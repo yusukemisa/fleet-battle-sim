@@ -46,6 +46,44 @@ function assignByX(layout: FormationLayout): void {
   }
 }
 
+function placeOujin(layout: FormationLayout): void {
+  const n = layout.count
+  const groups = 5
+  const base = Math.floor(n / groups)
+  let extra = n % groups
+  const sizes: number[] = []
+  for (let group = 0; group < groups; group++) {
+    const size = base + (extra > 0 ? 1 : 0)
+    if (extra > 0) extra -= 1
+    sizes.push(size)
+  }
+  const pitch = n > 2500 ? 7 : n > 400 ? 11 : 16
+  const gap = pitch * 2.4
+  const specs = sizes.map((size) => {
+    const cols = Math.max(1, Math.ceil(Math.sqrt(size * 1.35)))
+    const rows = Math.max(1, Math.ceil(size / cols))
+    return { size, cols, rows, width: Math.max(0, cols - 1) * pitch }
+  })
+  let span = gap * (groups - 1)
+  for (const spec of specs) span += spec.width
+  let left = -span / 2
+  let ship = 0
+  for (const spec of specs) {
+    const origin = left + spec.width / 2
+    left += spec.width + gap
+    const depth = Math.max(0, spec.rows - 1) * pitch
+    for (let k = 0; k < spec.size; k++) {
+      const row = Math.floor(k / spec.cols)
+      const col = k % spec.cols
+      const rowCount = Math.min(spec.cols, spec.size - row * spec.cols)
+      layout.x[ship] = origin + (col - (rowCount - 1) / 2) * pitch
+      layout.y[ship] = depth / 2 - row * pitch
+      layout.division[ship] = 0
+      ship += 1
+    }
+  }
+}
+
 function placeKakuyoku(layout: FormationLayout): void {
   const n = layout.count
   const ranks = n > 2000 ? 11 : n > 200 ? 6 : 3
@@ -245,6 +283,12 @@ function finishRadial(place: (layout: FormationLayout) => void): (layout: Format
 }
 
 export const FORMATIONS = {
+  oujin: {
+    id: 'oujin',
+    name: '横陣',
+    summary: '五つの分艦隊を横一列に並べる。各隊は塊で、艦首は敵を向く。',
+    place: finishLateral(placeOujin),
+  },
   kakuyoku: {
     id: 'kakuyoku',
     name: '鶴翼',

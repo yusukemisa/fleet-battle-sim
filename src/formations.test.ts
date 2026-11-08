@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { layoutFormation } from './formations.ts'
 import type { FormationId, FormationLayout } from './types.ts'
 
-const IDS: FormationId[] = ['kakuyoku', 'engetsu', 'gyorin', 'hoshi', 'houen']
+const IDS: FormationId[] = ['oujin', 'kakuyoku', 'engetsu', 'gyorin', 'hoshi', 'houen']
 
 function finite(layout: FormationLayout): boolean {
   for (let i = 0; i < layout.count; i++) {
@@ -18,6 +18,28 @@ function divisionCounts(layout: FormationLayout): number[] {
     if (slot >= 0 && slot < 5) counts[slot] = (counts[slot] ?? 0) + 1
   }
   return counts
+}
+
+function bandBox(layout: FormationLayout, slot: number): { minX: number; maxX: number; minY: number; maxY: number; meanX: number } | null {
+  let minX = Infinity
+  let maxX = -Infinity
+  let minY = Infinity
+  let maxY = -Infinity
+  let sumX = 0
+  let n = 0
+  for (let i = 0; i < layout.count; i++) {
+    if (layout.division[i] !== slot) continue
+    const x = layout.x[i] ?? 0
+    const y = layout.y[i] ?? 0
+    if (x < minX) minX = x
+    if (x > maxX) maxX = x
+    if (y < minY) minY = y
+    if (y > maxY) maxY = y
+    sumX += x
+    n += 1
+  }
+  if (n === 0) return null
+  return { minX, maxX, minY, maxY, meanX: sumX / n }
 }
 
 function xRange(layout: FormationLayout, pick: (index: number) => boolean): number {
@@ -41,6 +63,35 @@ describe('formations', () => {
       const counts = divisionCounts(layout)
       expect(counts.reduce((sum, n) => sum + n, 0)).toBe(count)
       for (const n of counts) expect(n).toBeGreaterThan(0)
+    }
+  })
+
+  it('横陣 lines five compact blocks abreast', () => {
+    for (const count of [50, 500, 5000]) {
+      const layout = layoutFormation('oujin', count)
+      const bands = [0, 1, 2, 3, 4].map((slot) => bandBox(layout, slot))
+      for (let i = 0; i < 4; i++) {
+        const left = bands[i]
+        const right = bands[i + 1]
+        expect(left).toBeDefined()
+        expect(right).toBeDefined()
+        if (!left || !right) continue
+        expect(left.meanX).toBeLessThan(right.meanX)
+        expect(left.maxX).toBeLessThan(right.minX)
+      }
+      const first = bands[0]
+      const last = bands[4]
+      expect(first).toBeDefined()
+      expect(last).toBeDefined()
+      if (!first || !last) continue
+      const line = last.maxX - first.minX
+      let depth = 0
+      for (const band of bands) {
+        if (!band) continue
+        depth = Math.max(depth, band.maxY - band.minY)
+        expect(Math.max(band.maxX - band.minX, band.maxY - band.minY)).toBeLessThan(line * 0.35)
+      }
+      expect(line).toBeGreaterThan(depth * 3)
     }
   })
 

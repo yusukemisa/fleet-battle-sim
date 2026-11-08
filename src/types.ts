@@ -3,7 +3,7 @@ import type { ShipStats } from './balance.ts'
 export const SHIP_COUNTS = [100, 1000, 10000] as const
 export type ShipCount = (typeof SHIP_COUNTS)[number]
 
-export const FORMATION_IDS = ['kakuyoku', 'engetsu', 'gyorin', 'hoshi', 'houen'] as const
+export const FORMATION_IDS = ['oujin', 'kakuyoku', 'engetsu', 'gyorin', 'hoshi', 'houen'] as const
 export type FormationId = (typeof FORMATION_IDS)[number]
 
 export const TACTIC_IDS = [
@@ -29,7 +29,7 @@ export type Speed = 1 | 2 | 4
 export type DivisionSlot = 0 | 1 | 2 | 3 | 4
 
 export const DEFAULT_SHIP_COUNT: ShipCount = 1000
-export const DEFAULT_FORMATION: FormationId = 'kakuyoku'
+export const DEFAULT_FORMATION: FormationId = 'oujin'
 
 export type BattlePhase =
   | { kind: 'setup'; speed: Speed }
