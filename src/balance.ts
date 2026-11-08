@@ -37,6 +37,29 @@ export const SHIP_STATS = {
   armorStern: (50 * Math.PI) / 180,
 } satisfies ShipStats
 
+/**
+ * Sim seconds advanced per wall-clock second at ×1.
+ * ×2 and ×4 still speed the battle up. Fire cooldown stays in sim seconds.
+ */
+export const SIM_TIME_SCALE = 0.5
+
+/**
+ * Close-range wheel. The map's +Y is up, so `turn: -1` is clockwise from above.
+ * A fleet inside `engage` keeps forward speed and slides clockwise around the enemy.
+ * Inside `pass` the bow swings ahead of the enemy so the fleet does not stop on top of it.
+ * 定点射撃 opts out via `Tactic.sweep`.
+ */
+export const SWEEP = {
+  turn: -1,
+  engage: 900,
+  pass: 420,
+  resume: 520,
+  off: (28 * Math.PI) / 180,
+  passOff: (125 * Math.PI) / 180,
+  speed: 50,
+  lead: 240,
+} as const
+
 export const FIELD = {
   fleetCenter: 580,
   beamLife: 0.22,

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { SIM_TIME_SCALE } from './balance.ts'
 import { createSim, dispatch } from './sim.ts'
 import { parseFormationId, parseShipCount, parseTacticId } from './parse.ts'
 
@@ -73,6 +74,7 @@ describe('battle', () => {
     state = dispatch(state, { type: 'tick', dt: 1 / 30 })
     const moved = state.time
     expect(moved).toBeGreaterThan(0)
+    expect(moved).toBeCloseTo((1 / 30) * 4 * SIM_TIME_SCALE)
     state = dispatch(state, { type: 'pause' })
     state = dispatch(state, { type: 'tick', dt: 1 })
     expect(state.time).toBe(moved)

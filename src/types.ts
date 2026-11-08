@@ -10,6 +10,9 @@ export const TACTIC_IDS = [
   'charge',
   'hold',
   'flank',
+  'broadside',
+  'rear',
+  'pin',
   'encircle',
   'breakthrough',
   'feint',
@@ -68,6 +71,8 @@ export interface Fleet {
   centerY: number
   facingX: number
   facingY: number
+  /** 0 while closing in, 1 while sliding past. Shared by the sweeping divisions. */
+  sweepLeg: 0 | 1
 }
 
 export interface Division {
@@ -93,6 +98,13 @@ export interface Division {
   focus: boolean
   focusX: number
   focusY: number
+  /** Point this division is steering toward. */
+  markX: number
+  markY: number
+  sweepAlong: number
+  sweepOut: number
+  sweepLocked: boolean
+  sweeping: boolean
   alive: number
   roster: number
 }
@@ -116,6 +128,7 @@ export interface TacticContext {
   ownY: number
   enemyX: number
   enemyY: number
+  sweepLeg: 0 | 1
   divisions: readonly Division[]
 }
 
@@ -126,6 +139,11 @@ export interface Tactic {
   focus: boolean
   /** Ships point the bow at the enemy instead of along the path to the slot. */
   guns: boolean
+  /**
+   * Join the clockwise fleet wheel inside engagement range.
+   * 定点射撃 leaves this false and stays on its point.
+   */
+  sweep: boolean
   step(div: Division, ctx: TacticContext, dt: number): void
 }
 
@@ -169,6 +187,13 @@ export interface Booms {
   head: number
 }
 
+/** Hits landed by each side, split by the armor they struck. */
+export interface ArmorHits {
+  front: [number, number]
+  side: [number, number]
+  rear: [number, number]
+}
+
 export interface SimState {
   shipCount: ShipCount
   phase: BattlePhase
@@ -186,6 +211,7 @@ export interface SimState {
   damage: [number, number]
   commandAt: number
   log: string[]
+  hits: ArmorHits
   beams: Beams
   booms: Booms
 }

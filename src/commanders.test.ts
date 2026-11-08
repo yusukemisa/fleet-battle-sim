@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { chooseTactic, COMMANDERS, type BattleFacts, type DivisionFact } from './commanders.ts'
 import { createSim, dispatch } from './sim.ts'
 
-const quietEnemy: DivisionFact = { alive: 100, tacticId: 'charge', phase: 0, ax: 400, ay: 0 }
+const quietEnemy: DivisionFact = { alive: 100, tacticId: 'charge', phase: 0, ax: 400, ay: 0, fx: -1, fy: 0 }
 
 function facts(patch: Partial<BattleFacts> = {}): BattleFacts {
   return {
@@ -13,6 +13,10 @@ function facts(patch: Partial<BattleFacts> = {}): BattleFacts {
     enemyFormation: 'kakuyoku',
     ownX: -200,
     ownY: 0,
+    ax: -200,
+    ay: 0,
+    fx: 1,
+    fy: 0,
     slot: 2,
     enemy: [quietEnemy],
     enemyOnUs: 'front',
@@ -33,10 +37,18 @@ describe('commanders', () => {
     )
   })
 
-  it('lets 智将 encircle a flanking enemy and slip past an arrowhead', () => {
-    const flanking: DivisionFact = { alive: 80, tacticId: 'flank', phase: 0, ax: 0, ay: 260 }
-    expect(chooseTactic(COMMANDERS.cunning, facts({ enemy: [flanking] }))).toBe('encircle')
-    expect(chooseTactic(COMMANDERS.cunning, facts({ enemyFormation: 'hoshi', slot: 2 }))).toBe('flank')
+  it('lets 智将 pin the center and hook the wings onto the side and rear', () => {
+    expect(chooseTactic(COMMANDERS.cunning, facts({ slot: 2 }))).toBe('pin')
+    expect(chooseTactic(COMMANDERS.cunning, facts({ slot: 1 }))).toBe('broadside')
+    expect(chooseTactic(COMMANDERS.cunning, facts({ slot: 3 }))).toBe('broadside')
+    expect(chooseTactic(COMMANDERS.cunning, facts({ slot: 0 }))).toBe('rear')
+    expect(chooseTactic(COMMANDERS.cunning, facts({ slot: 4 }))).toBe('rear')
+  })
+
+  it('lets 智将 send an inner division onto an enemy that is facing away', () => {
+    const turned: DivisionFact = { alive: 80, tacticId: 'charge', phase: 0, ax: 200, ay: 80, fx: 1, fy: 0 }
+    expect(chooseTactic(COMMANDERS.cunning, facts({ slot: 1, ax: -180, ay: 80, enemy: [turned] }))).toBe('rear')
+    expect(chooseTactic(COMMANDERS.cunning, facts({ slot: 0, ax: -180, ay: 160, enemy: [turned] }))).toBe('rear')
   })
 
   it('lets 守将 hold, then counterattack after the enemy is worn down', () => {
@@ -49,13 +61,14 @@ describe('commanders', () => {
   it('lets 常勝 attack when ahead, hold when behind, and encircle a flank', () => {
     expect(chooseTactic(COMMANDERS.balanced, facts({ ownAlive: 650, enemyAlive: 400 }))).toBe('breakthrough')
     expect(chooseTactic(COMMANDERS.balanced, facts({ ownAlive: 300, enemyAlive: 500 }))).toBe('hold')
-    const flanking: DivisionFact = { alive: 80, tacticId: 'encircle', phase: 0, ax: 0, ay: -240 }
+    const flanking: DivisionFact = { alive: 80, tacticId: 'encircle', phase: 0, ax: 0, ay: -240, fx: -1, fy: 0 }
     expect(chooseTactic(COMMANDERS.balanced, facts({ enemy: [flanking] }))).toBe('encircle')
   })
 
   it('values a flank or rear and protects its own', () => {
     expect(chooseTactic(COMMANDERS.fierce, facts({ usOnEnemy: 'rear', slot: 1 }))).toBe('breakthrough')
-    expect(chooseTactic(COMMANDERS.cunning, facts({ usOnEnemy: 'side', slot: 2 }))).toBe('encircle')
+    expect(chooseTactic(COMMANDERS.cunning, facts({ usOnEnemy: 'side', slot: 1 }))).toBe('broadside')
+    expect(chooseTactic(COMMANDERS.cunning, facts({ usOnEnemy: 'rear', slot: 0 }))).toBe('rear')
     expect(chooseTactic(COMMANDERS.guard, facts({ enemyOnUs: 'side' }))).toBe('focus')
     expect(chooseTactic(COMMANDERS.balanced, facts({ enemyOnUs: 'rear' }))).toBe('focus')
   })
@@ -85,6 +98,15 @@ describe('orders during battle', () => {
     state = dispatch(state, { type: 'tick', dt: 0.05 })
     expect(state.divisions[2]?.tacticId).toBe('breakthrough')
     expect(state.log.some((line) => line === '青軍 中軍: 中央突破に切替')).toBe(true)
+    let cunning = createSim({ shipCount: 100, commanders: ['cunning', 'manual'] })
+    cunning = dispatch(cunning, { type: 'start' })
+    cunning = dispatch(cunning, { type: 'tick', dt: 0.05 })
+    expect(cunning.divisions[2]?.tacticId).toBe('pin')
+    expect(cunning.divisions[0]?.tacticId).toBe('rear')
+    expect(cunning.divisions[1]?.tacticId).toBe('broadside')
+    expect(cunning.log).toContain('青軍 中軍: 釘付けに切替')
+    expect(cunning.log).toContain('青軍 左翼: 背後襲撃に切替')
+    expect(cunning.log).toContain('青軍 左衛: 側面攻撃に切替')
     state = dispatch(state, { type: 'set-commander', side: 0, commanderId: 'guard' })
     expect(state.fleets[0].commanderId).toBe('fierce')
   })
