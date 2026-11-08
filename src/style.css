@@ -1,0 +1,128 @@
+:root {
+  color: #d5dbe6;
+  background: #070b14;
+  font-family: "WenQuanYi Micro Hei", "Droid Sans Fallback", sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+html, body, #app {
+  margin: 0;
+  height: 100%;
+}
+
+body { overflow: hidden; }
+
+#view {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  touch-action: none;
+  cursor: grab;
+}
+
+#bar, #orders, #banner {
+  position: absolute;
+  z-index: 2;
+}
+
+#bar {
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  align-items: center;
+  padding: 8px 12px;
+  background: linear-gradient(180deg, rgba(7, 11, 20, 0.88), rgba(7, 11, 20, 0.35));
+  pointer-events: none;
+}
+
+#bar > * { pointer-events: auto; }
+
+.brand {
+  letter-spacing: 0.12em;
+  font-size: 14px;
+}
+
+label, button, select {
+  font: inherit;
+  color: inherit;
+}
+
+label { font-size: 12px; }
+
+select, button {
+  background: rgba(12, 16, 26, 0.9);
+  border: 1px solid rgba(186, 198, 214, 0.35);
+  color: #d5dbe6;
+  padding: 4px 8px;
+}
+
+button { cursor: pointer; }
+
+button.on, button:hover:not(:disabled) {
+  border-color: rgba(226, 206, 122, 0.8);
+}
+
+button:disabled { opacity: 0.45; cursor: default; }
+
+.side.blue select { border-color: rgba(60, 144, 214, 0.7); }
+.side.red select { border-color: rgba(225, 104, 88, 0.75); }
+
+.speeds { display: flex; gap: 4px; }
+
+#clock, #fps {
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  color: #9aa6b8;
+}
+
+#orders {
+  top: 52px;
+  right: 12px;
+  width: min(280px, calc(100% - 24px));
+  max-height: calc(100% - 70px);
+  overflow: auto;
+  background: rgba(8, 12, 20, 0.78);
+  border: 1px solid rgba(186, 198, 214, 0.28);
+  padding: 8px 10px;
+}
+
+#orders summary { cursor: pointer; }
+
+.order-grid {
+  display: grid;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.fleet-tactic, .div-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 6px;
+  align-items: center;
+  margin-top: 6px;
+}
+
+.div-row { grid-template-columns: 42px 52px 1fr; font-size: 12px; }
+
+.remain { text-align: right; color: #9aa6b8; }
+
+#banner {
+  left: 50%;
+  top: 58px;
+  transform: translateX(-50%);
+  margin: 0;
+  padding: 6px 12px;
+  background: rgba(8, 12, 20, 0.8);
+  border: 1px solid rgba(226, 206, 122, 0.45);
+}
+
+@media (max-width: 800px) {
+  #orders { top: auto; bottom: 12px; max-height: 36%; }
+  #banner { top: auto; bottom: 48%; }
+}
