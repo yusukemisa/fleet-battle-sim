@@ -1,7 +1,9 @@
 import { acquireSq, FIELD, rangeSq, SHIP_STATS, type ShipStats } from './balance.ts'
+import { chooseTactic, COMMANDERS, type BattleFacts } from './commanders.ts'
 import { layoutFormation } from './formations.ts'
 import { tacticById } from './tactics.ts'
 import {
+  DEFAULT_COMMANDER,
   DEFAULT_FORMATION,
   DIVISIONS_PER_SIDE,
   DIVISION_NAMES,
@@ -20,6 +22,7 @@ const FLEET_NAMES = ['青軍', '赤軍'] as const
 
 export function createSim(config: SimConfig): SimState {
   const formations = config.formations ?? [DEFAULT_FORMATION, DEFAULT_FORMATION]
+  const commanders = config.commanders ?? [DEFAULT_COMMANDER, DEFAULT_COMMANDER]
   const stats = shipStats(config)
   const damage: [number, number] = config.damage
     ? [config.damage[0], config.damage[1]]
@@ -27,6 +30,8 @@ export function createSim(config: SimConfig): SimState {
   const state = allocate(config.shipCount, stats, damage)
   state.fleets[0].formationId = formations[0]
   state.fleets[1].formationId = formations[1]
+  state.fleets[0].commanderId = commanders[0]
+  state.fleets[1].commanderId = commanders[1]
   if (config.tactics) {
     for (let i = 0; i < state.divisions.length; i++) {
       const tacticId = config.tactics[i]
@@ -48,6 +53,10 @@ export function dispatch(state: SimState, command: Command): SimState {
       if (state.phase.kind !== 'setup') return state
       state.fleets[command.side].formationId = command.formationId
       deploy(state)
+      return state
+    case 'set-commander':
+      if (state.phase.kind !== 'setup') return state
+      state.fleets[command.side].commanderId = command.commanderId
       return state
     case 'set-tactic':
       return applyTactic(state, command.division, command.tacticId)
@@ -91,6 +100,7 @@ function configFrom(state: SimState, patch: { shipCount?: SimState['shipCount'] 
     shipCount: patch.shipCount ?? state.shipCount,
     formations: [state.fleets[0].formationId, state.fleets[1].formationId],
     tactics: state.divisions.map((division) => division.tacticId),
+    commanders: [state.fleets[0].commanderId, state.fleets[1].commanderId],
     hp: state.stats.hp,
     damage: state.damage,
   }
@@ -117,6 +127,54 @@ function applyTactic(state: SimState, index: number, tacticId: TacticId): SimSta
   }
   division.focus = tacticById(tacticId).focus
   return state
+}
+
+function issueOrders(state: SimState): void {
+  const sides: SideId[] = [0, 1]
+  const slots: DivisionSlot[] = [0, 1, 2, 3, 4]
+  for (const side of sides) {
+    const fleet = state.fleets[side]
+    const commander = COMMANDERS[fleet.commanderId]
+    if (!commander.auto) continue
+    for (const slot of slots) {
+      const index = side * DIVISIONS_PER_SIDE + slot
+      const division = state.divisions[index]
+      if (!division || division.alive === 0) continue
+      const tacticId = chooseTactic(commander, factsFor(state, side, slot))
+      if (!tacticId || tacticId === division.tacticId) continue
+      applyTactic(state, index, tacticId)
+      const line = `${fleet.name} ${division.name}: ${tacticById(tacticId).name}に切替`
+      state.log.push(line)
+      if (state.log.length > FIELD.logLimit) state.log.shift()
+    }
+  }
+}
+
+function factsFor(state: SimState, side: SideId, slot: DivisionSlot): BattleFacts {
+  const enemy: SideId = side === 0 ? 1 : 0
+  const enemyFacts = []
+  for (let index = 0; index < DIVISIONS_PER_SIDE; index++) {
+    const division = state.divisions[enemy * DIVISIONS_PER_SIDE + index]
+    if (!division) continue
+    enemyFacts.push({
+      alive: division.alive,
+      tacticId: division.tacticId,
+      phase: division.phase,
+      ax: division.ax,
+      ay: division.ay,
+    })
+  }
+  return {
+    ownAlive: state.alive[side],
+    enemyAlive: state.alive[enemy],
+    ownLost: state.lost[side],
+    enemyLost: state.lost[enemy],
+    enemyFormation: state.fleets[enemy].formationId,
+    ownX: state.centroidX[side] ?? 0,
+    ownY: state.centroidY[side] ?? 0,
+    slot,
+    enemy: enemyFacts,
+  }
 }
 
 function shipStats(config: SimConfig): ShipStats {
@@ -153,8 +211,8 @@ function allocate(shipCount: SimState['shipCount'], stats: ShipStats, damage: [n
       target: new Int32Array(count),
     },
     fleets: [
-      { side: 0, name: FLEET_NAMES[0], formationId: DEFAULT_FORMATION, centerX: -FIELD.fleetCenter, centerY: 0, facingX: 1, facingY: 0 },
-      { side: 1, name: FLEET_NAMES[1], formationId: DEFAULT_FORMATION, centerX: FIELD.fleetCenter, centerY: 0, facingX: -1, facingY: 0 },
+      { side: 0, name: FLEET_NAMES[0], formationId: DEFAULT_FORMATION, commanderId: DEFAULT_COMMANDER, centerX: -FIELD.fleetCenter, centerY: 0, facingX: 1, facingY: 0 },
+      { side: 1, name: FLEET_NAMES[1], formationId: DEFAULT_FORMATION, commanderId: DEFAULT_COMMANDER, centerX: FIELD.fleetCenter, centerY: 0, facingX: -1, facingY: 0 },
     ],
     divisions,
     alive: [count / 2, count / 2],
@@ -166,6 +224,8 @@ function allocate(shipCount: SimState['shipCount'], stats: ShipStats, damage: [n
     rng: 0xa341316c,
     stats,
     damage,
+    commandAt: 0,
+    log: [],
     beams: {
       life: new Float32Array(FIELD.maxBeams),
       x1: new Float32Array(FIELD.maxBeams),
@@ -211,6 +271,7 @@ function makeDivision(side: SideId, slot: DivisionSlot): Division {
     focusX: 0,
     focusY: 0,
     alive: 0,
+    roster: 0,
   }
 }
 
@@ -222,6 +283,8 @@ function deploy(state: SimState): void {
   state.frame = 0
   state.lost[0] = 0
   state.lost[1] = 0
+  state.commandAt = 0
+  state.log = []
   for (const division of state.divisions) division.alive = 0
   const sides: SideId[] = [0, 1]
   for (const side of sides) placeSide(state, side, half)
@@ -267,6 +330,7 @@ function placeSide(state: SimState, side: SideId, half: number): void {
     const bucket = sums[side * DIVISIONS_PER_SIDE + slot]
     if (!division || !bucket) continue
     division.alive = bucket.n
+    division.roster = bucket.n
     division.ax = bucket.n > 0 ? bucket.x / bucket.n : centerX
     division.ay = bucket.n > 0 ? bucket.y / bucket.n : 0
     division.vx = 0
@@ -322,6 +386,10 @@ function markCommander(state: SimState, side: SideId, half: number): void {
 
 function step(state: SimState, dt: number): void {
   refreshCentroids(state)
+  if (state.time >= state.commandAt) {
+    issueOrders(state)
+    state.commandAt += FIELD.commandInterval
+  }
   const ctxBase = {
     divisions: state.divisions,
   }

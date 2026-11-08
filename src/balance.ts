@@ -29,6 +29,8 @@ export const FIELD = {
   maxBooms: 360,
   stagger: 3,
   sampleStep: 28,
+  commandInterval: 6,
+  logLimit: 6,
 } as const
 
 export function rangeSq(stats: ShipStats): number {

@@ -17,6 +17,10 @@ export const TACTIC_IDS = [
 ] as const
 export type TacticId = (typeof TACTIC_IDS)[number]
 
+export const COMMANDER_IDS = ['manual', 'fierce', 'cunning', 'guard', 'balanced'] as const
+export type CommanderId = (typeof COMMANDER_IDS)[number]
+export const DEFAULT_COMMANDER: CommanderId = 'balanced'
+
 export const DIVISION_NAMES = ['左翼', '左衛', '中軍', '右衛', '右翼'] as const
 export const DIVISIONS_PER_SIDE = DIVISION_NAMES.length
 
@@ -58,6 +62,7 @@ export interface Fleet {
   side: SideId
   name: string
   formationId: FormationId
+  commanderId: CommanderId
   centerX: number
   centerY: number
   facingX: number
@@ -88,6 +93,7 @@ export interface Division {
   focusX: number
   focusY: number
   alive: number
+  roster: number
 }
 
 export interface FormationLayout {
@@ -125,6 +131,7 @@ export type Command =
   | { type: 'set-formation'; side: SideId; formationId: FormationId }
   | { type: 'set-tactic'; division: number; tacticId: TacticId }
   | { type: 'set-side-tactic'; side: SideId; tacticId: TacticId }
+  | { type: 'set-commander'; side: SideId; commanderId: CommanderId }
   | { type: 'start' }
   | { type: 'pause' }
   | { type: 'resume' }
@@ -136,6 +143,7 @@ export interface SimConfig {
   shipCount: ShipCount
   formations?: readonly [FormationId, FormationId]
   tactics?: readonly TacticId[]
+  commanders?: readonly [CommanderId, CommanderId]
   hp?: number
   damage?: readonly [number, number]
 }
@@ -173,6 +181,8 @@ export interface SimState {
   rng: number
   stats: ShipStats
   damage: [number, number]
+  commandAt: number
+  log: string[]
   beams: Beams
   booms: Booms
 }
