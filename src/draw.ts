@@ -28,25 +28,9 @@ export function draw(ctx: CanvasRenderingContext2D, state: SimState, camera: Cam
   ctx.globalAlpha = 1
 
   const size = blockSize(camera.zoom, state.shipCount)
-  const ships = state.ships
-  ctx.fillStyle = BLUE
-  for (let i = 0; i < ships.count; i++) {
-    if (ships.alive[i] === 0 || ships.side[i] !== 0 || (ships.flash[i] ?? 0) > 0.55) continue
-    const p = worldToScreen(ships.x[i] ?? 0, ships.y[i] ?? 0, camera, width, height)
-    ctx.fillRect(p.x - size / 2, p.y - size / 2, size, size)
-  }
-  ctx.fillStyle = RED
-  for (let i = 0; i < ships.count; i++) {
-    if (ships.alive[i] === 0 || ships.side[i] !== 1 || (ships.flash[i] ?? 0) > 0.55) continue
-    const p = worldToScreen(ships.x[i] ?? 0, ships.y[i] ?? 0, camera, width, height)
-    ctx.fillRect(p.x - size / 2, p.y - size / 2, size, size)
-  }
-  ctx.fillStyle = '#f4f1df'
-  for (let i = 0; i < ships.count; i++) {
-    if (ships.alive[i] === 0 || (ships.flash[i] ?? 0) <= 0.55) continue
-    const p = worldToScreen(ships.x[i] ?? 0, ships.y[i] ?? 0, camera, width, height)
-    ctx.fillRect(p.x - size / 2, p.y - size / 2, size, size)
-  }
+  paintShips(ctx, state, camera, width, height, size, 0, BLUE)
+  paintShips(ctx, state, camera, width, height, size, 1, RED)
+  paintShips(ctx, state, camera, width, height, size, 'flash', '#f4f1df')
 
   strokeBeams(ctx, state, camera, width, height)
   strokeBooms(ctx, state, camera, width, height)
@@ -95,6 +79,33 @@ export function fitCamera(state: SimState, width: number, height: number): Camer
     x: worldX - (usableCenterX - width / 2) / zoom,
     y: worldY - (height / 2 - usableCenterY) / zoom,
     zoom,
+  }
+}
+
+function paintShips(
+  ctx: CanvasRenderingContext2D,
+  state: SimState,
+  camera: Camera,
+  width: number,
+  height: number,
+  size: number,
+  side: 0 | 1 | 'flash',
+  color: string,
+): void {
+  const ships = state.ships
+  ctx.fillStyle = color
+  const span = Math.max(3.2, size * 1.45)
+  const w = Math.max(1.6, size * 0.46)
+  for (let i = 0; i < ships.count; i++) {
+    if (ships.alive[i] === 0) continue
+    const flash = (ships.flash[i] ?? 0) > 0.55
+    if (side === 'flash' ? !flash : flash || ships.side[i] !== side) continue
+    const p = worldToScreen(ships.x[i] ?? 0, ships.y[i] ?? 0, camera, width, height)
+    const heading = ships.heading[i] ?? 0
+    const nx = Math.cos(heading) * span
+    const ny = -Math.sin(heading) * span
+    ctx.fillRect(p.x - nx * 0.32 - w / 2, p.y - ny * 0.32 - w / 2, w, w)
+    ctx.fillRect(p.x + nx * 0.38 - w * 0.28, p.y + ny * 0.38 - w * 0.28, w * 0.62, w * 0.62)
   }
 }
 
