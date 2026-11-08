@@ -51,6 +51,7 @@ export interface Ships {
   cooldown: Float32Array
   slotX: Float32Array
   slotY: Float32Array
+  heading: Float32Array
   alive: Uint8Array
   side: Uint8Array
   division: Uint8Array
@@ -123,6 +124,8 @@ export interface Tactic {
   name: string
   summary: string
   focus: boolean
+  /** Ships point the bow at the enemy instead of along the path to the slot. */
+  guns: boolean
   step(div: Division, ctx: TacticContext, dt: number): void
 }
 

@@ -8,6 +8,8 @@ export interface DivisionFact {
   ay: number
 }
 
+export type Bearing = 'front' | 'side' | 'rear'
+
 export interface BattleFacts {
   ownAlive: number
   enemyAlive: number
@@ -18,6 +20,8 @@ export interface BattleFacts {
   ownY: number
   slot: DivisionSlot
   enemy: readonly DivisionFact[]
+  enemyOnUs: Bearing
+  usOnEnemy: Bearing
 }
 
 interface TacticWeights {
@@ -85,6 +89,11 @@ export const COMMANDERS = {
       { id: 'center', test: (_facts, read) => read.center, add: { breakthrough: 3 } },
       { id: 'wing', test: (_facts, read) => read.wing, add: { charge: 2 } },
       { id: 'advantage', test: (_facts, read) => read.strength >= 1.2, add: { breakthrough: 4 } },
+      {
+        id: 'exposed-enemy',
+        test: (facts) => facts.usOnEnemy === 'side' || facts.usOnEnemy === 'rear',
+        add: { breakthrough: 3 },
+      },
     ],
   },
   cunning: {
@@ -107,6 +116,11 @@ export const COMMANDERS = {
         add: { flank: 3 },
       },
       { id: 'opening', test: (_facts, read) => read.enemyLoss >= 0.35, add: { encircle: 3 } },
+      {
+        id: 'their-armor',
+        test: (facts) => facts.usOnEnemy === 'side' || facts.usOnEnemy === 'rear',
+        add: { encircle: 3, flank: 2 },
+      },
     ],
   },
   guard: {
@@ -118,6 +132,11 @@ export const COMMANDERS = {
     prefer: ['charge', 'focus', 'hold', 'breakthrough', 'flank', 'encircle', 'feint'],
     rules: [
       { id: 'flanked', test: (_facts, read) => read.enemyFlanking, add: { focus: 3 } },
+      {
+        id: 'protect',
+        test: (facts) => facts.enemyOnUs === 'side' || facts.enemyOnUs === 'rear',
+        add: { focus: 4, hold: 1 },
+      },
       {
         id: 'counter',
         test: (_facts, read) => read.enemyLoss >= 0.35 && read.strength >= 1,
@@ -139,6 +158,16 @@ export const COMMANDERS = {
         id: 'flanked',
         test: (_facts, read) => read.enemyFlanking && read.strength > 0.8 && read.strength < 1.25,
         add: { encircle: 4 },
+      },
+      {
+        id: 'their-armor',
+        test: (facts, read) => (facts.usOnEnemy === 'side' || facts.usOnEnemy === 'rear') && read.strength > 0.8,
+        add: { encircle: 4, flank: 2 },
+      },
+      {
+        id: 'protect',
+        test: (facts) => facts.enemyOnUs === 'side' || facts.enemyOnUs === 'rear',
+        add: { focus: 3, hold: 2 },
       },
     ],
   },

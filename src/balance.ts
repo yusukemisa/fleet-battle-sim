@@ -8,6 +8,14 @@ export interface ShipStats {
   hitChance: number
   maxSpeed: number
   response: number
+  turnRate: number
+  reverse: number
+  arc: number
+  armorFront: number
+  armorSide: number
+  armorRear: number
+  armorBow: number
+  armorStern: number
 }
 
 export const SHIP_STATS = {
@@ -19,6 +27,14 @@ export const SHIP_STATS = {
   hitChance: 0.86,
   maxSpeed: 70,
   response: 5.2,
+  turnRate: 1.5,
+  reverse: 0.22,
+  arc: (40 * Math.PI) / 180,
+  armorFront: 0.5,
+  armorSide: 1,
+  armorRear: 1.5,
+  armorBow: (50 * Math.PI) / 180,
+  armorStern: (50 * Math.PI) / 180,
 } satisfies ShipStats
 
 export const FIELD = {

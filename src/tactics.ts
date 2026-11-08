@@ -108,8 +108,10 @@ function pierce(div: Division, ctx: TacticContext, dt: number, speed: number): v
 function feint(div: Division, ctx: TacticContext, dt: number, speed: number, offset: number, seconds: number): void {
   if (div.phase === 0) {
     div.phaseT += dt
-    steer(div, div.ax - ctx.enemyX, div.ay - ctx.enemyY, speed, dt)
-    face(div, ctx.enemyX, ctx.enemyY, dt)
+    const awayX = div.ax - ctx.enemyX
+    const awayY = div.ay - ctx.enemyY
+    steer(div, awayX, awayY, speed, dt)
+    face(div, div.ax + awayX, div.ay + awayY, dt)
     if (div.phaseT > seconds) {
       div.phase = 1
       div.phaseT = 0
@@ -128,8 +130,9 @@ export const TACTICS = {
   charge: {
     id: 'charge',
     name: '正面突撃',
-    summary: '敵の重心へ、陣を保ったまま進む。',
+    summary: '艦首を進路上に向け、敵の正面へ進む。',
     focus: false,
+    guns: false,
     step(div, ctx, dt) {
       tagged(div, false, ctx)
       charge(div, ctx, dt, 34)
@@ -138,8 +141,9 @@ export const TACTICS = {
   hold: {
     id: 'hold',
     name: '定点射撃',
-    summary: 'その場を守り、射程に入った敵を撃つ。',
+    summary: 'その場で艦首を敵へ向けて撃つ。',
     focus: false,
+    guns: true,
     step(div, ctx, dt) {
       tagged(div, false, ctx)
       hold(div, ctx, dt)
@@ -148,8 +152,9 @@ export const TACTICS = {
   flank: {
     id: 'flank',
     name: '側面迂回',
-    summary: '外側へ回り込み、横から敵に入る。',
+    summary: '外側へ回り、敵の側面から艦首を向ける。',
     focus: false,
+    guns: false,
     step(div, ctx, dt) {
       tagged(div, false, ctx)
       flank(div, ctx, dt, 36, 280)
@@ -158,8 +163,9 @@ export const TACTICS = {
   encircle: {
     id: 'encircle',
     name: '包囲',
-    summary: '敵の周囲を回り、環を狭める。',
+    summary: '敵の周囲を回り、側面と背面を撃つ。',
     focus: false,
+    guns: false,
     step(div, ctx, dt) {
       tagged(div, false, ctx)
       orbit(div, ctx, dt, 32, 210, 0.11)
@@ -168,8 +174,9 @@ export const TACTICS = {
   breakthrough: {
     id: 'breakthrough',
     name: '中央突破',
-    summary: '敵の中央を突き抜け、奥まで進む。',
+    summary: '艦首を向けたまま中央を突き抜ける。',
     focus: false,
+    guns: false,
     step(div, ctx, dt) {
       tagged(div, false, ctx)
       pierce(div, ctx, dt, 42)
@@ -178,8 +185,9 @@ export const TACTICS = {
   feint: {
     id: 'feint',
     name: '偽装退却',
-    summary: 'いったん下がり、それから側面へ回る。',
+    summary: 'いったん反転して下がり、側面へ回り込む。',
     focus: false,
+    guns: false,
     step(div, ctx, dt) {
       tagged(div, false, ctx)
       feint(div, ctx, dt, 32, 260, 12)
@@ -188,8 +196,9 @@ export const TACTICS = {
   focus: {
     id: 'focus',
     name: '集中砲火',
-    summary: 'ゆっくり進み、一つの敵部隊に弾を集める。',
+    summary: '艦首を一点へ向け、そこへ弾を集める。',
     focus: true,
+    guns: true,
     step(div, ctx, dt) {
       tagged(div, true, ctx)
       charge(div, ctx, dt, 18)

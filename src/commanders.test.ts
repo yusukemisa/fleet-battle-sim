@@ -15,6 +15,8 @@ function facts(patch: Partial<BattleFacts> = {}): BattleFacts {
     ownY: 0,
     slot: 2,
     enemy: [quietEnemy],
+    enemyOnUs: 'front',
+    usOnEnemy: 'front',
     ...patch,
   }
 }
@@ -49,6 +51,13 @@ describe('commanders', () => {
     expect(chooseTactic(COMMANDERS.balanced, facts({ ownAlive: 300, enemyAlive: 500 }))).toBe('hold')
     const flanking: DivisionFact = { alive: 80, tacticId: 'encircle', phase: 0, ax: 0, ay: -240 }
     expect(chooseTactic(COMMANDERS.balanced, facts({ enemy: [flanking] }))).toBe('encircle')
+  })
+
+  it('values a flank or rear and protects its own', () => {
+    expect(chooseTactic(COMMANDERS.fierce, facts({ usOnEnemy: 'rear', slot: 1 }))).toBe('breakthrough')
+    expect(chooseTactic(COMMANDERS.cunning, facts({ usOnEnemy: 'side', slot: 2 }))).toBe('encircle')
+    expect(chooseTactic(COMMANDERS.guard, facts({ enemyOnUs: 'side' }))).toBe('focus')
+    expect(chooseTactic(COMMANDERS.balanced, facts({ enemyOnUs: 'rear' }))).toBe('focus')
   })
 
   it('leaves tactics alone for 手動', () => {
