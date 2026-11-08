@@ -20,6 +20,8 @@ import {
 } from './types.ts'
 
 const FLEET_NAMES = ['青軍', '赤軍'] as const
+/** Cooldown lives in a Float32Array, so summed frame dt can be about a millisecond off. */
+const COOLDOWN_SLACK = 1e-3
 
 export function createSim(config: SimConfig): SimState {
   const formations = config.formations ?? [DEFAULT_FORMATION, DEFAULT_FORMATION]
@@ -533,8 +535,8 @@ function fight(state: SimState, dt: number): void {
     const needs = target < 0 || ships.alive[target] === 0 || i % stagger === frame % stagger
     if (needs) acquire(state, i)
     ships.cooldown[i] = (ships.cooldown[i] ?? 0) - dt
-    if ((ships.cooldown[i] ?? 0) > 0) continue
-    shoot(state, i)
+    if ((ships.cooldown[i] ?? 0) > COOLDOWN_SLACK) continue
+    shoot(state, i, dt)
   }
 }
 
@@ -572,7 +574,7 @@ function acquire(state: SimState, index: number): void {
   ships.target[index] = best
 }
 
-function shoot(state: SimState, index: number): void {
+function shoot(state: SimState, index: number, dt: number): void {
   const ships = state.ships
   const target = ships.target[index] ?? -1
   if (target < 0 || ships.alive[target] === 0) return
@@ -582,7 +584,10 @@ function shoot(state: SimState, index: number): void {
   if (!inFiringArc(ships.heading[index] ?? 0, ships.x[index] ?? 0, ships.y[index] ?? 0, ships.x[target] ?? 0, ships.y[target] ?? 0, state.stats.arc)) {
     return
   }
-  ships.cooldown[index] = state.stats.cooldown * (0.85 + rand(state) * 0.3)
+  const overdue = ships.cooldown[index] ?? 0
+  // Keep this step's overshoot so the next shot stays on the cooldown cadence. A ship that could not fire keeps a full cooldown.
+  const carry = overdue < -dt - COOLDOWN_SLACK ? 0 : overdue
+  ships.cooldown[index] = state.stats.cooldown + carry
   const hit = rand(state) <= state.stats.hitChance
   const spread = hit ? 0.4 : 8
   const ox = (rand(state) - 0.5) * spread

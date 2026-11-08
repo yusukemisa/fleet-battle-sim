@@ -15,11 +15,11 @@ function run(seconds: number, shipCount: 100 | 1000 | 10000 = 100, damage?: read
 }
 
 describe('battle', () => {
-  it('starts in 鶴翼 for both fleets and keeps the two sides apart', () => {
+  it('starts in 横陣 for both fleets and keeps the two sides apart', () => {
     const state = createSim({ shipCount: 1000 })
     expect(state.phase.kind).toBe('setup')
-    expect(state.fleets[0].formationId).toBe('kakuyoku')
-    expect(state.fleets[1].formationId).toBe('kakuyoku')
+    expect(state.fleets[0].formationId).toBe('oujin')
+    expect(state.fleets[1].formationId).toBe('oujin')
     expect(state.fleets[0].name).toBe('青軍')
     expect(state.fleets[1].name).toBe('赤軍')
     let blueMax = -Infinity
@@ -30,6 +30,13 @@ describe('battle', () => {
       else redMin = Math.min(redMin, x)
     }
     expect(blueMax).toBeLessThan(redMin)
+    expect(meanY(state, 0, 0)).toBeGreaterThan(meanY(state, 0, 4))
+    expect(meanY(state, 1, 0)).toBeLessThan(meanY(state, 1, 4))
+    for (let i = 0; i < state.ships.count; i++) {
+      const heading = state.ships.heading[i] ?? 0
+      const forward = state.ships.side[i] === 0 ? 1 : -1
+      expect(Math.cos(heading) * forward).toBeGreaterThan(0.99)
+    }
   })
 
   it('points 鶴翼 wings at the enemy and 鋒矢 at the enemy', () => {
@@ -45,7 +52,7 @@ describe('battle', () => {
     let state = createSim({ shipCount: 100 })
     state = dispatch(state, { type: 'start' })
     state = dispatch(state, { type: 'set-formation', side: 1, formationId: 'houen' })
-    expect(state.fleets[1].formationId).toBe('kakuyoku')
+    expect(state.fleets[1].formationId).toBe('oujin')
     expect(state.phase.kind).toBe('running')
   })
 
@@ -85,12 +92,26 @@ describe('parse', () => {
     expect(parseShipCount('1000')).toBe(1000)
     expect(parseShipCount('10000')).toBe(10000)
     expect(parseShipCount('500')).toBeNull()
+    expect(parseFormationId('oujin')).toBe('oujin')
     expect(parseFormationId('kakuyoku')).toBe('kakuyoku')
     expect(parseFormationId('line')).toBeNull()
     expect(parseTacticId('focus')).toBe('focus')
     expect(parseTacticId('retreat')).toBeNull()
   })
 })
+
+function meanY(state: ReturnType<typeof createSim>, side: 0 | 1, slot: number): number {
+  const ships = state.ships
+  let sum = 0
+  let n = 0
+  const division = side * 5 + slot
+  for (let i = 0; i < ships.count; i++) {
+    if (ships.side[i] !== side || ships.division[i] !== division) continue
+    sum += ships.y[i] ?? 0
+    n += 1
+  }
+  return sum / n
+}
 
 function wingForward(state: ReturnType<typeof createSim>, side: 0 | 1) {
   const ships = state.ships

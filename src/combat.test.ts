@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { SHIP_STATS } from './balance.ts'
 import { armorMultiplier, inFiringArc } from './combat.ts'
 import { createSim, dispatch } from './sim.ts'
-import type { SideId, SimState } from './types.ts'
+import type { SideId, SimState, Speed } from './types.ts'
 
 describe('directional combat', () => {
   it('cannot hit a target behind the bow', () => {
@@ -35,6 +35,29 @@ describe('directional combat', () => {
     const fromFront = damageFrom(0, 40)
     const fromRear = damageFrom(0, -40)
     expect(fromRear).toBeGreaterThan(fromFront)
+  })
+
+  it('fires once per 2s of sim time, at any frame step or speed', () => {
+    expect(SHIP_STATS.cooldown).toBe(2)
+    const cases: ReadonlyArray<readonly [number, Speed]> = [
+      [1 / 60, 1],
+      [1 / 30, 1],
+      [0.05, 1],
+      [0.01, 1],
+      [0.05, 2],
+      [0.05, 4],
+    ]
+    for (const [dt, speed] of cases) {
+      const times = shotTimes(dt, speed, SHIP_STATS.cooldown * 4 + 0.05)
+      expect(times).toHaveLength(4)
+      for (let window = 0; window < 4; window++) {
+        const start = SHIP_STATS.cooldown * window
+        const end = start + SHIP_STATS.cooldown
+        const hits = times.filter((time) => time > start + 1e-3 && time <= end + 1e-3)
+        expect(hits).toHaveLength(1)
+        expect(hits[0]).toBeCloseTo(end, 3)
+      }
+    }
   })
 
   it('wins from the flank more often than from the front', () => {
@@ -107,7 +130,49 @@ function runDuel(mode: 'front' | 'flank', seed: number): SimState {
     station(state, 1, 0, 0, 0)
   }
   let next = dispatch(state, { type: 'start' })
-  for (let step = 0; step < 160; step++) next = dispatch(next, { type: 'tick', dt: 1 / 20 })
+  const dt = 1 / 20
+  const steps = Math.round(17 / dt)
+  for (let step = 0; step < steps; step++) next = dispatch(next, { type: 'tick', dt })
+  return next
+}
+
+function shotTimes(frameDt: number, speed: Speed, seconds: number): number[] {
+  let state = aimingShip(speed)
+  const times: number[] = []
+  let seen = state.beams.head
+  let guard = 0
+  while (state.time < seconds) {
+    state = dispatch(state, { type: 'tick', dt: frameDt })
+    if (state.beams.head !== seen) {
+      times.push(state.time)
+      seen = state.beams.head
+    }
+    guard += 1
+    if (guard > 100000) throw new Error('sim time did not advance')
+  }
+  return times
+}
+
+function aimingShip(speed: Speed): SimState {
+  const state = createSim({ shipCount: 100, commanders: ['manual', 'manual'] })
+  const ships = state.ships
+  for (let i = 0; i < ships.count; i++) {
+    ships.cooldown[i] = 100
+    if (i !== 0 && i !== 50) ships.alive[i] = 0
+  }
+  ships.x[0] = 0
+  ships.y[0] = 0
+  ships.heading[0] = 0
+  ships.cooldown[0] = state.stats.cooldown
+  ships.target[0] = 50
+  ships.x[50] = 90
+  ships.y[50] = 0
+  ships.heading[50] = Math.PI
+  ships.hp[50] = 500
+  pin(state, 0)
+  pin(state, 50)
+  let next = dispatch(state, { type: 'set-speed', speed })
+  next = dispatch(next, { type: 'start' })
   return next
 }
 

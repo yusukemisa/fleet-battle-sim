@@ -93,20 +93,32 @@ function paintShips(
   color: string,
 ): void {
   const ships = state.ships
-  ctx.fillStyle = color
-  const span = Math.max(3.2, size * 1.45)
-  const w = Math.max(1.6, size * 0.46)
+  const hullW = Math.max(1.5, size * 0.64)
+  const halfLen = hullW
+  ctx.strokeStyle = color
+  ctx.lineCap = 'butt'
+  ctx.lineWidth = hullW
+  ctx.beginPath()
+  const bow = new Path2D()
   for (let i = 0; i < ships.count; i++) {
     if (ships.alive[i] === 0) continue
     const flash = (ships.flash[i] ?? 0) > 0.55
     if (side === 'flash' ? !flash : flash || ships.side[i] !== side) continue
     const p = worldToScreen(ships.x[i] ?? 0, ships.y[i] ?? 0, camera, width, height)
     const heading = ships.heading[i] ?? 0
-    const nx = Math.cos(heading) * span
-    const ny = -Math.sin(heading) * span
-    ctx.fillRect(p.x - nx * 0.32 - w / 2, p.y - ny * 0.32 - w / 2, w, w)
-    ctx.fillRect(p.x + nx * 0.38 - w * 0.28, p.y + ny * 0.38 - w * 0.28, w * 0.62, w * 0.62)
+    const hx = Math.cos(heading)
+    const hy = -Math.sin(heading)
+    const fx = hx * halfLen
+    const fy = hy * halfLen
+    ctx.moveTo(p.x - fx, p.y - fy)
+    ctx.lineTo(p.x + fx, p.y + fy)
+    const nose = halfLen + hullW * 0.22
+    bow.moveTo(p.x + hx * nose, p.y + hy * nose)
+    bow.lineTo(p.x + hx * (nose + hullW * 0.55), p.y + hy * (nose + hullW * 0.55))
   }
+  ctx.stroke()
+  ctx.lineWidth = hullW * 0.62
+  ctx.stroke(bow)
 }
 
 function blockSize(zoom: number, count: number): number {

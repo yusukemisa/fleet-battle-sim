@@ -23,7 +23,7 @@ export const SHIP_STATS = {
   damage: 7,
   range: 760,
   acquire: 820,
-  cooldown: 0.65,
+  cooldown: 2,
   hitChance: 0.86,
   maxSpeed: 70,
   response: 5.2,
