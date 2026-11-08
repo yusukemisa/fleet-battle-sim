@@ -1,7 +1,9 @@
 import {
+  COMMANDER_IDS,
   FORMATION_IDS,
   SHIP_COUNTS,
   TACTIC_IDS,
+  type CommanderId,
   type FormationId,
   type ShipCount,
   type Speed,
@@ -18,6 +20,13 @@ export function parseShipCount(value: string): ShipCount | null {
 
 export function parseFormationId(value: string): FormationId | null {
   for (const id of FORMATION_IDS) {
+    if (id === value) return id
+  }
+  return null
+}
+
+export function parseCommanderId(value: string): CommanderId | null {
+  for (const id of COMMANDER_IDS) {
     if (id === value) return id
   }
   return null

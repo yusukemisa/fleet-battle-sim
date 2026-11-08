@@ -92,6 +92,21 @@ button:disabled { opacity: 0.45; cursor: default; }
   padding: 8px 10px;
 }
 
+#log {
+  position: absolute;
+  top: 52px;
+  left: 14px;
+  z-index: 2;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #e6d48a;
+  text-shadow: 0 1px 2px #000;
+  pointer-events: none;
+}
+
 #orders summary { cursor: pointer; }
 
 .order-grid {

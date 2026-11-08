@@ -1,7 +1,9 @@
+import { COMMANDERS } from './commanders.ts'
 import { FORMATIONS } from './formations.ts'
-import { parseFormationId, parseShipCount, parseSpeed, parseTacticId } from './parse.ts'
+import { parseCommanderId, parseFormationId, parseShipCount, parseSpeed, parseTacticId } from './parse.ts'
 import { TACTICS } from './tactics.ts'
 import {
+  COMMANDER_IDS,
   FORMATION_IDS,
   SHIP_COUNTS,
   TACTIC_IDS,
@@ -12,7 +14,9 @@ import {
 export interface Hud {
   shipCount: HTMLSelectElement
   formation: [HTMLSelectElement, HTMLSelectElement]
+  commander: [HTMLSelectElement, HTMLSelectElement]
   division: HTMLSelectElement[]
+  log: HTMLElement
   clock: HTMLElement
   fps: HTMLElement
   banner: HTMLElement
@@ -30,7 +34,9 @@ export function mountHud(
       <div class="brand">艦隊決戦</div>
       <label>隻数 <select id="ship-count"></select></label>
       <label class="side blue">青軍 <select id="form-0"></select></label>
+      <label class="side blue">指揮官 <select id="cmd-0"></select></label>
       <label class="side red">赤軍 <select id="form-1"></select></label>
+      <label class="side red">指揮官 <select id="cmd-1"></select></label>
       <button id="start" type="button">開戦</button>
       <button id="pause" type="button">停止</button>
       <div class="speeds" role="group" aria-label="速度">
@@ -43,8 +49,9 @@ export function mountHud(
       <span id="clock">00:00</span>
       <span id="fps"></span>
     </header>
+    <ol id="log"></ol>
     <details id="orders">
-      <summary>分艦隊の戦術</summary>
+      <summary title="戦闘中も、分艦隊ごとと全軍に変更できます">分艦隊の戦術</summary>
       <div class="order-grid">
         <section data-side="0"></section>
         <section data-side="1"></section>
@@ -65,7 +72,7 @@ export function mountHud(
     if (count !== null) onCommand({ type: 'set-ship-count', count })
   })
 
-  const formation = [0, 1].map((side) => {
+  const formationList = [0, 1].map((side) => {
     const select = required(parent, `#form-${side}`, HTMLSelectElement)
     for (const id of FORMATION_IDS) {
       const option = document.createElement('option')
@@ -81,7 +88,33 @@ export function mountHud(
       }
     })
     return select
-  }) as [HTMLSelectElement, HTMLSelectElement]
+  })
+  const formation0 = formationList[0]
+  const formation1 = formationList[1]
+  if (!formation0 || !formation1) throw new Error('formation')
+  const formation: [HTMLSelectElement, HTMLSelectElement] = [formation0, formation1]
+
+  const commanderList = [0, 1].map((side) => {
+    const select = required(parent, `#cmd-${side}`, HTMLSelectElement)
+    for (const id of COMMANDER_IDS) {
+      const option = document.createElement('option')
+      option.value = id
+      option.textContent = COMMANDERS[id].name
+      option.title = COMMANDERS[id].summary
+      select.append(option)
+    }
+    select.addEventListener('change', () => {
+      const commanderId = parseCommanderId(select.value)
+      if (commanderId !== null && (side === 0 || side === 1)) {
+        onCommand({ type: 'set-commander', side, commanderId })
+      }
+    })
+    return select
+  })
+  const commander0 = commanderList[0]
+  const commander1 = commanderList[1]
+  if (!commander0 || !commander1) throw new Error('commander')
+  const commander: [HTMLSelectElement, HTMLSelectElement] = [commander0, commander1]
 
   const division: HTMLSelectElement[] = []
   const sections = parent.querySelectorAll('#orders section')
@@ -143,7 +176,9 @@ export function mountHud(
   return {
     shipCount,
     formation,
+    commander,
     division,
+    log: required(parent, '#log', HTMLElement),
     clock: required(parent, '#clock', HTMLElement),
     fps: required(parent, '#fps', HTMLElement),
     banner: required(parent, '#banner', HTMLElement),
@@ -160,6 +195,17 @@ export function syncHud(parent: HTMLElement, hud: Hud, state: SimState): void {
     const id = state.fleets[side]?.formationId
     if (id && select.value !== id) select.value = id
   })
+  hud.commander.forEach((select, side) => {
+    select.disabled = !setup
+    const id = state.fleets[side]?.commanderId
+    if (id && select.value !== id) select.value = id
+  })
+  hud.log.replaceChildren()
+  for (const line of state.log) {
+    const item = document.createElement('li')
+    item.textContent = line
+    hud.log.append(item)
+  }
   const speed = state.phase.kind === 'finished' ? 0 : state.phase.speed
   parent.querySelectorAll<HTMLButtonElement>('[data-speed]').forEach((button) => {
     button.classList.toggle('on', button.dataset.speed === String(speed))
