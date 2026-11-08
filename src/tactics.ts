@@ -1,3 +1,4 @@
+import { SWEEP } from './balance.ts'
 import type { Division, Tactic, TacticContext, TacticId } from './types.ts'
 
 function hypot(x: number, y: number): number {
@@ -20,13 +21,15 @@ function steer(div: Division, mx: number, my: number, speed: number, dt: number)
 }
 
 function face(div: Division, tx: number, ty: number, dt: number): void {
-  let fx = tx - div.ax
-  let fy = ty - div.ay
+  faceDirection(div, tx - div.ax, ty - div.ay, dt, 1.5)
+}
+
+function faceDirection(div: Division, fx: number, fy: number, dt: number, rate: number): void {
   const len = hypot(fx, fy)
   if (len < 1e-4) return
   fx /= len
   fy /= len
-  const a = 1 - Math.exp(-1.5 * dt)
+  const a = 1 - Math.exp(-rate * dt)
   div.fx += (fx - div.fx) * a
   div.fy += (fy - div.fy) * a
   const fl = hypot(div.fx, div.fy) || 1
@@ -105,6 +108,150 @@ function pierce(div: Division, ctx: TacticContext, dt: number, speed: number): v
   face(div, bx, by, dt)
 }
 
+function steerFace(div: Division, gx: number, gy: number, speed: number, dt: number): void {
+  steer(div, gx - div.ax, gy - div.ay, speed, dt)
+  face(div, gx, gy, dt)
+}
+
+function clampCone(mx: number, my: number, px: number, py: number, minDot: number): { x: number; y: number } {
+  const dot = mx * px + my * py
+  if (dot >= minDot) return { x: mx, y: my }
+  let sx = mx - px * dot
+  let sy = my - py * dot
+  const sl = Math.hypot(sx, sy)
+  if (sl < 1e-6) return { x: px, y: py }
+  sx /= sl
+  sy /= sl
+  const lateral = Math.sqrt(Math.max(0, 1 - minDot * minDot))
+  return { x: px * minDot + sx * lateral, y: py * minDot + sy * lateral }
+}
+
+function sailBow(
+  div: Division,
+  gx: number,
+  gy: number,
+  threatX: number,
+  threatY: number,
+  speed: number,
+  dt: number,
+  minDot: number,
+): void {
+  let mx = gx - div.ax
+  let my = gy - div.ay
+  const ml = Math.hypot(mx, my) || 1
+  mx /= ml
+  my /= ml
+  let px = threatX - div.ax
+  let py = threatY - div.ay
+  const pl = Math.hypot(px, py) || 1
+  px /= pl
+  py /= pl
+  const clamped = clampCone(mx, my, px, py, minDot)
+  steer(div, clamped.x, clamped.y, speed, dt)
+  face(div, div.ax + clamped.x, div.ay + clamped.y, dt)
+}
+
+function preyFor(div: Division, ctx: TacticContext): Division | null {
+  let best: Division | null = null
+  let bestScore = Infinity
+  const side = div.flankSign === 0 ? 1 : div.flankSign
+  for (const other of ctx.divisions) {
+    if (other.side === div.side || other.alive === 0) continue
+    const dist = Math.hypot(other.ax - div.ax, other.ay - div.ay)
+    const flank = Math.sign(other.ay - ctx.enemyY)
+    let score = dist
+    if (flank !== 0 && flank !== side) score += 240
+    if (other.slot === div.slot) score -= 40
+    if (score < bestScore) {
+      bestScore = score
+      best = other
+    }
+  }
+  return best
+}
+
+function polarPoint(prey: Division, side: number, angle: number, range: number): { x: number; y: number } {
+  const c = Math.cos(angle)
+  const s = Math.sin(angle)
+  return {
+    x: prey.ax + (prey.fx * c + prey.rx * side * s) * range,
+    y: prey.ay + (prey.fy * c + prey.ry * side * s) * range,
+  }
+}
+
+function hook(div: Division, ctx: TacticContext, dt: number, speed: number, mode: 'side' | 'rear'): void {
+  const prey = preyFor(div, ctx)
+  if (!prey) {
+    charge(div, ctx, dt, speed)
+    return
+  }
+  const side = div.flankSign === 0 ? 1 : div.flankSign
+  const relX = div.ax - prey.ax
+  const relY = div.ay - prey.ay
+  const along = relX * prey.fx + relY * prey.fy
+  const cross = relX * prey.rx + relY * prey.ry
+  const range = Math.hypot(relX, relY) || 1
+  const angle = Math.atan2(side * cross, along)
+  const arc = (50 * Math.PI) / 180
+  const safeRange = 800
+  const wantAngle = mode === 'rear' ? (118 * Math.PI) / 180 : (96 * Math.PI) / 180
+  const wantRange = mode === 'rear' ? 280 : 300
+  const pocket = angle > wantAngle - 0.4 && range < wantRange + 110
+  if (pocket) div.phase = 2
+  else if (angle < arc) div.phase = 0
+
+  let goalAngle = wantAngle
+  let goalRange = wantRange
+  if (div.phase !== 2) {
+    if (angle < arc) {
+      goalAngle = angle + 0.55
+      goalRange = Math.max(range, safeRange)
+    } else {
+      goalAngle = Math.min(wantAngle, angle + 0.7)
+      const span = wantAngle - arc
+      const t = span <= 0 ? 1 : (goalAngle - arc) / span
+      goalRange = safeRange + (wantRange - safeRange) * Math.min(1, Math.max(0, t))
+    }
+  }
+  const goal = polarPoint(prey, side, goalAngle, goalRange)
+  div.markX = goal.x
+  div.markY = goal.y
+  if (div.phase === 2) {
+    div.phaseT += dt
+    const orbit = Math.min(Math.PI + 0.15, angle + 0.4)
+    if (div.phaseT > 5 || angle > Math.PI - 0.35) {
+      div.phase = 0
+      div.phaseT = 0
+    }
+    const ahead = polarPoint(prey, side, orbit, wantRange)
+    div.markX = ahead.x
+    div.markY = ahead.y
+    steerFace(div, ahead.x, ahead.y, speed * 0.9, dt)
+    return
+  }
+  const threat = angle < arc + 0.2
+  if (threat) sailBow(div, goal.x, goal.y, prey.ax, prey.ay, speed, dt, 0.34)
+  else steerFace(div, goal.x, goal.y, speed, dt)
+}
+
+function pin(div: Division, ctx: TacticContext, dt: number): void {
+  const prey = preyFor(div, ctx)
+  const tx = prey ? prey.ax : ctx.enemyX
+  const ty = prey ? prey.ay : ctx.enemyY
+  let fx = prey ? prey.fx : ctx.ownX - ctx.enemyX
+  let fy = prey ? prey.fy : ctx.ownY - ctx.enemyY
+  const len = Math.hypot(fx, fy) || 1
+  fx /= len
+  fy /= len
+  const gx = tx + fx * 520
+  const gy = ty + fy * 520
+  div.markX = gx
+  div.markY = gy
+  const dist = Math.hypot(gx - div.ax, gy - div.ay)
+  steer(div, gx - div.ax, gy - div.ay, dist < 36 ? 0 : Math.min(28, dist), dt)
+  face(div, tx, ty, dt)
+}
+
 function feint(div: Division, ctx: TacticContext, dt: number, speed: number, offset: number, seconds: number): void {
   if (div.phase === 0) {
     div.phaseT += dt
@@ -121,6 +268,58 @@ function feint(div: Division, ctx: TacticContext, dt: number, speed: number, off
   flank(div, ctx, dt, speed, offset)
 }
 
+function fleetHeading(ctx: TacticContext, dist: number): { x: number; y: number } {
+  const dx = ctx.ownX - ctx.enemyX
+  const dy = ctx.ownY - ctx.enemyY
+  const ux = dx / dist
+  const uy = dy / dist
+  const tx = SWEEP.turn < 0 ? uy : -uy
+  const ty = SWEEP.turn < 0 ? -ux : ux
+  const off = ctx.sweepLeg === 1 ? SWEEP.passOff : SWEEP.off
+  const hx = -ux * Math.cos(off) + tx * Math.sin(off)
+  const hy = -uy * Math.cos(off) + ty * Math.sin(off)
+  const len = hypot(hx, hy) || 1
+  return { x: hx / len, y: hy / len }
+}
+
+function sweepDivision(div: Division, ctx: TacticContext, dt: number): void {
+  const dx = ctx.ownX - ctx.enemyX
+  const dy = ctx.ownY - ctx.enemyY
+  const dist = hypot(dx, dy) || 1
+  const ux = dx / dist
+  const uy = dy / dist
+  const tx = SWEEP.turn < 0 ? uy : -uy
+  const ty = SWEEP.turn < 0 ? -ux : ux
+  if (!div.sweepLocked) {
+    const ox = div.ax - ctx.ownX
+    const oy = div.ay - ctx.ownY
+    div.sweepAlong = ox * tx + oy * ty
+    div.sweepOut = ox * ux + oy * uy
+    div.sweepLocked = true
+  }
+  const heading = fleetHeading(ctx, dist)
+  const gx = ctx.ownX + heading.x * SWEEP.lead + tx * div.sweepAlong + ux * div.sweepOut
+  const gy = ctx.ownY + heading.y * SWEEP.lead + ty * div.sweepAlong + uy * div.sweepOut
+  div.markX = gx
+  div.markY = gy
+  div.sweeping = true
+  div.focus = false
+  steer(div, gx - div.ax, gy - div.ay, SWEEP.speed, dt)
+  faceDirection(div, heading.x, heading.y, dt, 3.4)
+}
+
+export function stepDivision(div: Division, ctx: TacticContext, dt: number): void {
+  const tactic = TACTICS[div.tacticId]
+  const dist = hypot(ctx.enemyX - ctx.ownX, ctx.enemyY - ctx.ownY)
+  if (tactic.sweep && dist < SWEEP.engage) {
+    sweepDivision(div, ctx, dt)
+    return
+  }
+  div.sweeping = false
+  div.sweepLocked = false
+  tactic.step(div, ctx, dt)
+}
+
 function tagged(div: Division, focus: boolean, ctx: TacticContext): void {
   div.focus = focus
   if (focus) aim(div, ctx)
@@ -133,6 +332,7 @@ export const TACTICS = {
     summary: '艦首を進路上に向け、敵の正面へ進む。',
     focus: false,
     guns: false,
+    sweep: true,
     step(div, ctx, dt) {
       tagged(div, false, ctx)
       charge(div, ctx, dt, 34)
@@ -141,9 +341,10 @@ export const TACTICS = {
   hold: {
     id: 'hold',
     name: '定点射撃',
-    summary: 'その場で艦首を敵へ向けて撃つ。',
+    summary: 'その場で艦首を敵へ向けて撃つ。接近しても艦隊の旋回には乗らない。',
     focus: false,
     guns: true,
+    sweep: false,
     step(div, ctx, dt) {
       tagged(div, false, ctx)
       hold(div, ctx, dt)
@@ -155,9 +356,46 @@ export const TACTICS = {
     summary: '外側へ回り、敵の側面から艦首を向ける。',
     focus: false,
     guns: false,
+    sweep: true,
     step(div, ctx, dt) {
       tagged(div, false, ctx)
       flank(div, ctx, dt, 36, 280)
+    },
+  },
+  broadside: {
+    id: 'broadside',
+    name: '側面攻撃',
+    summary: '敵分艦隊の射界の外へ出て、その側面を撃つ。接近後もこの回り込みを続ける。',
+    focus: false,
+    guns: false,
+    sweep: false,
+    step(div, ctx, dt) {
+      tagged(div, false, ctx)
+      hook(div, ctx, dt, 48, 'side')
+    },
+  },
+  rear: {
+    id: 'rear',
+    name: '背後襲撃',
+    summary: '大きく回り込んで敵分艦隊の背面を撃つ。接近後もこの回り込みを続ける。',
+    focus: false,
+    guns: false,
+    sweep: false,
+    step(div, ctx, dt) {
+      tagged(div, false, ctx)
+      hook(div, ctx, dt, 38, 'rear')
+    },
+  },
+  pin: {
+    id: 'pin',
+    name: '釘付け',
+    summary: '敵中軍の正面で艦首を向け、その場に縛る。接近しても艦隊の旋回には乗らない。',
+    focus: false,
+    guns: false,
+    sweep: false,
+    step(div, ctx, dt) {
+      tagged(div, false, ctx)
+      pin(div, ctx, dt)
     },
   },
   encircle: {
@@ -166,6 +404,7 @@ export const TACTICS = {
     summary: '敵の周囲を回り、側面と背面を撃つ。',
     focus: false,
     guns: false,
+    sweep: true,
     step(div, ctx, dt) {
       tagged(div, false, ctx)
       orbit(div, ctx, dt, 32, 210, 0.11)
@@ -177,6 +416,7 @@ export const TACTICS = {
     summary: '艦首を向けたまま中央を突き抜ける。',
     focus: false,
     guns: false,
+    sweep: true,
     step(div, ctx, dt) {
       tagged(div, false, ctx)
       pierce(div, ctx, dt, 42)
@@ -188,6 +428,7 @@ export const TACTICS = {
     summary: 'いったん反転して下がり、側面へ回り込む。',
     focus: false,
     guns: false,
+    sweep: true,
     step(div, ctx, dt) {
       tagged(div, false, ctx)
       feint(div, ctx, dt, 32, 260, 12)
@@ -196,9 +437,10 @@ export const TACTICS = {
   focus: {
     id: 'focus',
     name: '集中砲火',
-    summary: '艦首を一点へ向け、そこへ弾を集める。',
+    summary: '艦首を一点へ向け、そこへ弾を集める。接近しても艦隊の旋回には乗らない。',
     focus: true,
     guns: true,
+    sweep: false,
     step(div, ctx, dt) {
       tagged(div, true, ctx)
       charge(div, ctx, dt, 18)

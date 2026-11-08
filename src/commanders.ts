@@ -6,6 +6,8 @@ export interface DivisionFact {
   phase: number
   ax: number
   ay: number
+  fx: number
+  fy: number
 }
 
 export type Bearing = 'front' | 'side' | 'rear'
@@ -18,21 +20,17 @@ export interface BattleFacts {
   enemyFormation: FormationId
   ownX: number
   ownY: number
+  ax: number
+  ay: number
+  fx: number
+  fy: number
   slot: DivisionSlot
   enemy: readonly DivisionFact[]
   enemyOnUs: Bearing
   usOnEnemy: Bearing
 }
 
-interface TacticWeights {
-  charge: number
-  hold: number
-  flank: number
-  encircle: number
-  breakthrough: number
-  feint: number
-  focus: number
-}
+type TacticWeights = Record<TacticId, number>
 
 interface WeightRule {
   id: string
@@ -58,15 +56,18 @@ interface Read {
   enemyFlanking: boolean
 }
 
-const EMPTY: TacticWeights = {
+const EMPTY = {
   charge: 0,
   hold: 0,
   flank: 0,
+  broadside: 0,
+  rear: 0,
+  pin: 0,
   encircle: 0,
   breakthrough: 0,
   feint: 0,
   focus: 0,
-}
+} satisfies TacticWeights
 
 export const COMMANDERS = {
   manual: {
@@ -99,27 +100,23 @@ export const COMMANDERS = {
   cunning: {
     id: 'cunning',
     name: '智将',
-    summary: '偽装、迂回、包囲で隙を突く。',
+    summary: '中軍で正面を押さえ、両翼で側面と背面を撃つ。',
     auto: true,
-    base: { ...EMPTY, feint: 3, flank: 2, encircle: 2 },
-    prefer: ['encircle', 'feint', 'flank', 'breakthrough', 'focus', 'hold', 'charge'],
+    base: { ...EMPTY, pin: 1, broadside: 1, rear: 1 },
+    prefer: ['rear', 'broadside', 'pin', 'focus', 'hold', 'flank', 'charge', 'encircle', 'breakthrough', 'feint'],
     rules: [
-      { id: 'flanked', test: (_facts, read) => read.enemyFlanking, add: { encircle: 4 } },
+      { id: 'pin-center', test: (_facts, read) => read.center, add: { pin: 9 } },
+      { id: 'inner-wing', test: (facts) => facts.slot === 1 || facts.slot === 3, add: { broadside: 8 } },
+      { id: 'outer-wing', test: (_facts, read) => read.wing, add: { rear: 8 } },
       {
-        id: 'arrow',
-        test: (facts, read) => facts.enemyFormation === 'hoshi' && !read.enemyFlanking,
-        add: { flank: 4 },
+        id: 'exposed-rear',
+        test: (facts, read) => !read.center && opening(facts) === 'rear',
+        add: { rear: 10 },
       },
       {
-        id: 'wing',
-        test: (facts, read) => read.wing && !read.enemyFlanking && facts.enemyFormation !== 'hoshi',
-        add: { flank: 3 },
-      },
-      { id: 'opening', test: (_facts, read) => read.enemyLoss >= 0.35, add: { encircle: 3 } },
-      {
-        id: 'their-armor',
-        test: (facts) => facts.usOnEnemy === 'side' || facts.usOnEnemy === 'rear',
-        add: { encircle: 3, flank: 2 },
+        id: 'exposed-side',
+        test: (facts) => (facts.slot === 1 || facts.slot === 3) && opening(facts) === 'side',
+        add: { broadside: 4 },
       },
     ],
   },
@@ -207,11 +204,35 @@ function readFacts(facts: BattleFacts): Read {
   }
 }
 
+function opening(facts: BattleFacts): Bearing | null {
+  let best: Bearing | null = null
+  let bestScore = 0
+  for (const enemy of facts.enemy) {
+    if (enemy.alive === 0) continue
+    const dx = facts.ax - enemy.ax
+    const dy = facts.ay - enemy.ay
+    const len = Math.hypot(dx, dy) || 1
+    const dot = (dx / len) * enemy.fx + (dy / len) * enemy.fy
+    let bearing: Bearing = 'front'
+    if (dot <= -0.3) bearing = 'rear'
+    else if (dot < 0.45) bearing = 'side'
+    if (bearing === 'front') continue
+    const score = (bearing === 'rear' ? 2 : 1) + 140 / len
+    if (score > bestScore) {
+      bestScore = score
+      best = bearing
+    }
+  }
+  return best
+}
+
 function flanking(division: DivisionFact, ownY: number): boolean {
   if (division.alive === 0) return false
   const ordered =
     division.tacticId === 'flank' ||
     division.tacticId === 'encircle' ||
+    division.tacticId === 'broadside' ||
+    division.tacticId === 'rear' ||
     (division.tacticId === 'feint' && division.phase > 0)
   return ordered && Math.abs(division.ay - ownY) > 110
 }

@@ -19,6 +19,23 @@ export function inFiringArc(
   return Math.abs(wrapAngle(aim - heading)) <= arc
 }
 
+export type ArmorZone = 'front' | 'side' | 'rear'
+
+export function armorZone(
+  heading: number,
+  targetX: number,
+  targetY: number,
+  shooterX: number,
+  shooterY: number,
+  stats: ShipStats,
+): ArmorZone {
+  const incoming = Math.atan2(shooterY - targetY, shooterX - targetX)
+  const diff = Math.abs(wrapAngle(incoming - heading))
+  if (diff <= stats.armorBow) return 'front'
+  if (diff >= Math.PI - stats.armorStern) return 'rear'
+  return 'side'
+}
+
 export function armorMultiplier(
   heading: number,
   targetX: number,
@@ -27,9 +44,8 @@ export function armorMultiplier(
   shooterY: number,
   stats: ShipStats,
 ): number {
-  const incoming = Math.atan2(shooterY - targetY, shooterX - targetX)
-  const diff = Math.abs(wrapAngle(incoming - heading))
-  if (diff <= stats.armorBow) return stats.armorFront
-  if (diff >= Math.PI - stats.armorStern) return stats.armorRear
+  const zone = armorZone(heading, targetX, targetY, shooterX, shooterY, stats)
+  if (zone === 'front') return stats.armorFront
+  if (zone === 'rear') return stats.armorRear
   return stats.armorSide
 }
