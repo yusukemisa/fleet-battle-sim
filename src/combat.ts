@@ -7,6 +7,23 @@ export function wrapAngle(delta: number): number {
   return turn
 }
 
+/** True when `to` lies inside the bow cone. `cosLimit` is `cos(arc)`. */
+export function inArc(
+  hx: number,
+  hy: number,
+  fromX: number,
+  fromY: number,
+  toX: number,
+  toY: number,
+  cosLimit: number,
+): boolean {
+  const dx = toX - fromX
+  const dy = toY - fromY
+  const dist = Math.hypot(dx, dy)
+  if (dist < 1e-4) return true
+  return dx * hx + dy * hy >= dist * cosLimit
+}
+
 export function inFiringArc(
   heading: number,
   fromX: number,
@@ -15,8 +32,28 @@ export function inFiringArc(
   toY: number,
   arc: number,
 ): boolean {
-  const aim = Math.atan2(toY - fromY, toX - fromX)
-  return Math.abs(wrapAngle(aim - heading)) <= arc
+  return inArc(Math.cos(heading), Math.sin(heading), fromX, fromY, toX, toY, Math.cos(arc))
+}
+
+export function armorFactor(
+  hx: number,
+  hy: number,
+  targetX: number,
+  targetY: number,
+  shooterX: number,
+  shooterY: number,
+  stats: ShipStats,
+  cosBow: number,
+  cosStern: number,
+): number {
+  const ix = shooterX - targetX
+  const iy = shooterY - targetY
+  const dist = Math.hypot(ix, iy)
+  if (dist < 1e-4) return stats.armorFront
+  const dot = ix * hx + iy * hy
+  if (dot >= dist * cosBow) return stats.armorFront
+  if (dot <= -dist * cosStern) return stats.armorRear
+  return stats.armorSide
 }
 
 export type ArmorZone = 'front' | 'side' | 'rear'
@@ -29,10 +66,19 @@ export function armorZone(
   shooterY: number,
   stats: ShipStats,
 ): ArmorZone {
-  const incoming = Math.atan2(shooterY - targetY, shooterX - targetX)
-  const diff = Math.abs(wrapAngle(incoming - heading))
-  if (diff <= stats.armorBow) return 'front'
-  if (diff >= Math.PI - stats.armorStern) return 'rear'
+  const factor = armorFactor(
+    Math.cos(heading),
+    Math.sin(heading),
+    targetX,
+    targetY,
+    shooterX,
+    shooterY,
+    stats,
+    Math.cos(stats.armorBow),
+    Math.cos(stats.armorStern),
+  )
+  if (factor === stats.armorRear) return 'rear'
+  if (factor === stats.armorFront) return 'front'
   return 'side'
 }
 

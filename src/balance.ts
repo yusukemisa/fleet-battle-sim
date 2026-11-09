@@ -79,3 +79,25 @@ export function rangeSq(stats: ShipStats): number {
 export function acquireSq(stats: ShipStats): number {
   return stats.acquire * stats.acquire
 }
+
+/**
+ * Fire-control weights. Expected damage prefers exposed armor and a hull one
+ * shot can finish. `near` is subtracted per unit of range, so a closer ship
+ * screens one that has fallen back. `falloff` stays 0 while hit chance does
+ * not decay with range.
+ */
+export const GUNNERY = {
+  finish: 1.45,
+  lowHp: 0.4,
+  focus: 0.007,
+  near: 0.016,
+  falloff: 0,
+  falloffFloor: 0.55,
+  reserve: 1,
+  cell: 180,
+} as const
+
+/** How often a division reorders wounded ships behind healthy ones. */
+export const RANKS = {
+  interval: 0.25,
+} as const
