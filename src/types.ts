@@ -1,4 +1,5 @@
 import type { ShipStats } from './balance.ts'
+import type { CombatScratch } from './spatial.ts'
 
 export const SHIP_COUNTS = [100, 1000, 10000] as const
 export type ShipCount = (typeof SHIP_COUNTS)[number]
@@ -34,6 +35,24 @@ export type DivisionSlot = 0 | 1 | 2 | 3 | 4
 export const DEFAULT_SHIP_COUNT: ShipCount = 1000
 export const DEFAULT_FORMATION: FormationId = 'oujin'
 
+export type GunneryMode = 'legacy' | 'aimed'
+
+/** Shot quality gathered during one battle. Times are summed sim-seconds. */
+export interface GunneryTally {
+  shots: number
+  hits: number
+  damage: number
+  overkill: number
+  /** Ready guns that did not fire. */
+  idle: number
+  /** Ready guns that had a living target inside arc and range, and still did not fire. */
+  held: number
+  /** Ready guns whose current target sat outside the arc or the range. */
+  wide: number
+  deaths: number
+  deathTime: number
+}
+
 export type BattlePhase =
   | { kind: 'setup'; speed: Speed }
   | { kind: 'running'; speed: Speed }
@@ -54,6 +73,10 @@ export interface Ships {
   cooldown: Float32Array
   slotX: Float32Array
   slotY: Float32Array
+  homeX: Float32Array
+  homeY: Float32Array
+  /** 1 when this ship has dropped behind its division. */
+  falling: Uint8Array
   heading: Float32Array
   alive: Uint8Array
   side: Uint8Array
@@ -167,6 +190,9 @@ export interface SimConfig {
   commanders?: readonly [CommanderId, CommanderId]
   hp?: number
   damage?: readonly [number, number]
+  gunnery?: GunneryMode
+  /** Per side. False keeps every ship on the station it was given. */
+  withdraw?: readonly [boolean, boolean]
 }
 
 export interface Beams {
@@ -214,4 +240,10 @@ export interface SimState {
   hits: ArmorHits
   beams: Beams
   booms: Booms
+  gunnery: GunneryMode
+  withdrawSides: readonly [boolean, boolean]
+  tally: GunneryTally
+  scratch: CombatScratch
+  rankAt: number
+  fallingN: number
 }

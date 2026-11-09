@@ -1,7 +1,10 @@
-import { acquireSq, FIELD, rangeSq, SHIP_STATS, SIM_TIME_SCALE, SWEEP, type ShipStats } from './balance.ts'
-import { armorZone, inFiringArc, wrapAngle } from './combat.ts'
+import { acquireSq, FIELD, GUNNERY, RANKS, rangeSq, SHIP_STATS, SIM_TIME_SCALE, SWEEP, type ShipStats } from './balance.ts'
+import { armorZone, inArc, inFiringArc, wrapAngle } from './combat.ts'
 import { chooseTactic, COMMANDERS, type BattleFacts, type Bearing } from './commanders.ts'
 import { layoutFormation } from './formations.ts'
+import { cacheBows, cacheSpread, emptyTally, hasClearShot, pickTarget } from './gunnery.ts'
+import { refreshCover, rotateRanks } from './ranks.ts'
+import { createScratch, fillSpatialHash } from './spatial.ts'
 import { TACTICS, stepDivision, tacticById } from './tactics.ts'
 import {
   DEFAULT_COMMANDER,
@@ -12,6 +15,7 @@ import {
   type Command,
   type Division,
   type DivisionSlot,
+  type GunneryMode,
   type SideId,
   type SimConfig,
   type SimState,
@@ -30,7 +34,7 @@ export function createSim(config: SimConfig): SimState {
   const damage: [number, number] = config.damage
     ? [config.damage[0], config.damage[1]]
     : [stats.damage, stats.damage]
-  const state = allocate(config.shipCount, stats, damage)
+  const state = allocate(config.shipCount, stats, damage, config.gunnery ?? 'aimed', config.withdraw ?? [true, true])
   state.fleets[0].formationId = formations[0]
   state.fleets[1].formationId = formations[1]
   state.fleets[0].commanderId = commanders[0]
@@ -106,6 +110,8 @@ function configFrom(state: SimState, patch: { shipCount?: SimState['shipCount'] 
     commanders: [state.fleets[0].commanderId, state.fleets[1].commanderId],
     hp: state.stats.hp,
     damage: state.damage,
+    gunnery: state.gunnery,
+    withdraw: state.withdrawSides,
   }
 }
 
@@ -231,7 +237,13 @@ function shipStats(config: SimConfig): ShipStats {
   return { ...SHIP_STATS, hp: config.hp ?? SHIP_STATS.hp }
 }
 
-function allocate(shipCount: SimState['shipCount'], stats: ShipStats, damage: [number, number]): SimState {
+function allocate(
+  shipCount: SimState['shipCount'],
+  stats: ShipStats,
+  damage: [number, number],
+  gunnery: GunneryMode,
+  withdrawSides: readonly [boolean, boolean],
+): SimState {
   const count = shipCount
   const divisions: Division[] = []
   const sides: SideId[] = [0, 1]
@@ -254,6 +266,9 @@ function allocate(shipCount: SimState['shipCount'], stats: ShipStats, damage: [n
       cooldown: new Float32Array(count),
       slotX: new Float32Array(count),
       slotY: new Float32Array(count),
+      homeX: new Float32Array(count),
+      homeY: new Float32Array(count),
+      falling: new Uint8Array(count),
       heading: new Float32Array(count),
       alive: new Uint8Array(count),
       side: new Uint8Array(count),
@@ -294,6 +309,12 @@ function allocate(shipCount: SimState['shipCount'], stats: ShipStats, damage: [n
       side: new Uint8Array(FIELD.maxBooms),
       head: 0,
     },
+    gunnery,
+    withdrawSides,
+    tally: emptyTally(),
+    scratch: createScratch(count, GUNNERY.cell),
+    rankAt: 0,
+    fallingN: 0,
   }
 }
 
@@ -349,6 +370,20 @@ function deploy(state: SimState): void {
   state.hits.side[1] = 0
   state.hits.rear[0] = 0
   state.hits.rear[1] = 0
+  const tally = state.tally
+  tally.shots = 0
+  tally.hits = 0
+  tally.damage = 0
+  tally.overkill = 0
+  tally.idle = 0
+  tally.held = 0
+  tally.wide = 0
+  tally.deaths = 0
+  tally.deathTime = 0
+  state.rankAt = 0
+  state.fallingN = 0
+  state.ships.falling.fill(0)
+  state.scratch.look.fill(-1)
   for (const division of state.divisions) division.alive = 0
   const sides: SideId[] = [0, 1]
   state.fleets[0].sweepLeg = 0
@@ -429,6 +464,9 @@ function placeSide(state: SimState, side: SideId, half: number): void {
     const dy = ships.y[at]! - division.ay
     ships.slotX[at] = dx * division.rx + dy * division.ry
     ships.slotY[at] = dx * division.fx + dy * division.fy
+    ships.homeX[at] = ships.slotX[at] ?? 0
+    ships.homeY[at] = ships.slotY[at] ?? 0
+    ships.falling[at] = 0
     ships.heading[at] = Math.atan2(division.fy, division.fx)
   }
   markCommander(state, side, half)
@@ -489,6 +527,14 @@ function step(state: SimState, dt: number): void {
       dt,
     )
   }
+  if (state.time >= state.rankAt) {
+    rotateRanks(state)
+    state.rankAt = state.time + RANKS.interval
+  }
+  if (state.fallingN > 0) {
+    cacheBows(state)
+    refreshCover(state)
+  }
   moveShips(state, dt)
   fight(state, dt)
   fadeEffects(state, dt)
@@ -537,7 +583,15 @@ function moveShips(state: SimState, dt: number): void {
     const guns = TACTICS[division.tacticId].guns && !division.sweeping
     let desired = Math.atan2(division.fy, division.fx)
     const target = ships.target[i] ?? -1
-    if (!guns && dist > 22) {
+    const falling = ships.falling[i] === 1
+    if (falling && dist > 8) {
+      const enemy = ships.side[i] === 1 ? 0 : 1
+      const threat = Math.atan2((state.centroidY[enemy] ?? 0) - y, (state.centroidX[enemy] ?? 0) - x)
+      const aim = Math.atan2(dy, dx)
+      const delta = wrapAngle(aim - threat)
+      // The rally point is behind. Keep the bow toward the enemy and creep, so the stern stays out of their guns.
+      desired = Math.abs(delta) > (70 * Math.PI) / 180 ? threat : aim
+    } else if (!guns && dist > 22) {
       desired = Math.atan2(dy, dx)
     } else if (target >= 0 && ships.alive[target] === 1) {
       desired = Math.atan2((ships.y[target] ?? 0) - y, (ships.x[target] ?? 0) - x)
@@ -563,6 +617,58 @@ function moveShips(state: SimState, dt: number): void {
 
 function fight(state: SimState, dt: number): void {
   const ships = state.ships
+  cacheBows(state)
+  cacheSpread(state)
+  fillSpatialHash(state.scratch.hash, ships.x, ships.y, ships.alive, ships.count)
+  state.scratch.opened.set(ships.hp)
+  state.scratch.incoming.fill(0)
+  if (state.gunnery === 'legacy') {
+    fightLegacy(state, dt)
+    return
+  }
+  const blue = state.scratch.ready.blue
+  const red = state.scratch.ready.red
+  let n0 = 0
+  let n1 = 0
+  // Large steps already fire on the frame cooldown elapses. Small steps stagger ships that are still waiting.
+  const period = dt >= 0.05 ? 1 : Math.max(1, Math.round(0.12 / dt))
+  const frame = state.frame
+  for (let i = 0; i < ships.count; i++) {
+    if (ships.alive[i] === 0) continue
+    const cd = (ships.cooldown[i] ?? 0) - dt
+    ships.cooldown[i] = cd
+    if (cd <= COOLDOWN_SLACK) {
+      const look = state.scratch.look[i] ?? -1
+      const fresh = cd + dt > COOLDOWN_SLACK
+      if (fresh || look < 0 || frame - look >= period) {
+        state.scratch.look[i] = frame
+        if (ships.side[i] === 1) red[n1++] = i
+        else blue[n0++] = i
+      } else noteIdle(state, i, dt, false)
+      continue
+    }
+    const target = ships.target[i] ?? -1
+    if (target >= 0 && ships.alive[target] === 0) {
+      ships.target[i] = frame % period === i % period ? pickTarget(state, i) : -1
+    }
+  }
+  const pairs = n0 > n1 ? n0 : n1
+  for (let k = 0; k < pairs; k++) {
+    const left = blue[k] ?? -1
+    const right = red[k] ?? -1
+    if (k < n0) volley(state, left, dt)
+    if (k < n1) volley(state, right, dt)
+  }
+}
+
+function volley(state: SimState, index: number, dt: number): void {
+  const picked = pickTarget(state, index)
+  state.ships.target[index] = picked
+  if (!fireAt(state, index, dt)) noteIdle(state, index, dt, true)
+}
+
+function fightLegacy(state: SimState, dt: number): void {
+  const ships = state.ships
   const stagger = FIELD.stagger
   const frame = state.frame
   for (let i = 0; i < ships.count; i++) {
@@ -572,8 +678,37 @@ function fight(state: SimState, dt: number): void {
     if (needs) acquire(state, i)
     ships.cooldown[i] = (ships.cooldown[i] ?? 0) - dt
     if ((ships.cooldown[i] ?? 0) > COOLDOWN_SLACK) continue
-    shoot(state, i, dt)
+    if (!fireAt(state, i, dt)) noteIdle(state, i, dt, true)
   }
+}
+
+function noteIdle(state: SimState, index: number, dt: number, searched: boolean): void {
+  const ships = state.ships
+  state.tally.idle += dt
+  const target = ships.target[index] ?? -1
+  let outside = true
+  if (target >= 0 && ships.alive[target] === 1) {
+    const sx = ships.x[index] ?? 0
+    const sy = ships.y[index] ?? 0
+    const tx = ships.x[target] ?? 0
+    const ty = ships.y[target] ?? 0
+    const dx = tx - sx
+    const dy = ty - sy
+    const inRange = dx * dx + dy * dy <= state.stats.range * state.stats.range
+    const aimed = inArc(
+      state.scratch.bowX[index] ?? 1,
+      state.scratch.bowY[index] ?? 0,
+      sx,
+      sy,
+      tx,
+      ty,
+      state.scratch.cosArc,
+    )
+    outside = !inRange || !aimed
+  }
+  if (outside) state.tally.wide += dt
+  if (!searched || ships.falling[index] === 1 || state.gunnery === 'aimed') return
+  if (hasClearShot(state, index)) state.tally.held += dt
 }
 
 function acquire(state: SimState, index: number): void {
@@ -610,47 +745,47 @@ function acquire(state: SimState, index: number): void {
   ships.target[index] = best
 }
 
-function shoot(state: SimState, index: number, dt: number): void {
+function fireAt(state: SimState, index: number, dt: number): boolean {
   const ships = state.ships
   const target = ships.target[index] ?? -1
-  if (target < 0 || ships.alive[target] === 0) return
-  const dx = ships.x[target]! - ships.x[index]!
-  const dy = ships.y[target]! - ships.y[index]!
-  if (dx * dx + dy * dy > rangeSq(state.stats)) return
-  if (!inFiringArc(ships.heading[index] ?? 0, ships.x[index] ?? 0, ships.y[index] ?? 0, ships.x[target] ?? 0, ships.y[target] ?? 0, state.stats.arc)) {
-    return
+  if (target < 0 || ships.alive[target] === 0) return false
+  const sx = ships.x[index] ?? 0
+  const sy = ships.y[index] ?? 0
+  const tx = ships.x[target] ?? 0
+  const ty = ships.y[target] ?? 0
+  const dx = tx - sx
+  const dy = ty - sy
+  if (dx * dx + dy * dy > rangeSq(state.stats)) return false
+  if (!inArc(state.scratch.bowX[index] ?? 1, state.scratch.bowY[index] ?? 0, sx, sy, tx, ty, state.scratch.cosArc)) {
+    return false
   }
   const overdue = ships.cooldown[index] ?? 0
   // Keep this step's overshoot so the next shot stays on the cooldown cadence. A ship that could not fire keeps a full cooldown.
   const carry = overdue < -dt - COOLDOWN_SLACK ? 0 : overdue
   ships.cooldown[index] = state.stats.cooldown + carry
+  const side = ships.side[index] === 1 ? 1 : 0
+  const zone = armorZone(ships.heading[target] ?? 0, tx, ty, sx, sy, state.stats)
+  const factor = zone === 'front' ? state.stats.armorFront : zone === 'rear' ? state.stats.armorRear : state.stats.armorSide
+  const opened = state.scratch.opened[target] ?? 0
+  const queued = state.scratch.incoming[target] ?? 0
+  if ((ships.hp[target] ?? 0) <= 0 || (opened > 0 && queued >= opened)) state.tally.overkill += 1
+  state.scratch.incoming[target] = queued + state.damage[side] * factor * GUNNERY.reserve
+  state.tally.shots += 1
   const hit = rand(state) <= state.stats.hitChance
   const spread = hit ? 0.4 : 8
   const ox = (rand(state) - 0.5) * spread
   const oy = (rand(state) - 0.5) * spread
-  spawnBeam(
-    state,
-    ships.x[index]!,
-    ships.y[index]!,
-    ships.x[target]! + ox,
-    ships.y[target]! + oy,
-    ships.side[index] ?? 0,
-  )
-  if (!hit) return
-  const side = ships.side[index] === 1 ? 1 : 0
-  const zone = armorZone(
-    ships.heading[target] ?? 0,
-    ships.x[target] ?? 0,
-    ships.y[target] ?? 0,
-    ships.x[index] ?? 0,
-    ships.y[index] ?? 0,
-    state.stats,
-  )
+  spawnBeam(state, sx, sy, tx + ox, ty + oy, ships.side[index] ?? 0)
+  if (!hit) return true
   state.hits[zone][side] += 1
-  const factor = zone === 'front' ? state.stats.armorFront : zone === 'rear' ? state.stats.armorRear : state.stats.armorSide
-  ships.hp[target] = (ships.hp[target] ?? 0) - state.damage[side] * factor
+  const before = ships.hp[target] ?? 0
+  const blow = state.damage[side] * factor
+  state.tally.hits += 1
+  state.tally.damage += Math.min(before, blow)
+  ships.hp[target] = before - blow
   ships.flash[target] = 1
   if ((ships.hp[target] ?? 0) <= 0) destroy(state, target)
+  return true
 }
 
 function destroy(state: SimState, index: number): void {
@@ -663,6 +798,8 @@ function destroy(state: SimState, index: number): void {
   const side: SideId = ships.side[index] === 1 ? 1 : 0
   state.alive[side] -= 1
   state.lost[side] += 1
+  state.tally.deaths += 1
+  state.tally.deathTime += state.time
   const slot = state.booms.head
   state.booms.head = (slot + 1) % FIELD.maxBooms
   state.booms.x[slot] = ships.x[index] ?? 0

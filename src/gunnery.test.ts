@@ -1,0 +1,169 @@
+import { describe, expect, it } from 'vitest'
+import { SHIP_STATS } from './balance.ts'
+import { COMMANDERS } from './commanders.ts'
+import { armorMultiplier, armorZone } from './combat.ts'
+import { createSim, dispatch } from './sim.ts'
+import type { SimState } from './types.ts'
+
+describe('fire control', () => {
+  it('matches the bow and stern armor zones', () => {
+    expect(armorZone(0, 0, 0, 20, 0, SHIP_STATS)).toBe('front')
+    expect(armorZone(0, 0, 0, -20, 0, SHIP_STATS)).toBe('rear')
+    expect(armorZone(0, 0, 0, 0, 20, SHIP_STATS)).toBe('side')
+    let mismatches = 0
+    for (let h = 0; h < 12; h++) {
+      for (let a = 0; a < 24; a++) {
+        const heading = (h / 12) * Math.PI * 2
+        const incoming = (a / 24) * Math.PI * 2
+        const diff = Math.abs(wrap(incoming - heading))
+        const oracle = diff <= SHIP_STATS.armorBow ? 'front' : diff >= Math.PI - SHIP_STATS.armorStern ? 'rear' : 'side'
+        const got = armorZone(heading, 0, 0, Math.cos(incoming), Math.sin(incoming), SHIP_STATS)
+        if (got !== oracle) mismatches += 1
+      }
+    }
+    expect(mismatches).toBe(0)
+    expect(armorMultiplier(0, 0, 0, -20, 0, SHIP_STATS)).toBe(SHIP_STATS.armorRear)
+  })
+
+  it('spreads a salvo once a hull is already covered', () => {
+    const state = scene()
+    const ships = state.ships
+    ships.hp[50] = 8
+    ships.x[50] = 120
+    ships.y[50] = 0
+    ships.x[51] = 120
+    ships.y[51] = 36
+    const next = dispatch(dispatch(state, { type: 'start' }), { type: 'tick', dt: 0.05 })
+    expect(next.ships.hp[51]).toBeLessThan(SHIP_STATS.hp - 1)
+    expect(next.ships.hp[50] ?? 0).toBeLessThanOrEqual(0)
+    expect(next.tally.overkill).toBe(0)
+  })
+
+  it('picks the exposed rear over a closer bow', () => {
+    const state = scene()
+    const ships = state.ships
+    ships.alive[1] = 0
+    ships.alive[2] = 0
+    ships.alive[3] = 0
+    ships.alive[4] = 0
+    ships.alive[5] = 0
+    ships.x[50] = 140
+    ships.y[50] = 0
+    ships.heading[50] = 0
+    ships.hp[50] = SHIP_STATS.hp
+    ships.x[51] = 100
+    ships.y[51] = 0
+    ships.heading[51] = Math.PI
+    ships.hp[51] = SHIP_STATS.hp
+    const beforeRear = ships.hp[50] ?? 0
+    const beforeFront = ships.hp[51] ?? 0
+    const next = dispatch(dispatch(state, { type: 'start' }), { type: 'tick', dt: 0.05 })
+    expect(beforeRear - (next.ships.hp[50] ?? 0)).toBeGreaterThan(0)
+    expect(next.ships.hp[51]).toBe(beforeFront)
+  })
+})
+
+describe('withdrawal', () => {
+  it('is conservative for 守将, 常勝, and 智将, and slight for 猛将', () => {
+    expect(COMMANDERS.guard.withdraw.hp).toBeGreaterThan(COMMANDERS.fierce.withdraw.hp)
+    expect(COMMANDERS.balanced.withdraw.hp).toBeGreaterThan(COMMANDERS.fierce.withdraw.hp)
+    expect(COMMANDERS.cunning.withdraw.hp).toBeGreaterThan(COMMANDERS.fierce.withdraw.hp)
+    expect(COMMANDERS.fierce.withdraw.reengage).toBeGreaterThan(COMMANDERS.guard.withdraw.reengage)
+    expect(COMMANDERS.fierce.withdraw.depth).toBeLessThan(COMMANDERS.guard.withdraw.depth)
+    expect(COMMANDERS.manual.withdraw.hp).toBe(0)
+  })
+
+  it('rotates a wounded ship behind healthy ships in the same division', () => {
+    let state = createSim({
+      shipCount: 100,
+      commanders: ['guard', 'manual'],
+      withdraw: [true, false],
+    })
+    const ships = state.ships
+    const wounded = woundedShip(state)
+    ships.hp[wounded] = 4
+    state = dispatch(state, { type: 'start' })
+    for (let step = 0; step < 30; step++) state = dispatch(state, { type: 'tick', dt: 0.05 })
+    expect(ships.falling[wounded]).toBe(1)
+    let ahead = 0
+    let behind = 0
+    const division = ships.division[wounded] ?? 0
+    for (let i = 0; i < ships.count; i++) {
+      if (ships.alive[i] === 0 || ships.division[i] !== division || i === wounded) continue
+      if ((ships.slotY[i] ?? 0) > (ships.slotY[wounded] ?? 0)) ahead += 1
+      else behind += 1
+    }
+    expect(ahead).toBeGreaterThan(behind)
+    expect(ahead).toBeGreaterThan(0)
+  })
+})
+
+function wrap(delta: number): number {
+  let turn = delta
+  while (turn > Math.PI) turn -= Math.PI * 2
+  while (turn < -Math.PI) turn += Math.PI * 2
+  return turn
+}
+
+function scene(): SimState {
+  const state = createSim({
+    shipCount: 100,
+    commanders: ['manual', 'manual'],
+    gunnery: 'aimed',
+    withdraw: [false, false],
+  })
+  state.stats.hitChance = 1
+  const ships = state.ships
+  for (let i = 0; i < ships.count; i++) {
+    ships.alive[i] = 0
+    ships.cooldown[i] = 100
+    ships.hp[i] = 0
+  }
+  for (let i = 0; i < 6; i++) {
+    ships.alive[i] = 1
+    ships.side[i] = 0
+    ships.hp[i] = SHIP_STATS.hp
+    ships.cooldown[i] = 0
+    ships.x[i] = 0
+    ships.y[i] = (i - 2.5) * 6
+    ships.heading[i] = 0
+    ships.target[i] = -1
+    ships.vx[i] = 0
+    ships.vy[i] = 0
+  }
+  for (const at of [50, 51]) {
+    ships.alive[at] = 1
+    ships.side[at] = 1
+    ships.hp[at] = SHIP_STATS.hp
+    ships.cooldown[at] = 100
+    ships.heading[at] = Math.PI
+    ships.target[at] = -1
+  }
+  const division = state.divisions[0]
+  if (division) {
+    division.ax = 0
+    division.ay = 0
+    division.fx = 1
+    division.fy = 0
+    division.rx = 0
+    division.ry = -1
+    division.tacticId = 'hold'
+    division.holdArmed = true
+    division.holdX = 0
+    division.holdY = 0
+  }
+  for (let i = 0; i < 6; i++) {
+    ships.slotX[i] = ships.y[i] ?? 0
+    ships.slotY[i] = 0
+    ships.division[i] = 0
+  }
+  return state
+}
+
+function woundedShip(state: SimState): number {
+  const ships = state.ships
+  for (let i = 0; i < ships.count; i++) {
+    if (ships.side[i] === 0 && ships.division[i] === 2) return i
+  }
+  return 0
+}

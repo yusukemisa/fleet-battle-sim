@@ -38,6 +38,21 @@ interface WeightRule {
   add: Partial<TacticWeights>
 }
 
+/**
+ * Damaged ships drop behind the division and shoot only on a good angle.
+ * `hp` is the fraction of max HP where that starts. `reengage` is the share of
+ * the living division that stays in the forward ranks anyway.
+ * `shot` is the lowest armor multiplier a withdrawing ship will fire into.
+ * `threat` is how many enemy guns may bear before it holds fire and keeps the bow on them.
+ */
+export interface Withdrawal {
+  hp: number
+  reengage: number
+  depth: number
+  shot: number
+  threat: number
+}
+
 export interface Commander {
   id: CommanderId
   name: string
@@ -46,6 +61,7 @@ export interface Commander {
   base: TacticWeights
   prefer: readonly TacticId[]
   rules: readonly WeightRule[]
+  withdraw: Withdrawal
 }
 
 interface Read {
@@ -78,11 +94,12 @@ export const COMMANDERS = {
     base: EMPTY,
     prefer: ['charge'],
     rules: [],
+    withdraw: { hp: 0, reengage: 1, depth: 0, shot: 0.5, threat: 99 },
   },
   fierce: {
     id: 'fierce',
     name: '猛将',
-    summary: '正面と突破を好み、有利ならさらに押す。',
+    summary: '正面と突破を好み、有利ならさらに押す。深手だけ少し下がる。',
     auto: true,
     base: { ...EMPTY, charge: 5, breakthrough: 4, flank: 1 },
     prefer: ['breakthrough', 'charge', 'flank', 'focus', 'encircle', 'feint', 'hold'],
@@ -96,11 +113,12 @@ export const COMMANDERS = {
         add: { breakthrough: 3 },
       },
     ],
+    withdraw: { hp: 0.22, reengage: 0.88, depth: 60, shot: 0.5, threat: 16 },
   },
   cunning: {
     id: 'cunning',
     name: '智将',
-    summary: '中軍で正面を押さえ、両翼で側面と背面を撃つ。',
+    summary: '中軍で正面を押さえ、両翼で側面と背面を撃つ。傷ついた艦は後ろで機会を待つ。',
     auto: true,
     base: { ...EMPTY, pin: 1, broadside: 1, rear: 1 },
     prefer: ['rear', 'broadside', 'pin', 'focus', 'hold', 'flank', 'charge', 'encircle', 'breakthrough', 'feint'],
@@ -119,11 +137,12 @@ export const COMMANDERS = {
         add: { broadside: 4 },
       },
     ],
+    withdraw: { hp: 0.4, reengage: 0.82, depth: 110, shot: 0.5, threat: 12 },
   },
   guard: {
     id: 'guard',
     name: '守将',
-    summary: 'その場を守り、敵が削れたら反撃する。',
+    summary: 'その場を守り、敵が削れたら反撃する。傷ついた艦は列の後ろへ下がる。',
     auto: true,
     base: { ...EMPTY, hold: 5, focus: 4 },
     prefer: ['charge', 'focus', 'hold', 'breakthrough', 'flank', 'encircle', 'feint'],
@@ -140,11 +159,12 @@ export const COMMANDERS = {
         add: { charge: 8 },
       },
     ],
+    withdraw: { hp: 0.58, reengage: 0.58, depth: 220, shot: 0.5, threat: 8 },
   },
   balanced: {
     id: 'balanced',
     name: '常勝',
-    summary: '戦力と敵の動きを見て陣を変える。',
+    summary: '戦力と敵の動きを見て陣を変える。傷ついた艦は前の列に隠れる。',
     auto: true,
     base: { ...EMPTY, charge: 3, hold: 1, flank: 1, focus: 1, breakthrough: 1 },
     prefer: ['breakthrough', 'encircle', 'hold', 'charge', 'focus', 'flank', 'feint'],
@@ -167,6 +187,7 @@ export const COMMANDERS = {
         add: { focus: 3, hold: 2 },
       },
     ],
+    withdraw: { hp: 0.52, reengage: 0.72, depth: 180, shot: 0.5, threat: 8 },
   },
 } satisfies Record<CommanderId, Commander>
 
