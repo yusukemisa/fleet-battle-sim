@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { BATTERIES, SHIP_STATS } from './balance.ts'
+import { BATTERIES, FIRE, SHIP_STATS, volleyGap } from './balance.ts'
 import { inBattery } from './combat.ts'
 import { createSim, dispatch } from './sim.ts'
 import type { SimState } from './types.ts'
@@ -13,7 +13,10 @@ describe('batteries', () => {
     expect(port?.guns).toBe(16)
     expect(starboard?.guns).toBe(16)
     expect((bow?.guns ?? 0) + (port?.guns ?? 0) + (starboard?.guns ?? 0)).toBe(40)
-    expect(bow?.cooldown).toBe(2)
+    expect(bow?.cooldown).toBe(FIRE.cooldown)
+    expect(port?.cooldown).toBe(FIRE.cooldown)
+    expect(starboard?.cooldown).toBe(FIRE.cooldown)
+    expect(FIRE.jitter).toBe(0.1)
     expect(port?.maxRange).toBeLessThan(bow?.maxRange ?? 0)
     expect(bow?.minRange).toBeGreaterThan(port?.maxRange ? 0 : 0)
     expect(inBattery(1, 0, 0, 0, bow?.minRange ? bow.minRange - 40 : 0, 0, bow!)).toBe(false)
@@ -45,20 +48,35 @@ describe('batteries', () => {
     expect(far.ships.hp[50]).toBe(SHIP_STATS.hp)
   })
 
-  it('keeps a separate cooldown on each battery', () => {
+  it('keeps a separate cooldown on each battery, inside the jitter', () => {
+    const low = FIRE.cooldown * (1 - FIRE.jitter) - 0.06
+    const high = FIRE.cooldown * (1 + FIRE.jitter) + 0.01
     const state = duel(0, 0, 500)
-    state.ships.gunCd[0] = 0
-    state.ships.gunCd[1] = 0
+    state.ships.gunCd[0] = 100
+    state.ships.gunCd[1] = 100
     const next = dispatch(dispatch(state, { type: 'start' }), { type: 'tick', dt: 0.05 })
-    expect(next.ships.cooldown[0]).toBeGreaterThan(1)
-    expect(next.ships.gunCd[0] ?? 0).toBeLessThan(0.1)
-    expect(next.ships.gunCd[1] ?? 0).toBeLessThan(0.1)
+    expect(next.tally.shots).toBe(1)
+    expect(next.ships.cooldown[0]).toBeGreaterThanOrEqual(low)
+    expect(next.ships.cooldown[0]).toBeLessThanOrEqual(high)
+    expect(next.ships.gunCd[0] ?? 0).toBeGreaterThan(90)
+    expect(next.ships.gunCd[1] ?? 0).toBeGreaterThan(90)
     const side = duel(0, Math.PI / 2, 300)
-    side.ships.cooldown[0] = 0
+    side.ships.cooldown[0] = 100
     side.ships.gunCd[0] = 0
+    side.ships.gunCd[1] = 100
     const fired = dispatch(dispatch(side, { type: 'start' }), { type: 'tick', dt: 0.05 })
-    expect(fired.ships.gunCd[0]).toBeGreaterThan(1)
-    expect(fired.ships.cooldown[0]).toBeLessThanOrEqual(0)
+    expect(fired.tally.shots).toBe(1)
+    expect(fired.ships.gunCd[0] ?? 0).toBeGreaterThanOrEqual(low)
+    expect(fired.ships.gunCd[0] ?? 0).toBeLessThanOrEqual(high)
+    expect(fired.ships.cooldown[0] ?? 0).toBeGreaterThan(90)
+    expect(fired.ships.gunCd[1] ?? 0).toBeGreaterThan(90)
+    const gaps = new Set<number>()
+    for (let ship = 0; ship < 32; ship++) gaps.add(volleyGap(0x51ed, ship, ship % 3))
+    for (const gap of gaps) {
+      expect(gap).toBeGreaterThanOrEqual(FIRE.cooldown * (1 - FIRE.jitter))
+      expect(gap).toBeLessThanOrEqual(FIRE.cooldown * (1 + FIRE.jitter))
+    }
+    expect(gaps.size).toBeGreaterThan(8)
   })
 })
 
