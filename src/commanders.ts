@@ -1,4 +1,4 @@
-import type { CommanderId, DivisionSlot, FormationId, TacticId } from './types.ts'
+import type { CommanderId, DivisionSlot, FormationId, ManeuverId, TacticId } from './types.ts'
 
 export interface DivisionFact {
   alive: number
@@ -53,6 +53,8 @@ export interface Withdrawal {
   threat: number
 }
 
+export type PostureWeights = Record<ManeuverId, number> & { commit: number }
+
 export interface Commander {
   id: CommanderId
   name: string
@@ -62,6 +64,7 @@ export interface Commander {
   prefer: readonly TacticId[]
   rules: readonly WeightRule[]
   withdraw: Withdrawal
+  posture: PostureWeights
 }
 
 interface Read {
@@ -95,6 +98,7 @@ export const COMMANDERS = {
     prefer: ['charge'],
     rules: [],
     withdraw: { hp: 0, reengage: 1, depth: 0, shot: 0.5, threat: 99 },
+    posture: { press: 1, seize: 0, envelop: 0, wheel: 1, breakout: 0, refuse: 0, reform: 0, commit: 30 },
   },
   fierce: {
     id: 'fierce',
@@ -114,6 +118,7 @@ export const COMMANDERS = {
       },
     ],
     withdraw: { hp: 0.22, reengage: 0.88, depth: 60, shot: 0.5, threat: 16 },
+    posture: { press: 6, seize: 3, envelop: 2, wheel: 1, breakout: 2, refuse: 0, reform: 0, commit: 6 },
   },
   cunning: {
     id: 'cunning',
@@ -137,7 +142,8 @@ export const COMMANDERS = {
         add: { broadside: 4 },
       },
     ],
-    withdraw: { hp: 0.4, reengage: 0.82, depth: 110, shot: 0.5, threat: 12 },
+    withdraw: { hp: 0.4, reengage: 0.86, depth: 60, shot: 0.5, threat: 12 },
+    posture: { press: 1, seize: 5, envelop: 5, wheel: 1, breakout: 5, refuse: 2, reform: 2, commit: 8 },
   },
   guard: {
     id: 'guard',
@@ -159,7 +165,8 @@ export const COMMANDERS = {
         add: { charge: 8 },
       },
     ],
-    withdraw: { hp: 0.58, reengage: 0.58, depth: 220, shot: 0.5, threat: 8 },
+    withdraw: { hp: 0.58, reengage: 0.7, depth: 90, shot: 0.5, threat: 8 },
+    posture: { press: 0, seize: 1, envelop: 0, wheel: 0, breakout: 4, refuse: 5, reform: 6, commit: 9 },
   },
   balanced: {
     id: 'balanced',
@@ -187,7 +194,8 @@ export const COMMANDERS = {
         add: { focus: 3, hold: 2 },
       },
     ],
-    withdraw: { hp: 0.52, reengage: 0.72, depth: 180, shot: 0.5, threat: 8 },
+    withdraw: { hp: 0.52, reengage: 0.78, depth: 70, shot: 0.5, threat: 8 },
+    posture: { press: 2, seize: 4, envelop: 3, wheel: 2, breakout: 4, refuse: 3, reform: 3, commit: 7 },
   },
 } satisfies Record<CommanderId, Commander>
 

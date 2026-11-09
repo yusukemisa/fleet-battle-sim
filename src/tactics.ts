@@ -108,11 +108,6 @@ function pierce(div: Division, ctx: TacticContext, dt: number, speed: number): v
   face(div, bx, by, dt)
 }
 
-function steerFace(div: Division, gx: number, gy: number, speed: number, dt: number): void {
-  steer(div, gx - div.ax, gy - div.ay, speed, dt)
-  face(div, gx, gy, dt)
-}
-
 function clampCone(mx: number, my: number, px: number, py: number, minDot: number): { x: number; y: number } {
   const dot = mx * px + my * py
   if (dot >= minDot) return { x: mx, y: my }
@@ -193,9 +188,9 @@ function hook(div: Division, ctx: TacticContext, dt: number, speed: number, mode
   const range = Math.hypot(relX, relY) || 1
   const angle = Math.atan2(side * cross, along)
   const arc = (50 * Math.PI) / 180
-  const safeRange = 800
+  const safeRange = 560
   const wantAngle = mode === 'rear' ? (118 * Math.PI) / 180 : (96 * Math.PI) / 180
-  const wantRange = mode === 'rear' ? 280 : 300
+  const wantRange = mode === 'rear' ? 360 : 420
   const pocket = angle > wantAngle - 0.4 && range < wantRange + 110
   if (pocket) div.phase = 2
   else if (angle < arc) div.phase = 0
@@ -226,12 +221,16 @@ function hook(div: Division, ctx: TacticContext, dt: number, speed: number, mode
     const ahead = polarPoint(prey, side, orbit, wantRange)
     div.markX = ahead.x
     div.markY = ahead.y
-    steerFace(div, ahead.x, ahead.y, speed * 0.9, dt)
+    steer(div, ahead.x - div.ax, ahead.y - div.ay, speed * 0.9, dt)
+    face(div, prey.ax, prey.ay, dt)
     return
   }
   const threat = angle < arc + 0.2
   if (threat) sailBow(div, goal.x, goal.y, prey.ax, prey.ay, speed, dt, 0.34)
-  else steerFace(div, goal.x, goal.y, speed, dt)
+  else {
+    steer(div, goal.x - div.ax, goal.y - div.ay, speed, dt)
+    face(div, prey.ax, prey.ay, dt)
+  }
 }
 
 function pin(div: Division, ctx: TacticContext, dt: number): void {
@@ -308,10 +307,16 @@ function sweepDivision(div: Division, ctx: TacticContext, dt: number): void {
   faceDirection(div, heading.x, heading.y, dt, 3.4)
 }
 
-export function stepDivision(div: Division, ctx: TacticContext, dt: number): void {
+/** Clockwise close-range wheel. Shaped fleets pick this only when it is the committed maneuver. */
+export function wheelDivision(div: Division, ctx: TacticContext, dt: number): void {
+  sweepDivision(div, ctx, dt)
+}
+
+export function stepDivision(div: Division, ctx: TacticContext, dt: number, wheel = true): void {
+  div.shaped = false
   const tactic = TACTICS[div.tacticId]
   const dist = hypot(ctx.enemyX - ctx.ownX, ctx.enemyY - ctx.ownY)
-  if (tactic.sweep && dist < SWEEP.engage) {
+  if (wheel && tactic.sweep && dist < SWEEP.engage) {
     sweepDivision(div, ctx, dt)
     return
   }
@@ -371,7 +376,7 @@ export const TACTICS = {
     sweep: false,
     step(div, ctx, dt) {
       tagged(div, false, ctx)
-      hook(div, ctx, dt, 48, 'side')
+      hook(div, ctx, dt, 58, 'side')
     },
   },
   rear: {

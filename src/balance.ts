@@ -16,13 +16,41 @@ export interface ShipStats {
   armorRear: number
   armorBow: number
   armorStern: number
+  /** Bow, then port, then starboard. Rear has no battery. */
+  batteries: readonly BatterySpec[]
 }
+
+export interface BatterySpec {
+  id: 'bow' | 'port' | 'starboard'
+  guns: number
+  /** Damage per gun before armor and hit chance. A volley is guns × power. */
+  power: number
+  /** Arc center relative to the bow, radians. Port is positive. */
+  center: number
+  /** Half-width of the arc. */
+  half: number
+  minRange: number
+  maxRange: number
+  cooldown: number
+}
+
+const DEG = Math.PI / 180
+
+/**
+ * 40 guns. The bow reaches past the broadsides and cannot fire inside its minimum.
+ * Each broadside covers its own side from 40° to 140° off the bow, out to a shorter range.
+ */
+export const BATTERIES = [
+  { id: 'bow', guns: 8, power: 0.9, center: 0, half: 40 * DEG, minRange: 280, maxRange: 900, cooldown: 2 },
+  { id: 'port', guns: 16, power: 0.32, center: 90 * DEG, half: 50 * DEG, minRange: 0, maxRange: 420, cooldown: 2 },
+  { id: 'starboard', guns: 16, power: 0.32, center: -90 * DEG, half: 50 * DEG, minRange: 0, maxRange: 420, cooldown: 2 },
+] as const satisfies readonly BatterySpec[]
 
 export const SHIP_STATS = {
   hp: 54,
   damage: 7,
-  range: 760,
-  acquire: 820,
+  range: 900,
+  acquire: 980,
   cooldown: 2,
   hitChance: 0.86,
   maxSpeed: 70,
@@ -35,6 +63,7 @@ export const SHIP_STATS = {
   armorRear: 1.5,
   armorBow: (50 * Math.PI) / 180,
   armorStern: (50 * Math.PI) / 180,
+  batteries: BATTERIES,
 } satisfies ShipStats
 
 /**
@@ -64,7 +93,7 @@ export const FIELD = {
   fleetCenter: 580,
   beamLife: 0.22,
   boomLife: 0.4,
-  maxBeams: 720,
+  maxBeams: 1600,
   maxBooms: 360,
   stagger: 3,
   sampleStep: 28,
@@ -95,9 +124,23 @@ export const GUNNERY = {
   falloffFloor: 0.55,
   reserve: 1,
   cell: 180,
+  /** Keep the current target unless a new one scores this much higher. */
+  stick: 1.35,
 } as const
 
 /** How often a division reorders wounded ships behind healthy ones. */
 export const RANKS = {
   interval: 0.25,
+  /** Shaped fleets keep the same ranks long enough that ships can arrive. */
+  shapedInterval: 2.5,
+} as const
+
+/** Distances for a fleet maneuver. The clockwise wheel is one option, not the default. */
+export const MANEUVER = {
+  station: 420,
+  lane: 130,
+  reform: 560,
+  breakOut: 880,
+  contact: 900,
+  stick: 1.15,
 } as const

@@ -37,6 +37,11 @@ export const DEFAULT_FORMATION: FormationId = 'oujin'
 
 export type GunneryMode = 'legacy' | 'aimed'
 
+export type ManeuverMode = 'legacy' | 'shaped'
+
+export const MANEUVER_IDS = ['press', 'seize', 'envelop', 'wheel', 'breakout', 'refuse', 'reform'] as const
+export type ManeuverId = (typeof MANEUVER_IDS)[number]
+
 /** Shot quality gathered during one battle. Times are summed sim-seconds. */
 export interface GunneryTally {
   shots: number
@@ -71,12 +76,16 @@ export interface Ships {
   hp: Float32Array
   flash: Float32Array
   cooldown: Float32Array
+  /** Port and starboard cooldowns, packed as ship * 2 + side. The bow stays in `cooldown`. */
+  gunCd: Float32Array
   slotX: Float32Array
   slotY: Float32Array
   homeX: Float32Array
   homeY: Float32Array
   /** 1 when this ship has dropped behind its division. */
   falling: Uint8Array
+  /** 1 while the ship is still sailing to its station. */
+  approach: Uint8Array
   heading: Float32Array
   alive: Uint8Array
   side: Uint8Array
@@ -96,6 +105,11 @@ export interface Fleet {
   facingY: number
   /** 0 while closing in, 1 while sliding past. Shared by the sweeping divisions. */
   sweepLeg: 0 | 1
+  maneuver: ManeuverId
+  maneuverUntil: number
+  prey: number
+  /** Which side of the enemy the fleet committed to. */
+  bias: number
 }
 
 export interface Division {
@@ -128,6 +142,8 @@ export interface Division {
   sweepOut: number
   sweepLocked: boolean
   sweeping: boolean
+  /** Shaped steering owns this division: bows follow the division, not a shifting slot. */
+  shaped: boolean
   alive: number
   roster: number
 }
@@ -193,6 +209,8 @@ export interface SimConfig {
   gunnery?: GunneryMode
   /** Per side. False keeps every ship on the station it was given. */
   withdraw?: readonly [boolean, boolean]
+  /** `shaped` reads both formations and commits to one fleet maneuver. */
+  maneuver?: ManeuverMode
 }
 
 export interface Beams {
@@ -241,6 +259,7 @@ export interface SimState {
   beams: Beams
   booms: Booms
   gunnery: GunneryMode
+  maneuver: ManeuverMode
   withdrawSides: readonly [boolean, boolean]
   tally: GunneryTally
   scratch: CombatScratch

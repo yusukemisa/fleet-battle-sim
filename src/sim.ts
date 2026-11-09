@@ -1,10 +1,11 @@
-import { acquireSq, FIELD, GUNNERY, RANKS, rangeSq, SHIP_STATS, SIM_TIME_SCALE, SWEEP, type ShipStats } from './balance.ts'
-import { armorZone, inArc, inFiringArc, wrapAngle } from './combat.ts'
+import { acquireSq, FIELD, GUNNERY, RANKS, SHIP_STATS, SIM_TIME_SCALE, SWEEP, type ShipStats } from './balance.ts'
+import { armorZone, inArc, inBattery, inFiringArc, wrapAngle } from './combat.ts'
 import { chooseTactic, COMMANDERS, type BattleFacts, type Bearing } from './commanders.ts'
 import { layoutFormation } from './formations.ts'
-import { cacheBows, cacheSpread, emptyTally, hasClearShot, pickTarget } from './gunnery.ts'
+import { batteryCooldown, cacheBows, cacheSpread, emptyTally, hasClearShot, pickBatteryTarget, pickTarget, setBatteryCooldown } from './gunnery.ts'
 import { refreshCover, rotateRanks } from './ranks.ts'
-import { createScratch, fillSpatialHash } from './spatial.ts'
+import { collectNear, createScratch, fillSpatialHash } from './spatial.ts'
+import { stepPlan, updatePlan } from './posture.ts'
 import { TACTICS, stepDivision, tacticById } from './tactics.ts'
 import {
   DEFAULT_COMMANDER,
@@ -16,6 +17,7 @@ import {
   type Division,
   type DivisionSlot,
   type GunneryMode,
+  type ManeuverMode,
   type SideId,
   type SimConfig,
   type SimState,
@@ -34,7 +36,14 @@ export function createSim(config: SimConfig): SimState {
   const damage: [number, number] = config.damage
     ? [config.damage[0], config.damage[1]]
     : [stats.damage, stats.damage]
-  const state = allocate(config.shipCount, stats, damage, config.gunnery ?? 'aimed', config.withdraw ?? [true, true])
+  const state = allocate(
+    config.shipCount,
+    stats,
+    damage,
+    config.gunnery ?? 'aimed',
+    config.maneuver ?? 'shaped',
+    config.withdraw ?? [true, true],
+  )
   state.fleets[0].formationId = formations[0]
   state.fleets[1].formationId = formations[1]
   state.fleets[0].commanderId = commanders[0]
@@ -111,6 +120,7 @@ function configFrom(state: SimState, patch: { shipCount?: SimState['shipCount'] 
     hp: state.stats.hp,
     damage: state.damage,
     gunnery: state.gunnery,
+    maneuver: state.maneuver,
     withdraw: state.withdrawSides,
   }
 }
@@ -242,6 +252,7 @@ function allocate(
   stats: ShipStats,
   damage: [number, number],
   gunnery: GunneryMode,
+  maneuver: ManeuverMode,
   withdrawSides: readonly [boolean, boolean],
 ): SimState {
   const count = shipCount
@@ -264,11 +275,13 @@ function allocate(
       hp: new Float32Array(count),
       flash: new Float32Array(count),
       cooldown: new Float32Array(count),
+      gunCd: new Float32Array(count * 2),
       slotX: new Float32Array(count),
       slotY: new Float32Array(count),
       homeX: new Float32Array(count),
       homeY: new Float32Array(count),
       falling: new Uint8Array(count),
+      approach: new Uint8Array(count),
       heading: new Float32Array(count),
       alive: new Uint8Array(count),
       side: new Uint8Array(count),
@@ -277,8 +290,8 @@ function allocate(
       target: new Int32Array(count),
     },
     fleets: [
-      { side: 0, name: FLEET_NAMES[0], formationId: DEFAULT_FORMATION, commanderId: DEFAULT_COMMANDER, centerX: -FIELD.fleetCenter, centerY: 0, facingX: 1, facingY: 0, sweepLeg: 0 },
-      { side: 1, name: FLEET_NAMES[1], formationId: DEFAULT_FORMATION, commanderId: DEFAULT_COMMANDER, centerX: FIELD.fleetCenter, centerY: 0, facingX: -1, facingY: 0, sweepLeg: 0 },
+      { side: 0, name: FLEET_NAMES[0], formationId: DEFAULT_FORMATION, commanderId: DEFAULT_COMMANDER, centerX: -FIELD.fleetCenter, centerY: 0, facingX: 1, facingY: 0, sweepLeg: 0, maneuver: 'press', maneuverUntil: 0, prey: -1, bias: 1 },
+      { side: 1, name: FLEET_NAMES[1], formationId: DEFAULT_FORMATION, commanderId: DEFAULT_COMMANDER, centerX: FIELD.fleetCenter, centerY: 0, facingX: -1, facingY: 0, sweepLeg: 0, maneuver: 'press', maneuverUntil: 0, prey: -1, bias: 1 },
     ],
     divisions,
     alive: [count / 2, count / 2],
@@ -310,6 +323,7 @@ function allocate(
       head: 0,
     },
     gunnery,
+    maneuver,
     withdrawSides,
     tally: emptyTally(),
     scratch: createScratch(count, GUNNERY.cell),
@@ -349,6 +363,7 @@ function makeDivision(side: SideId, slot: DivisionSlot): Division {
     sweepOut: 0,
     sweepLocked: false,
     sweeping: false,
+    shaped: false,
     alive: 0,
     roster: 0,
   }
@@ -388,6 +403,14 @@ function deploy(state: SimState): void {
   const sides: SideId[] = [0, 1]
   state.fleets[0].sweepLeg = 0
   state.fleets[1].sweepLeg = 0
+  state.fleets[0].maneuver = 'press'
+  state.fleets[1].maneuver = 'press'
+  state.fleets[0].maneuverUntil = 0
+  state.fleets[1].maneuverUntil = 0
+  state.fleets[0].prey = -1
+  state.fleets[1].prey = -1
+  state.fleets[0].bias = 1
+  state.fleets[1].bias = 1
   for (const side of sides) placeSide(state, side, half)
   state.alive[0] = half
   state.alive[1] = half
@@ -415,6 +438,8 @@ function placeSide(state: SimState, side: SideId, half: number): void {
     ships.hp[at] = state.stats.hp
     ships.flash[at] = 0
     ships.cooldown[at] = rand(state) * state.stats.cooldown
+    ships.gunCd[at * 2] = rand(state) * state.stats.cooldown
+    ships.gunCd[at * 2 + 1] = rand(state) * state.stats.cooldown
     ships.alive[at] = 1
     ships.side[at] = side
     ships.division[at] = divisionIndex
@@ -510,26 +535,39 @@ function step(state: SimState, dt: number): void {
     if (dist < SWEEP.pass) fleet.sweepLeg = 1
     else if (dist > SWEEP.resume) fleet.sweepLeg = 0
   }
+  if (state.maneuver === 'shaped') {
+    updatePlan(state, 0)
+    updatePlan(state, 1)
+  }
   for (const division of state.divisions) {
     if (division.alive === 0) continue
     const enemy: SideId = division.side === 0 ? 1 : 0
     const fleet = state.fleets[division.side]
-    stepDivision(
-      division,
-      {
-        divisions: state.divisions,
-        ownX: state.centroidX[division.side],
-        ownY: state.centroidY[division.side],
-        enemyX: state.centroidX[enemy],
-        enemyY: state.centroidY[enemy],
-        sweepLeg: fleet.sweepLeg,
-      },
-      dt,
+    const shaped = state.maneuver === 'shaped' && COMMANDERS[fleet.commanderId].auto
+    const apart = Math.hypot(
+      (state.centroidX[division.side] ?? 0) - (state.centroidX[enemy] ?? 0),
+      (state.centroidY[division.side] ?? 0) - (state.centroidY[enemy] ?? 0),
     )
+    const bowMin = state.stats.batteries[0]?.minRange ?? 280
+    const ctx = {
+      divisions: state.divisions,
+      ownX: state.centroidX[division.side],
+      ownY: state.centroidY[division.side],
+      enemyX: state.centroidX[enemy],
+      enemyY: state.centroidY[enemy],
+      sweepLeg: fleet.sweepLeg,
+    }
+    if (shaped && (fleet.maneuver === 'breakout' || apart < bowMin + 10)) {
+      stepPlan(state, division, dt)
+      continue
+    }
+    division.shaped = false
+    stepDivision(division, ctx, dt, !shaped || fleet.maneuver === 'wheel')
   }
   if (state.time >= state.rankAt) {
     rotateRanks(state)
-    state.rankAt = state.time + RANKS.interval
+    const every = state.maneuver === 'shaped' ? RANKS.shapedInterval : RANKS.interval
+    state.rankAt = state.time + every
   }
   if (state.fallingN > 0) {
     cacheBows(state)
@@ -591,6 +629,14 @@ function moveShips(state: SimState, dt: number): void {
       const delta = wrapAngle(aim - threat)
       // The rally point is behind. Keep the bow toward the enemy and creep, so the stern stays out of their guns.
       desired = Math.abs(delta) > (70 * Math.PI) / 180 ? threat : aim
+    } else if (division.shaped && division.focus) {
+      desired = Math.atan2(division.fy, division.fx)
+    } else if (division.shaped) {
+      let chase = ships.approach[i] === 1
+      if (dist > 180) chase = true
+      else if (dist < 90) chase = false
+      ships.approach[i] = chase ? 1 : 0
+      desired = chase ? Math.atan2(dy, dx) : Math.atan2(division.fy, division.fx)
     } else if (!guns && dist > 22) {
       desired = Math.atan2(dy, dx)
     } else if (target >= 0 && ships.alive[target] === 1) {
@@ -631,15 +677,18 @@ function fight(state: SimState, dt: number): void {
   let n0 = 0
   let n1 = 0
   // Large steps already fire on the frame cooldown elapses. Small steps stagger ships that are still waiting.
-  const period = dt >= 0.05 ? 1 : Math.max(1, Math.round(0.12 / dt))
+  const period = dt >= 0.05 ? 1 : Math.max(1, Math.round(0.45 / dt))
   const frame = state.frame
   for (let i = 0; i < ships.count; i++) {
     if (ships.alive[i] === 0) continue
-    const cd = (ships.cooldown[i] ?? 0) - dt
-    ships.cooldown[i] = cd
-    if (cd <= COOLDOWN_SLACK) {
+    tickBatteries(state, i, dt)
+    if (anyBatteryReady(state, i)) {
       const look = state.scratch.look[i] ?? -1
-      const fresh = cd + dt > COOLDOWN_SLACK
+      let fresh = false
+      for (let b = 0; b < state.stats.batteries.length; b++) {
+        const now = batteryCooldown(state, i, b)
+        if (now <= COOLDOWN_SLACK && now + dt > COOLDOWN_SLACK) fresh = true
+      }
       if (fresh || look < 0 || frame - look >= period) {
         state.scratch.look[i] = frame
         if (ships.side[i] === 1) red[n1++] = i
@@ -662,9 +711,22 @@ function fight(state: SimState, dt: number): void {
 }
 
 function volley(state: SimState, index: number, dt: number): void {
-  const picked = pickTarget(state, index)
-  state.ships.target[index] = picked
-  if (!fireAt(state, index, dt)) noteIdle(state, index, dt, true)
+  fireBatteries(state, index, dt, false)
+}
+
+function anyBatteryReady(state: SimState, index: number): boolean {
+  const batteries = state.stats.batteries
+  for (let b = 0; b < batteries.length; b++) {
+    if (batteryCooldown(state, index, b) <= COOLDOWN_SLACK) return true
+  }
+  return false
+}
+
+function tickBatteries(state: SimState, index: number, dt: number): void {
+  const batteries = state.stats.batteries
+  for (let b = 0; b < batteries.length; b++) {
+    setBatteryCooldown(state, index, b, batteryCooldown(state, index, b) - dt)
+  }
 }
 
 function fightLegacy(state: SimState, dt: number): void {
@@ -673,12 +735,12 @@ function fightLegacy(state: SimState, dt: number): void {
   const frame = state.frame
   for (let i = 0; i < ships.count; i++) {
     if (ships.alive[i] === 0) continue
+    tickBatteries(state, i, dt)
     const target = ships.target[i] ?? -1
     const needs = target < 0 || ships.alive[target] === 0 || i % stagger === frame % stagger
     if (needs) acquire(state, i)
-    ships.cooldown[i] = (ships.cooldown[i] ?? 0) - dt
-    if ((ships.cooldown[i] ?? 0) > COOLDOWN_SLACK) continue
-    if (!fireAt(state, i, dt)) noteIdle(state, i, dt, true)
+    if (!anyBatteryReady(state, i)) continue
+    fireBatteries(state, i, dt, true)
   }
 }
 
@@ -745,47 +807,89 @@ function acquire(state: SimState, index: number): void {
   ships.target[index] = best
 }
 
-function fireAt(state: SimState, index: number, dt: number): boolean {
+function fireBatteries(state: SimState, index: number, dt: number, legacy: boolean): void {
   const ships = state.ships
-  const target = ships.target[index] ?? -1
-  if (target < 0 || ships.alive[target] === 0) return false
+  const batteries = state.stats.batteries
+  let maxR = 0
+  for (const battery of batteries) maxR = Math.max(maxR, battery.maxRange)
+  const sx = ships.x[index] ?? 0
+  const sy = ships.y[index] ?? 0
+  const enemy = ships.side[index] === 1 ? 0 : 1
+  const cdx = (state.centroidX[enemy] ?? 0) - sx
+  const cdy = (state.centroidY[enemy] ?? 0) - sy
+  if (cdx * cdx + cdy * cdy > (maxR + 220) * (maxR + 220)) {
+    if (batteryCooldown(state, index, 0) <= COOLDOWN_SLACK) noteIdle(state, index, dt, true)
+    return
+  }
+  const n = collectNear(state.scratch.hash, sx, sy, maxR, ships.x, ships.y)
+  const found = state.scratch.hash.found
+  let bowTried = false
+  let bowFired = false
+  for (let b = 0; b < batteries.length; b++) {
+    if (batteryCooldown(state, index, b) > COOLDOWN_SLACK) continue
+    const battery = batteries[b]
+    if (!battery) continue
+    const target = pickBatteryTarget(state, index, battery, found, n, legacy)
+    if (b === 0) {
+      ships.target[index] = target
+      bowTried = true
+    }
+    if (target < 0) continue
+    if (shootBattery(state, index, target, b, dt)) {
+      if (b === 0) bowFired = true
+    }
+  }
+  if (bowTried && !bowFired) noteIdle(state, index, dt, true)
+}
+
+function shootBattery(state: SimState, index: number, target: number, batteryIndex: number, dt: number): boolean {
+  const battery = state.stats.batteries[batteryIndex]
+  if (!battery) return false
+  const ships = state.ships
+  if (ships.alive[target] === 0) return false
   const sx = ships.x[index] ?? 0
   const sy = ships.y[index] ?? 0
   const tx = ships.x[target] ?? 0
   const ty = ships.y[target] ?? 0
-  const dx = tx - sx
-  const dy = ty - sy
-  if (dx * dx + dy * dy > rangeSq(state.stats)) return false
-  if (!inArc(state.scratch.bowX[index] ?? 1, state.scratch.bowY[index] ?? 0, sx, sy, tx, ty, state.scratch.cosArc)) {
-    return false
-  }
-  const overdue = ships.cooldown[index] ?? 0
-  // Keep this step's overshoot so the next shot stays on the cooldown cadence. A ship that could not fire keeps a full cooldown.
+  const hx = state.scratch.bowX[index] ?? 1
+  const hy = state.scratch.bowY[index] ?? 0
+  if (!inBattery(hx, hy, sx, sy, tx, ty, battery)) return false
+  const overdue = batteryCooldown(state, index, batteryIndex)
   const carry = overdue < -dt - COOLDOWN_SLACK ? 0 : overdue
-  ships.cooldown[index] = state.stats.cooldown + carry
+  setBatteryCooldown(state, index, batteryIndex, battery.cooldown + carry)
   const side = ships.side[index] === 1 ? 1 : 0
   const zone = armorZone(ships.heading[target] ?? 0, tx, ty, sx, sy, state.stats)
   const factor = zone === 'front' ? state.stats.armorFront : zone === 'rear' ? state.stats.armorRear : state.stats.armorSide
+  const scale = (state.damage[side] ?? state.stats.damage) / Math.max(0.01, state.stats.damage)
+  const blow = battery.guns * battery.power * scale * factor
   const opened = state.scratch.opened[target] ?? 0
   const queued = state.scratch.incoming[target] ?? 0
   if ((ships.hp[target] ?? 0) <= 0 || (opened > 0 && queued >= opened)) state.tally.overkill += 1
-  state.scratch.incoming[target] = queued + state.damage[side] * factor * GUNNERY.reserve
+  state.scratch.incoming[target] = queued + blow * GUNNERY.reserve
   state.tally.shots += 1
   const hit = rand(state) <= state.stats.hitChance
   const spread = hit ? 0.4 : 8
   const ox = (rand(state) - 0.5) * spread
   const oy = (rand(state) - 0.5) * spread
-  spawnBeam(state, sx, sy, tx + ox, ty + oy, ships.side[index] ?? 0)
+  const mount = batteryMount(hx, hy, battery.id)
+  spawnBeam(state, sx + mount.x, sy + mount.y, tx + ox, ty + oy, side)
   if (!hit) return true
   state.hits[zone][side] += 1
   const before = ships.hp[target] ?? 0
-  const blow = state.damage[side] * factor
   state.tally.hits += 1
   state.tally.damage += Math.min(before, blow)
   ships.hp[target] = before - blow
   ships.flash[target] = 1
   if ((ships.hp[target] ?? 0) <= 0) destroy(state, target)
   return true
+}
+
+function batteryMount(hx: number, hy: number, id: string): { x: number; y: number } {
+  const lx = -hy
+  const ly = hx
+  if (id === 'port') return { x: lx * 8, y: ly * 8 }
+  if (id === 'starboard') return { x: -lx * 8, y: -ly * 8 }
+  return { x: hx * 14, y: hy * 14 }
 }
 
 function destroy(state: SimState, index: number): void {
