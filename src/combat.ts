@@ -1,4 +1,4 @@
-import type { ShipStats } from './balance.ts'
+import type { BatterySpec, ShipStats } from './balance.ts'
 
 export function wrapAngle(delta: number): number {
   let turn = delta
@@ -22,6 +22,27 @@ export function inArc(
   const dist = Math.hypot(dx, dy)
   if (dist < 1e-4) return true
   return dx * hx + dy * hy >= dist * cosLimit
+}
+
+/** True when the target lies in this battery's arc and between its minimum and maximum range. */
+export function inBattery(
+  hx: number,
+  hy: number,
+  fromX: number,
+  fromY: number,
+  toX: number,
+  toY: number,
+  battery: BatterySpec,
+): boolean {
+  const dx = toX - fromX
+  const dy = toY - fromY
+  const dist = Math.hypot(dx, dy)
+  if (dist < battery.minRange || dist > battery.maxRange) return false
+  if (dist < 1e-4) return Math.abs(battery.center) <= battery.half
+  const forward = dx * hx + dy * hy
+  const right = dx * hy - dy * hx
+  const angle = Math.atan2(-right, forward)
+  return Math.abs(wrapAngle(angle - battery.center)) <= battery.half
 }
 
 export function inFiringArc(

@@ -32,8 +32,8 @@ describe('directional combat', () => {
     expect(rear).toBeGreaterThan(front)
     expect(front).toBe(SHIP_STATS.armorFront)
     expect(rear).toBe(SHIP_STATS.armorRear)
-    const fromFront = damageFrom(0, 40)
-    const fromRear = damageFrom(0, -40)
+    const fromFront = damageFrom(0, 400)
+    const fromRear = damageFrom(0, -400)
     expect(fromRear).toBeGreaterThan(fromFront)
   })
 
@@ -126,7 +126,7 @@ function runDuel(mode: 'front' | 'flank', seed: number): SimState {
     station(state, 0, -180, 0, 0)
     station(state, 1, 180, 0, Math.PI)
   } else {
-    station(state, 0, 0, 200, -Math.PI / 2)
+    station(state, 0, 0, 400, -Math.PI / 2)
     station(state, 1, 0, 0, 0)
   }
   let next = dispatch(state, { type: 'start' })
@@ -165,7 +165,7 @@ function aimingShip(speed: Speed): SimState {
   ships.heading[0] = 0
   ships.cooldown[0] = state.stats.cooldown
   ships.target[0] = 50
-  ships.x[50] = 90
+  ships.x[50] = 420
   ships.y[50] = 0
   ships.heading[50] = Math.PI
   ships.hp[50] = 500

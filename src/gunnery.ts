@@ -1,5 +1,5 @@
-import { GUNNERY } from './balance.ts'
-import { armorFactor, inArc } from './combat.ts'
+import { GUNNERY, type BatterySpec } from './balance.ts'
+import { armorFactor, inArc, inBattery } from './combat.ts'
 import { withdrawalFor } from './ranks.ts'
 import { collectNear } from './spatial.ts'
 import type { GunneryTally, SimState } from './types.ts'
@@ -54,6 +54,110 @@ function rangeScale(dist: number, range: number): number {
   return Math.max(GUNNERY.falloffFloor, 1 - (dist / range) * GUNNERY.falloff)
 }
 
+export function batteryCooldown(state: SimState, index: number, battery: number): number {
+  const ships = state.ships
+  if (battery === 0) return ships.cooldown[index] ?? 0
+  return ships.gunCd[index * 2 + (battery - 1)] ?? 0
+}
+
+export function setBatteryCooldown(state: SimState, index: number, battery: number, value: number): void {
+  const ships = state.ships
+  if (battery === 0) ships.cooldown[index] = value
+  else ships.gunCd[index * 2 + (battery - 1)] = value
+}
+
+/** Best target for one battery. `legacy` keeps the nearest hull instead of the highest expected damage. */
+export function pickBatteryTarget(
+  state: SimState,
+  index: number,
+  battery: BatterySpec,
+  found: Int32Array,
+  n: number,
+  legacy: boolean,
+): number {
+  const ships = state.ships
+  const stats = state.stats
+  const scratch = state.scratch
+  const sx = ships.x[index] ?? 0
+  const sy = ships.y[index] ?? 0
+  const hx = scratch.bowX[index] ?? 1
+  const hy = scratch.bowY[index] ?? 0
+  const side = ships.side[index] === 1 ? 1 : 0
+  const policy = ships.falling[index] === 1 ? withdrawalFor(state, side) : null
+  if (policy && (scratch.exposed[index] ?? 0) > policy.threat) return -1
+  const division = state.divisions[ships.division[index] ?? 0]
+  const focus = division?.focus === true
+  const scale = (state.damage[side] ?? stats.damage) / Math.max(0.01, stats.damage)
+  const volley = battery.guns * battery.power * scale
+  const prefer = state.maneuver === 'shaped' ? (ships.target[index] ?? -1) : -1
+  let preferScore = -Infinity
+  let best = -1
+  let bestScore = -Infinity
+  let fallback = -1
+  let fallbackScore = -Infinity
+  for (let k = 0; k < n; k++) {
+    const other = found[k] ?? -1
+    if (other < 0 || ships.alive[other] === 0 || ships.side[other] === side) continue
+    const ox = ships.x[other] ?? 0
+    const oy = ships.y[other] ?? 0
+    if (!inBattery(hx, hy, sx, sy, ox, oy, battery)) continue
+    const dist = Math.hypot(ox - sx, oy - sy)
+    if (legacy) {
+      const score = -dist
+      if (score > bestScore || (score === bestScore && other < best)) {
+        bestScore = score
+        best = other
+      }
+      continue
+    }
+    const factor = armorFactor(
+      scratch.bowX[other] ?? 1,
+      scratch.bowY[other] ?? 0,
+      ox,
+      oy,
+      sx,
+      sy,
+      stats,
+      scratch.cosBow,
+      scratch.cosStern,
+    )
+    const heat = policy ? (scratch.exposed[index] ?? 0) : 0
+    if (policy && heat > 0 && factor + 1e-6 < policy.shot) continue
+    const hp = ships.hp[other] ?? 0
+    const queued = scratch.incoming[other] ?? 0
+    const hpLeft = (scratch.opened[other] ?? hp) - queued
+    const blow = volley * factor * stats.hitChance * rangeScale(dist, battery.maxRange)
+    if (hpLeft <= 0) {
+      const score = hpLeft - dist * GUNNERY.near
+      if (score > fallbackScore || (score === fallbackScore && (fallback < 0 || other < fallback))) {
+        fallbackScore = score
+        fallback = other
+      }
+      continue
+    }
+    const killing = blow >= hpLeft
+    const finish = killing ? GUNNERY.finish : 1
+    const low = 1 + GUNNERY.lowHp * (1 - hp / Math.max(1, stats.hp))
+    let score = blow * finish * low
+    if (focus && division) {
+      const fd = Math.hypot(ox - division.focusX, oy - division.focusY)
+      score /= 1 + fd * GUNNERY.focus
+    }
+    score -= dist * GUNNERY.near
+    if (other === prefer && battery.id === 'bow') preferScore = score
+    if (score > bestScore || (score === bestScore && other < best)) {
+      bestScore = score
+      best = other
+    }
+  }
+  if (battery.id === 'bow' && best >= 0 && preferScore > 0 && prefer >= 0 && preferScore * GUNNERY.stick >= bestScore) {
+    return prefer
+  }
+  if (best >= 0) return best
+  if (policy) return -1
+  return fallback
+}
+
 /** Best in-arc target by expected damage, or -1 when a withdrawing ship should hold fire. */
 export function pickTarget(state: SimState, index: number): number {
   const ships = state.ships
@@ -75,6 +179,8 @@ export function pickTarget(state: SimState, index: number): number {
   const division = state.divisions[ships.division[index] ?? 0]
   const focus = division?.focus === true
   const damage = state.damage[side]
+  const prefer = state.maneuver === 'shaped' ? (ships.target[index] ?? -1) : -1
+  let preferScore = -Infinity
   let best = -1
   let bestScore = -Infinity
   let fallback = -1
@@ -126,11 +232,13 @@ export function pickTarget(state: SimState, index: number): number {
       score /= 1 + fd * GUNNERY.focus
     }
     score -= dist * GUNNERY.near
+    if (other === prefer) preferScore = score
     if (score > bestScore || (score === bestScore && other < best)) {
       bestScore = score
       best = other
     }
   }
+  if (best >= 0 && preferScore > 0 && prefer >= 0 && preferScore * GUNNERY.stick >= bestScore) return prefer
   if (best >= 0) return best
   if (policy) return -1
   return fallback
