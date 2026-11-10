@@ -548,8 +548,8 @@ function directLights(state: SimState, side: SideId, fleetIndex?: number): void 
         if (heavy.side !== side || heavy.classId !== 'battleship') continue
         if (fleetIndex !== undefined && heavy.fleet !== fleetIndex) continue
         heavy.screen = true
-        if (home.plan === 'ring' || home.plan === 'steady') heavy.phase = 5
-        else if (home.plan === 'spear') heavy.phase = 7
+        if (home.plan === 'ring') heavy.phase = 5
+        else if (home.plan === 'spear' || home.plan === 'steady') heavy.phase = 7
         else if (home.plan === 'offset') heavy.phase = 8
       }
     }
