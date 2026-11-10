@@ -473,6 +473,7 @@ function chooseCounter(state: SimState, fleet: Fleet, sit: Situation): void {
     else if (fleet.formationId === 'houen' && foe.formationId !== 'houen') next = 'ring'
     else if (fleet.formationId === 'kakuyoku') next = 'crane'
     else if (fleet.formationId === 'gyorin' && foe.formationId === 'oujin') next = 'tip'
+    else if (fleet.formationId === 'engetsu' && foe.formationId === 'kakuyoku') next = 'crescent'
   }
   if (next === fleet.plan) return
   fleet.plan = next
@@ -535,7 +536,7 @@ function directLights(state: SimState, side: SideId, fleetIndex?: number): void 
     const foeCommander = enemyBbs[0] ? state.fleets[enemyBbs[0].fleet]?.commanderId : undefined
     if (home?.plan === 'steady') home.cover = true
     if (home && commander === 'balanced' && home.formationId === 'houen' && foeCommander !== 'guard') home.cover = true
-    if (home?.plan === 'tip') {
+    if (home?.plan === 'tip' || home?.plan === 'crescent') {
       for (const heavy of state.divisions) {
         if (heavy.side !== side || heavy.classId !== 'battleship') continue
         if (fleetIndex !== undefined && heavy.fleet !== fleetIndex) continue
@@ -581,7 +582,7 @@ function directLights(state: SimState, side: SideId, fleetIndex?: number): void 
       }
       if (division.phase === 4) division.phase = 0
     }
-    if (commander === 'balanced' && home?.plan === 'tip' && division.classId === 'destroyer' && ownBb && enemyBbs[0]) {
+    if (commander === 'balanced' && (home?.plan === 'tip' || home?.plan === 'crescent') && division.classId === 'destroyer' && ownBb && enemyBbs[0]) {
       const preyBb = enemyBbs[0]
       const rushRange = Math.hypot(preyBb.ax - ownBb.ax, preyBb.ay - ownBb.ay)
       if (rushRange > 680) {
