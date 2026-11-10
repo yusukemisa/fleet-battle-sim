@@ -10,7 +10,7 @@ function steer(div: Division, mx: number, my: number, speed: number, dt: number)
   const len = hypot(mx, my)
   let tvx = 0
   let tvy = 0
-  const paced = speed * anchorPace(div.classId)
+  const paced = speed * anchorPace(div)
   if (len > 0.8 && paced > 0) {
     tvx = (mx / len) * paced
     tvy = (my / len) * paced
@@ -336,13 +336,13 @@ export const TACTICS = {
   flank: {
     id: 'flank',
     name: '側面迂回',
-    summary: '外側へ回り、敵の側面から艦首を向ける。',
+    summary: '艦首射程の外を回って側面に出る。隊列の歩調には縛られない。',
     focus: false,
     guns: false,
-    sweep: true,
+    sweep: false,
     step(div, ctx, dt) {
       tagged(div, false, ctx)
-      flank(div, ctx, dt, 36, 280)
+      hook(div, ctx, dt, 46, 'side')
     },
   },
   broadside: {

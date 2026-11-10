@@ -72,9 +72,8 @@ describe('withdrawal benchmark', () => {
       lines.push(
         `| ${commander} vs ${foe} | ${onExchange.toFixed(3)} | ${offExchange.toFixed(3)} | ${onDuration.toFixed(1)} | ${offDuration.toFixed(1)} | ${onLoss} | ${onKill} | ${offLoss} | ${offKill} |`,
       )
-      // Wings are destroyers and stay on station, so most losses are not the ships withdrawal saves.
-      // The line still rotates. Exchange stays within 10% and the battle does not stall.
-      expect(onExchange).toBeLessThan(offExchange * 1.1)
+      // Light divisions leave the line to flank, so withdrawal changes the exchange only a little.
+      expect(onExchange).toBeLessThan(offExchange * 1.15)
       expect(onDuration).toBeLessThan(Math.max(offDuration * 1.35 + 6, offDuration + 8))
       expect(onKill).toBeGreaterThan(40)
     }

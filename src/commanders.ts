@@ -103,7 +103,7 @@ export const COMMANDERS = {
   fierce: {
     id: 'fierce',
     name: '猛将',
-    summary: '正面と突破を好み、有利ならさらに押す。深手だけ少し下がる。',
+    summary: '戦艦で正面を突き、巡航艦と駆逐艦は側面と背面へ回す。深手だけ少し下がる。',
     auto: true,
     base: { ...EMPTY, charge: 5, breakthrough: 4, flank: 1 },
     prefer: ['breakthrough', 'charge', 'flank', 'focus', 'encircle', 'feint', 'hold'],
@@ -123,7 +123,7 @@ export const COMMANDERS = {
   cunning: {
     id: 'cunning',
     name: '智将',
-    summary: '中軍で正面を押さえ、両翼で側面と背面を撃つ。傷ついた艦は後ろで機会を待つ。',
+    summary: '戦艦で正面を釘付けにし、速い隊は艦首射程の外から挟む。傷ついた艦は後ろで機会を待つ。',
     auto: true,
     base: { ...EMPTY, pin: 1, broadside: 1, rear: 1 },
     prefer: ['rear', 'broadside', 'pin', 'focus', 'hold', 'flank', 'charge', 'encircle', 'breakthrough', 'feint'],
@@ -148,7 +148,7 @@ export const COMMANDERS = {
   guard: {
     id: 'guard',
     name: '守将',
-    summary: 'その場を守り、敵が削れたら反撃する。傷ついた艦は列の後ろへ下がる。',
+    summary: '戦艦で陣を守り、軽い隊は側近として敵の回り込みを叩く。傷ついた艦は列の後ろへ下がる。',
     auto: true,
     base: { ...EMPTY, hold: 5, focus: 4 },
     prefer: ['charge', 'focus', 'hold', 'breakthrough', 'flank', 'encircle', 'feint'],
@@ -171,7 +171,7 @@ export const COMMANDERS = {
   balanced: {
     id: 'balanced',
     name: '常勝',
-    summary: '戦力と敵の動きを見て陣を変える。傷ついた艦は前の列に隠れる。',
+    summary: '戦艦で戦列を保ち、側面が空けば速い隊をそこへ送る。傷ついた艦は前の列に隠れる。',
     auto: true,
     base: { ...EMPTY, charge: 3, hold: 1, flank: 1, focus: 1, breakthrough: 1 },
     prefer: ['breakthrough', 'encircle', 'hold', 'charge', 'focus', 'flank', 'feint'],
@@ -198,6 +198,32 @@ export const COMMANDERS = {
     posture: { press: 2, seize: 4, envelop: 3, wheel: 2, breakout: 4, refuse: 3, reform: 3, commit: 7 },
   },
 } satisfies Record<CommanderId, Commander>
+
+const LINE_TACTICS = new Set<TacticId>(['charge', 'hold', 'pin', 'breakthrough', 'focus'])
+
+/** Battleships hold the line. Lighter classes leave it, each commander in its own way. */
+export function employClass(commander: Commander, classId: 'battleship' | 'cruiser' | 'destroyer', chosen: TacticId, facts: BattleFacts): TacticId {
+  if (!commander.auto) return chosen
+  const light = classId !== 'battleship'
+  if (!light) {
+    if (LINE_TACTICS.has(chosen)) return chosen
+    if (commander.id === 'fierce') return 'breakthrough'
+    if (commander.id === 'guard') return 'hold'
+    if (commander.id === 'cunning') return 'pin'
+    return 'charge'
+  }
+  if (commander.id === 'fierce') return classId === 'destroyer' ? 'rear' : 'broadside'
+  if (commander.id === 'cunning') return classId === 'destroyer' ? 'rear' : 'broadside'
+  if (commander.id === 'guard') {
+    if (facts.enemyOnUs === 'side' || facts.enemyOnUs === 'rear') return 'broadside'
+    return 'flank'
+  }
+  if (facts.usOnEnemy === 'rear') return 'rear'
+  if (facts.usOnEnemy === 'side' || facts.enemyOnUs === 'side' || facts.enemyOnUs === 'rear') {
+    return classId === 'destroyer' ? 'rear' : 'broadside'
+  }
+  return 'flank'
+}
 
 export function chooseTactic(commander: Commander, facts: BattleFacts): TacticId | null {
   if (!commander.auto) return null

@@ -9,6 +9,8 @@ export interface ShipStats {
   maxSpeed: number
   response: number
   turnRate: number
+  /** How fast the yaw rate can rise, radians per second squared. */
+  yawAccel: number
   reverse: number
   arc: number
   armorFront: number
@@ -88,9 +90,10 @@ export const SHIP_STATS = {
   acquire: 980,
   cooldown: FIRE.cooldown,
   hitChance: 0.86,
-  maxSpeed: 70,
+  maxSpeed: 60,
   response: 5.2,
-  turnRate: 1.5,
+  turnRate: 0.9,
+  yawAccel: 1.15,
   reverse: 0.22,
   arc: (40 * Math.PI) / 180,
   armorFront: 0.5,
@@ -117,6 +120,8 @@ export interface ClassMods {
   speed: number
   accel: number
   turn: number
+  /** Multiplier on yaw acceleration. Battleships are 1. */
+  yaw: number
   wing: number
   bowGuns: number
   bowPower: number
@@ -140,6 +145,7 @@ export const CLASS_MODS = {
     speed: 1,
     accel: 1,
     turn: 1,
+    yaw: 1,
     wing: 0.82,
     bowGuns: 1,
     bowPower: 1,
@@ -158,9 +164,10 @@ export const CLASS_MODS = {
     summary: '戦艦より軽く、速く、よく曲がる。射程と威力は一回り小さい。',
     hp: 0.64,
     armor: 1.2,
-    speed: 1.28,
-    accel: 1.4,
-    turn: 1.6,
+    speed: 1.55,
+    accel: 2.6,
+    turn: 2.35,
+    yaw: 3.4,
     wing: 1.08,
     bowGuns: 0.75,
     bowPower: 0.85,
@@ -179,9 +186,10 @@ export const CLASS_MODS = {
     summary: '脆い代わりに速く、舷側砲を近づけて撃つ。',
     hp: 0.34,
     armor: 1.45,
-    speed: 1.58,
-    accel: 1.8,
-    turn: 2.2,
+    speed: 2.4,
+    accel: 7,
+    turn: 4.6,
+    yaw: 9,
     wing: 1.38,
     bowGuns: 0.5,
     bowPower: 0.55,
@@ -232,6 +240,7 @@ function deriveClass(id: ShipClassId): ShipStats {
     maxSpeed: SHIP_STATS.maxSpeed * mods.speed,
     response: SHIP_STATS.response * mods.accel,
     turnRate: SHIP_STATS.turnRate * mods.turn,
+    yawAccel: SHIP_STATS.yawAccel * mods.yaw,
     reverse: SHIP_STATS.reverse,
     arc: SHIP_STATS.arc * mods.bowArc,
     armorFront: SHIP_STATS.armorFront * mods.armor,
@@ -269,9 +278,38 @@ export function hullHp(index: number, battleshipHp: number): number {
   return Math.max(1, Math.round((base * battleshipHp) / SHIP_STATS.hp))
 }
 
-/** Division anchors take part of the class speed so a wing leads without leaving the fleet. */
-export function anchorPace(id: ShipClassId): number {
-  return 1 + (CLASS_MODS[id].speed - 1) * 0.45
+const SPRINT_TACTICS = new Set(['flank', 'broadside', 'rear', 'encircle', 'feint'])
+
+/**
+ * Formation advances use the battleship pace so destroyer wings stay with the center.
+ * Flanking tactics, an envelopment, and a manual move order use the class's own speed.
+ */
+export function anchorPace(div: { classId: ShipClassId; tacticId: string; ordered: boolean; sprint: boolean }): number {
+  if (div.ordered || div.sprint || SPRINT_TACTICS.has(div.tacticId)) return CLASS_MODS[div.classId].speed
+  return 1
+}
+
+/** Linear acceleration, world units per second squared. */
+export function thrust(response: number): number {
+  return response * 14
+}
+
+/** Steady-turn radius at top speed. */
+export function turningRadius(maxSpeed: number, turnRate: number): number {
+  return maxSpeed / turnRate
+}
+
+export function stepYaw(yaw: number, error: number, turnRate: number, yawAccel: number, dt: number): { yaw: number; delta: number } {
+  const want = Math.max(-turnRate, Math.min(turnRate, error * 5))
+  let next = yaw + Math.max(-yawAccel * dt, Math.min(yawAccel * dt, want - yaw))
+  next = Math.max(-turnRate, Math.min(turnRate, next))
+  let delta = next * dt
+  if (error !== 0 && Math.abs(delta) > Math.abs(error) && error * delta > 0) {
+    delta = error
+    next = dt > 0 ? error / dt : 0
+    next = Math.max(-turnRate, Math.min(turnRate, next))
+  }
+  return { yaw: next, delta }
 }
 
 /**

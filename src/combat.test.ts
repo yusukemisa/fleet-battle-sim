@@ -162,6 +162,8 @@ function aimingShip(speed: Speed): SimState {
   const ships = state.ships
   for (let i = 0; i < ships.count; i++) {
     ships.cooldown[i] = 100
+    ships.gunCd[i * 2] = 100
+    ships.gunCd[i * 2 + 1] = 100
     if (i !== 0 && i !== 50) ships.alive[i] = 0
   }
   ships.shipClass[0] = 0
