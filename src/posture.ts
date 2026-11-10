@@ -105,12 +105,16 @@ function span(list: readonly Division[], ox: number, oy: number, fx: number, fy:
   return width
 }
 
-export function assess(state: SimState, side: SideId): Situation {
+export function assess(
+  state: SimState,
+  side: SideId,
+  focus?: { ownX: number; ownY: number; enemyX: number; enemyY: number },
+): Situation {
   const enemy: SideId = side === 0 ? 1 : 0
-  const ownX = state.centroidX[side] ?? 0
-  const ownY = state.centroidY[side] ?? 0
-  const enemyX = state.centroidX[enemy] ?? 0
-  const enemyY = state.centroidY[enemy] ?? 0
+  const ownX = focus?.ownX ?? state.centroidX[side] ?? 0
+  const ownY = focus?.ownY ?? state.centroidY[side] ?? 0
+  const enemyX = focus?.enemyX ?? state.centroidX[enemy] ?? 0
+  const enemyY = focus?.enemyY ?? state.centroidY[enemy] ?? 0
   const toX = enemyX - ownX
   const toY = enemyY - ownY
   const dist = hypot(toX, toY) || 1
@@ -313,17 +317,24 @@ function stepPlaced(div: Division, sit: Situation, fleetManeuver: ManeuverId, dt
 
 export function stepPlan(state: SimState, div: Division, dt: number): void {
   const side = div.side
-  const fleet = state.fleets[side]
+  const multi = state.fleets.length > 2
+  const fleet = (multi ? state.fleets[div.fleet] : state.fleets[side]) ?? state.fleets[side]
+  if (!fleet) return
   const enemy: SideId = side === 0 ? 1 : 0
+  const enemyFleet = multi ? state.fleets[fleet.enemyFleet] : undefined
+  const ownX = multi ? fleet.meanX : (state.centroidX[side] ?? 0)
+  const ownY = multi ? fleet.meanY : (state.centroidY[side] ?? 0)
+  const enemyX = multi ? (enemyFleet?.meanX ?? state.centroidX[enemy] ?? 0) : (state.centroidX[enemy] ?? 0)
+  const enemyY = multi ? (enemyFleet?.meanY ?? state.centroidY[enemy] ?? 0) : (state.centroidY[enemy] ?? 0)
   const ctx: TacticContext = {
     divisions: state.divisions,
-    ownX: state.centroidX[side] ?? 0,
-    ownY: state.centroidY[side] ?? 0,
-    enemyX: state.centroidX[enemy] ?? 0,
-    enemyY: state.centroidY[enemy] ?? 0,
+    ownX,
+    ownY,
+    enemyX,
+    enemyY,
     sweepLeg: fleet.sweepLeg,
   }
-  const sit = assess(state, side)
+  const sit = multi ? assess(state, side, { ownX, ownY, enemyX, enemyY }) : assess(state, side)
   const apart = hypot(sit.enemyX - sit.ownX, sit.enemyY - sit.ownY)
   const onMission = div.tacticId === 'flank' || div.tacticId === 'broadside' || div.tacticId === 'rear' || div.tacticId === 'feint'
   if (onMission && fleet.maneuver !== 'breakout') {
@@ -386,17 +397,27 @@ function presentBroadside(div: Division, ox: number, oy: number, sign: number, r
   drive(div, gx, gy, gx + hx * 180, gy + hy * 180, 36, dt)
 }
 
-export function updatePlan(state: SimState, side: SideId): void {
-  const fleet = state.fleets[side]
+export function updatePlan(state: SimState, side: SideId, fleetIndex?: number): void {
+  const fleet = state.fleets[fleetIndex ?? side]
+  if (!fleet || fleet.ships <= 0) return
   const commander = COMMANDERS[fleet.commanderId]
   if (!commander.auto) return
-  const sit = assess(state, side)
+  const enemyFleet = state.fleets[fleet.enemyFleet]
+  const sit =
+    fleetIndex === undefined
+      ? assess(state, side)
+      : assess(state, fleet.side, {
+          ownX: fleet.meanX,
+          ownY: fleet.meanY,
+          enemyX: enemyFleet?.meanX ?? state.centroidX[fleet.side === 0 ? 1 : 0] ?? 0,
+          enemyY: enemyFleet?.meanY ?? state.centroidY[fleet.side === 0 ? 1 : 0] ?? 0,
+        })
   const committed = state.time < fleet.maneuverUntil
   const next = selectManeuver(commander.posture, sit, fleet.maneuver, committed)
   if (next !== fleet.maneuver || state.time >= fleet.maneuverUntil) {
     if (next !== fleet.maneuver) {
       for (const division of state.divisions) {
-        if (division.side !== side) continue
+        if (fleetIndex === undefined ? division.side !== side : division.fleet !== fleet.index) continue
         division.phase = 0
         division.phaseT = 0
         division.sweepLocked = false
@@ -406,12 +427,12 @@ export function updatePlan(state: SimState, side: SideId): void {
     fleet.maneuverUntil = state.time + commander.posture.commit
     fleet.bias = sit.exposedSign || 1
   }
-  if (commander.id === 'balanced') commitPrey(state, side)
+  if (commander.id === 'balanced') commitPrey(state, fleet.side, fleetIndex)
   else {
     const preyAlive = (state.divisions[fleet.prey]?.alive ?? 0) > 0
     if (sit.prey >= 0 && (!preyAlive || !committed)) fleet.prey = sit.prey
   }
-  directLights(state, side)
+  directLights(state, fleet.side, fleetIndex)
 }
 
 function setDuty(state: SimState, div: Division, tactic: TacticId): void {
@@ -427,15 +448,18 @@ function setDuty(state: SimState, div: Division, tactic: TacticId): void {
 }
 
 /** Destroyers either duck under a battleship's bow or stand in front of our own. */
-function directLights(state: SimState, side: SideId): void {
-  const commander = state.fleets[side].commanderId
+function directLights(state: SimState, side: SideId, fleetIndex?: number): void {
+  const commander = state.fleets[fleetIndex ?? side]?.commanderId
+  if (!commander) return
   const enemy: SideId = side === 0 ? 1 : 0
   let ownBb: Division | undefined
   const enemyBbs: Division[] = []
   const enemyDds: Division[] = []
   for (const division of state.divisions) {
     if (division.alive === 0) continue
-    if (division.side === side && division.classId === 'battleship') ownBb = division
+    if (division.side === side && division.classId === 'battleship' && (fleetIndex === undefined || division.fleet === fleetIndex)) {
+      ownBb = division
+    }
     if (division.side === enemy && division.classId === 'battleship') enemyBbs.push(division)
     if (division.side === enemy && division.classId === 'destroyer') enemyDds.push(division)
   }
@@ -461,6 +485,7 @@ function directLights(state: SimState, side: SideId): void {
   const prey = enemyBbs[0]
   for (const division of state.divisions) {
     if (division.side !== side || division.alive === 0 || division.classId === 'battleship') continue
+    if (fleetIndex !== undefined && division.fleet !== fleetIndex) continue
     const duty = lightDuty(commander, division.classId, incoming, enemyScreenHome, division.slot)
     if (duty === 'screen') {
       division.screen = true
@@ -499,8 +524,9 @@ function preyValue(division: Division, enemyCommander: CommanderId, ex: number, 
 }
 
 /** One enemy division at a time. Stick with it until it is almost gone. */
-function commitPrey(state: SimState, side: SideId): void {
-  const fleet = state.fleets[side]
+function commitPrey(state: SimState, side: SideId, fleetIndex?: number): void {
+  const fleet = state.fleets[fleetIndex ?? side]
+  if (!fleet) return
   const enemy: SideId = side === 0 ? 1 : 0
   const enemyCommander = state.fleets[enemy].commanderId
   const ex = state.centroidX[enemy] ?? 0
@@ -526,6 +552,7 @@ function commitPrey(state: SimState, side: SideId): void {
   if (best >= 0) fleet.prey = best
   for (const division of state.divisions) {
     if (division.side !== side) continue
+    if (fleetIndex !== undefined && division.fleet !== fleet.index) continue
     division.hunt = fleet.prey
     division.standoff = division.classId === 'battleship' && enemyCommander !== 'guard'
     division.rush = division.classId !== 'battleship'

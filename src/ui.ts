@@ -1,4 +1,4 @@
-import { CLASS_MODS, SHIP_CLASS_IDS } from './balance.ts'
+import { CLASS_MODS, FLEET_SHIP_PRESETS, SHIP_CLASS_IDS } from './balance.ts'
 import { COMMANDERS } from './commanders.ts'
 import { FORMATIONS } from './formations.ts'
 import { parseClassId, parseCommanderId, parseFormationId, parseShipCount, parseSpeed, parseTacticId } from './parse.ts'
@@ -14,8 +14,10 @@ import {
 
 export interface Hud {
   shipCount: HTMLSelectElement
+  fleetCount: [HTMLSelectElement, HTMLSelectElement]
   formation: [HTMLSelectElement, HTMLSelectElement]
   commander: [HTMLSelectElement, HTMLSelectElement]
+  orderKey: string
   division: HTMLSelectElement[]
   shipClass: HTMLSelectElement[]
   log: HTMLElement
@@ -38,8 +40,10 @@ export function mountHud(
       <label>隻数 <select id="ship-count"></select></label>
       <label class="side blue">青軍 <select id="form-0"></select></label>
       <label class="side blue">指揮官 <select id="cmd-0"></select></label>
+      <label class="side blue">艦隊 <select id="fleets-0"></select></label>
       <label class="side red">赤軍 <select id="form-1"></select></label>
       <label class="side red">指揮官 <select id="cmd-1"></select></label>
+      <label class="side red">艦隊 <select id="fleets-1"></select></label>
       <button id="start" type="button">開戦</button>
       <button id="pause" type="button">停止</button>
       <div class="speeds" role="group" aria-label="速度">
@@ -118,6 +122,70 @@ export function mountHud(
   const commander1 = commanderList[1]
   if (!commander0 || !commander1) throw new Error('commander')
   const commander: [HTMLSelectElement, HTMLSelectElement] = [commander0, commander1]
+
+  const fleetCountList = [0, 1].map((side) => {
+    const select = required(parent, `#fleets-${side}`, HTMLSelectElement)
+    for (const count of [1, 2, 3]) {
+      const option = document.createElement('option')
+      option.value = String(count)
+      option.textContent = `${count}`
+      select.append(option)
+    }
+    select.addEventListener('change', () => {
+      const count = Number(select.value)
+      if ((count === 1 || count === 2 || count === 3) && (side === 0 || side === 1)) {
+        onCommand({ type: 'set-fleet-count', side, count })
+      }
+    })
+    return select
+  })
+  const fleetCount0 = fleetCountList[0]
+  const fleetCount1 = fleetCountList[1]
+  if (!fleetCount0 || !fleetCount1) throw new Error('fleet count')
+  const fleetCount: [HTMLSelectElement, HTMLSelectElement] = [fleetCount0, fleetCount1]
+
+  const orders = required(parent, '#orders', HTMLElement)
+  orders.addEventListener('change', (event) => {
+    const target = event.target
+    if (!(target instanceof HTMLSelectElement)) return
+    const fleet = Number(target.dataset.fleet)
+    const divisionIndex = Number(target.dataset.division)
+    if (target.dataset.kind === 'ships' && Number.isInteger(fleet)) {
+      onCommand({ type: 'set-fleet-ships', fleet, ships: Number(target.value) })
+    }
+    if (target.dataset.kind === 'formation' && Number.isInteger(fleet)) {
+      const formationId = parseFormationId(target.value)
+      if (formationId !== null) onCommand({ type: 'set-fleet-formation', fleet, formationId })
+    }
+    if (target.dataset.kind === 'commander' && Number.isInteger(fleet)) {
+      const commanderId = parseCommanderId(target.value)
+      if (commanderId !== null) onCommand({ type: 'set-fleet-commander', fleet, commanderId })
+    }
+    if (target.dataset.kind === 'tactic' && Number.isInteger(divisionIndex)) {
+      const tacticId = parseTacticId(target.value)
+      if (tacticId !== null) onCommand({ type: 'set-tactic', division: divisionIndex, tacticId })
+    }
+    if (target.dataset.kind === 'class' && Number.isInteger(divisionIndex)) {
+      const classId = parseClassId(target.value)
+      if (classId !== null) onCommand({ type: 'set-class', division: divisionIndex, classId })
+    }
+  })
+  orders.addEventListener('click', (event) => {
+    const target = event.target
+    if (!(target instanceof HTMLElement)) return
+    if (target.classList.contains('div-name')) {
+      const row = target.closest('.div-row')
+      if (row instanceof HTMLElement) onSelectDivision(Number(row.dataset.index), event.shiftKey)
+    }
+    if (target instanceof HTMLButtonElement && target.dataset.kind === 'order-fleet') {
+      const select = target.previousElementSibling
+      const fleet = Number(target.dataset.fleet)
+      if (select instanceof HTMLSelectElement) {
+        const tacticId = parseTacticId(select.value)
+        if (tacticId !== null) onCommand({ type: 'set-fleet-tactic', fleet, tacticId })
+      }
+    }
+  })
 
   const division: HTMLSelectElement[] = []
   const shipClass: HTMLSelectElement[] = []
@@ -201,6 +269,8 @@ export function mountHud(
     shipCount,
     formation,
     commander,
+    fleetCount,
+    orderKey: '',
     division,
     shipClass,
     log: required(parent, '#log', HTMLElement),
@@ -215,6 +285,21 @@ export function syncHud(parent: HTMLElement, hud: Hud, state: SimState, picked: 
   const setup = state.phase.kind === 'setup'
   hud.shipCount.disabled = !setup
   if (hud.shipCount.value !== String(state.shipCount)) hud.shipCount.value = String(state.shipCount)
+  const blueFleets = state.fleets.filter((fleet) => fleet.side === 0 && fleet.ships > 0).length
+  const redFleets = state.fleets.filter((fleet) => fleet.side === 1 && fleet.ships > 0).length
+  hud.fleetCount[0].disabled = !setup
+  hud.fleetCount[1].disabled = !setup
+  if (hud.fleetCount[0].value !== String(blueFleets)) hud.fleetCount[0].value = String(Math.max(1, blueFleets))
+  if (hud.fleetCount[1].value !== String(redFleets)) hud.fleetCount[1].value = String(Math.max(1, redFleets))
+  const orderKey = state.fleets.map((fleet) => `${fleet.index}:${fleet.ships}:${fleet.formationId}:${fleet.commanderId}`).join()
+  if (orderKey !== hud.orderKey) {
+    hud.orderKey = orderKey
+    paintOrders(parent, hud, state)
+  }
+  parent.querySelectorAll<HTMLSelectElement>('#orders select').forEach((select) => {
+    if (select.dataset.kind === 'tactic') select.disabled = state.phase.kind === 'finished'
+    else select.disabled = !setup
+  })
   hud.formation.forEach((select, side) => {
     select.disabled = !setup
     const id = state.fleets[side]?.formationId
@@ -277,6 +362,95 @@ export function syncHud(parent: HTMLElement, hud: Hud, state: SimState, picked: 
   } else {
     hud.banner.hidden = true
   }
+}
+
+function paintOrders(parent: HTMLElement, hud: Hud, state: SimState): void {
+  const sections = parent.querySelectorAll('#orders section')
+  hud.division = []
+  hud.shipClass = []
+  sections.forEach((section, side) => {
+    section.replaceChildren()
+    if (side !== 0 && side !== 1) return
+    const fleets = state.fleets.filter((fleet) => fleet.side === side && fleet.ships > 0)
+    for (const fleet of fleets) {
+      const head = document.createElement('div')
+      head.className = `fleet-head shade-${fleet.ordinal}`
+      const title = document.createElement('strong')
+      title.textContent = fleet.name
+      const ships = document.createElement('select')
+      ships.dataset.kind = 'ships'
+      ships.dataset.fleet = String(fleet.index)
+      for (const count of FLEET_SHIP_PRESETS) {
+        const option = document.createElement('option')
+        option.value = String(count)
+        option.textContent = `${count.toLocaleString('ja-JP')}隻`
+        ships.append(option)
+      }
+      ships.value = String(fleet.ships)
+      const formation = document.createElement('select')
+      formation.dataset.kind = 'formation'
+      formation.dataset.fleet = String(fleet.index)
+      for (const id of FORMATION_IDS) {
+        const option = document.createElement('option')
+        option.value = id
+        option.textContent = FORMATIONS[id].name
+        formation.append(option)
+      }
+      formation.value = fleet.formationId
+      const commander = document.createElement('select')
+      commander.dataset.kind = 'commander'
+      commander.dataset.fleet = String(fleet.index)
+      for (const id of COMMANDER_IDS) {
+        const option = document.createElement('option')
+        option.value = id
+        option.textContent = COMMANDERS[id].name
+        commander.append(option)
+      }
+      commander.value = fleet.commanderId
+      const tactic = document.createElement('select')
+      fillTactics(tactic)
+      const apply = document.createElement('button')
+      apply.type = 'button'
+      apply.dataset.kind = 'order-fleet'
+      apply.dataset.fleet = String(fleet.index)
+      apply.textContent = 'この艦隊に下令'
+      head.append(title, ships, formation, commander, tactic, apply)
+      section.append(head)
+      for (let slot = 0; slot < 5; slot++) {
+        const index = fleet.index * 5 + slot
+        const division = state.divisions[index]
+        const row = document.createElement('div')
+        row.className = `div-row shade-${fleet.ordinal}`
+        row.dataset.index = String(index)
+        const name = document.createElement('span')
+        name.className = 'div-name'
+        name.textContent = division?.name ?? ''
+        name.title = `${fleet.name}の${division?.name ?? '隊'}。クリックで選択。`
+        const count = document.createElement('span')
+        count.className = 'remain'
+        const klass = document.createElement('select')
+        klass.className = 'class-select'
+        klass.dataset.kind = 'class'
+        klass.dataset.division = String(index)
+        for (const id of SHIP_CLASS_IDS) {
+          const option = document.createElement('option')
+          option.value = id
+          option.textContent = CLASS_MODS[id].name
+          klass.append(option)
+        }
+        if (division) klass.value = division.classId
+        const select = document.createElement('select')
+        select.dataset.kind = 'tactic'
+        select.dataset.division = String(index)
+        fillTactics(select)
+        if (division) select.value = division.tacticId
+        row.append(name, klass, count, select)
+        section.append(row)
+        hud.division[index] = select
+        hud.shipClass[index] = klass
+      }
+    }
+  })
 }
 
 function fillTactics(select: HTMLSelectElement): void {

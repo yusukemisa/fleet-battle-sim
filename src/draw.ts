@@ -12,6 +12,8 @@ export interface Camera {
 
 const BLUE = '#3c90d6'
 const RED = '#e16858'
+const BLUE_SHADES = ['#3c90d6', '#8fc0ea', '#1d4f7a']
+const RED_SHADES = ['#e16858', '#f2b2a8', '#8c342c']
 const STAR = 'rgba(220, 226, 236, 0.55)'
 
 let stars: { x: number; y: number; r: number; a: number }[] = []
@@ -50,9 +52,17 @@ export function draw(
   }
   ctx.globalAlpha = 1
 
-  const size = blockSize(camera.zoom, state.shipCount)
-  paintShips(ctx, state, camera, width, height, size, 0, BLUE)
-  paintShips(ctx, state, camera, width, height, size, 1, RED)
+  const size = blockSize(camera.zoom, state.ships.count)
+  if (state.fleets.length > 2) {
+    for (const fleet of state.fleets) {
+      if (fleet.ships <= 0) continue
+      const shade = (fleet.side === 0 ? BLUE_SHADES : RED_SHADES)[fleet.ordinal] ?? BLUE
+      paintFleet(ctx, state, camera, width, height, size, fleet.index, shade)
+    }
+  } else {
+    paintShips(ctx, state, camera, width, height, size, 0, BLUE)
+    paintShips(ctx, state, camera, width, height, size, 1, RED)
+  }
   paintShips(ctx, state, camera, width, height, size, 'flash', '#f4f1df')
 
   strokeBeams(ctx, state, camera, width, height)
@@ -104,6 +114,49 @@ export function fitCamera(state: SimState, width: number, height: number): Camer
     x: worldX - (usableCenterX - width / 2) / zoom,
     y: worldY - (height / 2 - usableCenterY) / zoom,
     zoom,
+  }
+}
+
+function paintFleet(
+  ctx: CanvasRenderingContext2D,
+  state: SimState,
+  camera: Camera,
+  width: number,
+  height: number,
+  size: number,
+  fleetIndex: number,
+  color: string,
+): void {
+  const ships = state.ships
+  ctx.strokeStyle = color
+  ctx.lineCap = 'butt'
+  for (let klass = 0; klass < SHIP_CLASS_IDS.length; klass++) {
+    const mods = classMods(klass)
+    const hullW = Math.max(0.5, size * 0.7 * mods.girth)
+    const halfLen = Math.max(hullW * 0.9, size * 0.9 * mods.length)
+    ctx.lineWidth = hullW
+    ctx.beginPath()
+    const bow = new Path2D()
+    for (let i = 0; i < ships.count; i++) {
+      if (ships.alive[i] === 0 || (ships.shipClass[i] ?? 0) !== klass) continue
+      const division = state.divisions[ships.division[i] ?? 0]
+      if (!division || division.fleet !== fleetIndex) continue
+      if ((ships.flash[i] ?? 0) > 0.55) continue
+      const p = worldToScreen(ships.x[i] ?? 0, ships.y[i] ?? 0, camera, width, height)
+      const heading = ships.heading[i] ?? 0
+      const hx = Math.cos(heading)
+      const hy = -Math.sin(heading)
+      const fx = hx * halfLen
+      const fy = hy * halfLen
+      ctx.moveTo(p.x - fx, p.y - fy)
+      ctx.lineTo(p.x + fx, p.y + fy)
+      const nose = halfLen + hullW * 0.22
+      bow.moveTo(p.x + hx * nose, p.y + hy * nose)
+      bow.lineTo(p.x + hx * (nose + hullW * 0.55), p.y + hy * (nose + hullW * 0.55))
+    }
+    ctx.stroke()
+    ctx.lineWidth = Math.max(0.6, hullW * 0.62)
+    ctx.stroke(bow)
   }
 }
 
@@ -164,7 +217,7 @@ function drawOrders(
   for (let index = 0; index < state.divisions.length; index++) {
     const division = state.divisions[index]
     if (!division || division.alive === 0) continue
-    if (state.fleets[division.side].commanderId !== 'manual') continue
+    if ((state.fleets[division.fleet] ?? state.fleets[division.side])?.commanderId !== 'manual') continue
     const selected = overlay.selected.includes(index)
     const at = worldToScreen(division.ax, division.ay, camera, width, height)
     ctx.beginPath()
@@ -364,14 +417,17 @@ function strokeBooms(
 }
 
 function drawLegend(ctx: CanvasRenderingContext2D, state: SimState, height: number): void {
-  const rows = [0, 1] as const
+  const fleets = state.fleets.filter((fleet) => fleet.ships > 0)
   ctx.font = '13px "WenQuanYi Micro Hei", "Droid Sans Fallback", sans-serif'
-  const lines = rows.map((side) => {
-    const fleet = state.fleets[side]
-    const count = state.alive[side].toLocaleString('ja-JP')
-    return `${fleet.name} ${count}隻  ${FORMATIONS[fleet.formationId].name}`
+  const lines = fleets.map((fleet) => {
+    let alive = 0
+    for (const division of state.divisions) {
+      if (division.fleet === fleet.index) alive += division.alive
+    }
+    const mark = alive === 0 ? '壊滅' : `${alive.toLocaleString('ja-JP')}隻`
+    return `${fleet.name} ${mark}  ${FORMATIONS[fleet.formationId].name}`
   })
-  const width = Math.max(...lines.map((line) => ctx.measureText(line).width)) + 36
+  const width = Math.max(120, ...lines.map((line) => ctx.measureText(line).width)) + 36
   const boxH = 18 + lines.length * 22
   const x = 14
   const y = height - boxH - 14
@@ -380,8 +436,9 @@ function drawLegend(ctx: CanvasRenderingContext2D, state: SimState, height: numb
   ctx.lineWidth = 1
   ctx.fillRect(x, y, width, boxH)
   ctx.strokeRect(x + 0.5, y + 0.5, width - 1, boxH - 1)
-  rows.forEach((side, index) => {
-    ctx.fillStyle = side === 0 ? BLUE : RED
+  fleets.forEach((fleet, index) => {
+    const shade = (fleet.side === 0 ? BLUE_SHADES : RED_SHADES)[fleet.ordinal] ?? (fleet.side === 0 ? BLUE : RED)
+    ctx.fillStyle = shade
     ctx.fillRect(x + 10, y + 14 + index * 22, 9, 9)
     ctx.fillStyle = '#d5dbe6'
     ctx.fillText(lines[index] ?? '', x + 26, y + 23 + index * 22)
