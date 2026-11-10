@@ -1,6 +1,7 @@
 import { anchorPace, CLASS_MODS, CLASS_STATS, classIndex, MANEUVER } from './balance.ts'
 import type { PostureWeights } from './commanders.ts'
 import { COMMANDERS } from './commanders.ts'
+import { aimUnderThreat, wideFlankGoal } from './threat.ts'
 import { wheelDivision } from './tactics.ts'
 import type { Division, ManeuverId, SideId, SimState, TacticContext } from './types.ts'
 import { MANEUVER_IDS } from './types.ts'
@@ -43,8 +44,9 @@ function steer(div: Division, mx: number, my: number, speed: number, dt: number)
 }
 
 function face(div: Division, tx: number, ty: number, dt: number): void {
-  let fx = tx - div.ax
-  let fy = ty - div.ay
+  const aimed = aimUnderThreat(div, tx, ty)
+  let fx = aimed.x - div.ax
+  let fy = aimed.y - div.ay
   const len = hypot(fx, fy)
   if (len < 1e-4) return
   fx /= len
@@ -335,8 +337,13 @@ export function stepPlan(state: SimState, div: Division, dt: number): void {
   const sideMax = sideGun?.maxRange ?? 420
   const prey = state.divisions[fleet.prey >= 0 ? fleet.prey : sit.prey]
   const onFlank = fleet.maneuver === 'seize' || fleet.maneuver === 'envelop'
-  if (onFlank && prey && prey.alive > 0 && prey.side !== side && apart < (bow?.maxRange ?? 900)) {
-    // Sit on the exposed beam and point the bow at it: their side is hit, our front faces them.
+  if (onFlank && prey && prey.alive > 0 && prey.side !== side && apart < (bow?.maxRange ?? 900) + 120) {
+    const wide = wideFlankGoal(div, prey, 'side')
+    if (!wide.pocket) {
+      drive(div, wide.x, wide.y, prey.ax, prey.ay, 40, dt)
+      return
+    }
+    // Outside the bow arc: point our front at their exposed beam.
     const s = fleet.bias || sit.exposedSign || 1
     const fore = slotOffset(div.slot)
     const reach = 400 * CLASS_MODS[div.classId].wing
@@ -346,7 +353,8 @@ export function stepPlan(state: SimState, div: Division, dt: number): void {
     return
   }
   if (fleet.maneuver !== 'breakout' && apart < bowMin + 10) {
-    presentBroadside(div, sit.enemyX, sit.enemyY, fleet.bias || 1, Math.min(sideMax * 0.72, 300), dt)
+    if (div.broadsideOk) presentBroadside(div, sit.enemyX, sit.enemyY, fleet.bias || 1, Math.min(sideMax * 0.72, 300), dt)
+    else drive(div, div.ax, div.ay, sit.enemyX, sit.enemyY, 0, dt)
     return
   }
   if (apart > bowMin + 200) {
