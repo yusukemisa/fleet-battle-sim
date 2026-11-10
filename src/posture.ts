@@ -2,7 +2,7 @@ import { anchorPace, CLASS_MODS, CLASS_STATS, classIndex, MANEUVER } from './bal
 import type { PostureWeights } from './commanders.ts'
 import { COMMANDERS } from './commanders.ts'
 import { aimUnderThreat, wideFlankGoal } from './threat.ts'
-import { wheelDivision } from './tactics.ts'
+import { stepDivision, wheelDivision } from './tactics.ts'
 import type { Division, ManeuverId, SideId, SimState, TacticContext } from './types.ts'
 import { MANEUVER_IDS } from './types.ts'
 
@@ -31,7 +31,7 @@ function steer(div: Division, mx: number, my: number, speed: number, dt: number)
   const len = hypot(mx, my)
   let tvx = 0
   let tvy = 0
-  const paced = speed * anchorPace(div.classId)
+  const paced = speed * anchorPace(div)
   if (len > 0.8 && paced > 0) {
     tvx = (mx / len) * paced
     tvy = (my / len) * paced
@@ -325,6 +325,11 @@ export function stepPlan(state: SimState, div: Division, dt: number): void {
   }
   const sit = assess(state, side)
   const apart = hypot(sit.enemyX - sit.ownX, sit.enemyY - sit.ownY)
+  const onMission = div.tacticId === 'flank' || div.tacticId === 'broadside' || div.tacticId === 'rear' || div.tacticId === 'feint'
+  if (onMission && fleet.maneuver !== 'breakout') {
+    stepDivision(div, ctx, dt, false)
+    return
+  }
   if (fleet.maneuver === 'wheel' && apart < 700) {
     wheelDivision(div, ctx, dt)
     div.shaped = false
@@ -346,7 +351,7 @@ export function stepPlan(state: SimState, div: Division, dt: number): void {
     // Outside the bow arc: point our front at their exposed beam.
     const s = fleet.bias || sit.exposedSign || 1
     const fore = slotOffset(div.slot)
-    const reach = 400 * CLASS_MODS[div.classId].wing
+    const reach = Math.min(400 * CLASS_MODS[div.classId].wing, (sideGun?.maxRange ?? 420) * 0.9)
     const gx = prey.ax + prey.fx * fore + prey.rx * s * reach
     const gy = prey.ay + prey.fy * fore + prey.ry * s * reach
     drive(div, gx, gy, prey.ax, prey.ay, 38, dt)

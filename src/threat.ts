@@ -88,15 +88,20 @@ export function wideFlankGoal(div: Division, prey: Division, mode: 'side' | 'rea
   const bowHalf = bow?.half ?? 0.7
   const bowMax = bow?.maxRange ?? 900
   const safeRange = bowMax + 80
-  const side = div.flankSign === 0 ? 1 : div.flankSign
+  const preferred = div.flankSign === 0 ? 1 : div.flankSign
   const relX = div.ax - prey.ax
   const relY = div.ay - prey.ay
   const along = relX * prey.fx + relY * prey.fy
   const cross = relX * prey.rx + relY * prey.ry
+  const side = Math.abs(cross) > 40 ? Math.sign(cross) || preferred : preferred
   const range = Math.hypot(relX, relY) || 1
   const angle = Math.atan2(side * cross, along)
-  const wantAngle = mode === 'rear' ? (130 * Math.PI) / 180 : (100 * Math.PI) / 180
-  const wantRange = mode === 'rear' ? 340 : 380
+  const own = statsOf(div)
+  const ownSide = own.batteries[1]?.maxRange ?? 420
+  const ownBow = own.batteries[0]?.maxRange ?? 900
+  const gunRange = Math.min(ownSide * 0.88, ownBow * 0.78)
+  const wantAngle = mode === 'rear' ? (130 * Math.PI) / 180 : div.screen ? (78 * Math.PI) / 180 : (100 * Math.PI) / 180
+  const wantRange = mode === 'rear' ? Math.min(ownBow * 0.8, gunRange + 30) : gunRange
   const inFront = angle < bowHalf + 0.15
   const pocket = angle > wantAngle - 0.35 && range < wantRange + 140
   let goalAngle = wantAngle

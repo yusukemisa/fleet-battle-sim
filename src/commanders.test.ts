@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { chooseTactic, COMMANDERS, type BattleFacts, type DivisionFact } from './commanders.ts'
+import { chooseTactic, COMMANDERS, employClass, type BattleFacts, type DivisionFact } from './commanders.ts'
 import { createSim, dispatch } from './sim.ts'
 
 const quietEnemy: DivisionFact = { alive: 100, tacticId: 'charge', phase: 0, ax: 400, ay: 0, fx: -1, fy: 0 }
@@ -35,6 +35,21 @@ describe('commanders', () => {
     expect(chooseTactic(COMMANDERS.fierce, facts({ slot: 0, ownAlive: 600, enemyAlive: 400 }))).toBe(
       'breakthrough',
     )
+  })
+
+  it('puts fast divisions on the flank and battleships on the line', () => {
+    expect(employClass(COMMANDERS.fierce, 'destroyer', 'charge', facts({ slot: 0 }))).toBe('rear')
+    expect(employClass(COMMANDERS.fierce, 'cruiser', 'charge', facts({ slot: 1 }))).toBe('broadside')
+    expect(employClass(COMMANDERS.fierce, 'battleship', 'flank', facts({ slot: 2 }))).toBe('breakthrough')
+    expect(employClass(COMMANDERS.cunning, 'destroyer', 'charge', facts({ slot: 0 }))).toBe('rear')
+    expect(employClass(COMMANDERS.cunning, 'cruiser', 'charge', facts({ slot: 1 }))).toBe('broadside')
+    expect(employClass(COMMANDERS.cunning, 'battleship', 'rear', facts({ slot: 2 }))).toBe('pin')
+    expect(employClass(COMMANDERS.guard, 'destroyer', 'hold', facts({ slot: 0 }))).toBe('flank')
+    expect(employClass(COMMANDERS.guard, 'destroyer', 'hold', facts({ slot: 0, enemyOnUs: 'side' }))).toBe('broadside')
+    expect(employClass(COMMANDERS.guard, 'battleship', 'rear', facts({ slot: 2 }))).toBe('hold')
+    expect(employClass(COMMANDERS.balanced, 'destroyer', 'charge', facts({ slot: 0, usOnEnemy: 'side' }))).toBe('rear')
+    expect(employClass(COMMANDERS.balanced, 'cruiser', 'charge', facts({ slot: 1 }))).toBe('flank')
+    expect(employClass(COMMANDERS.balanced, 'battleship', 'encircle', facts({ slot: 2 }))).toBe('charge')
   })
 
   it('lets 智将 pin the center and hook the wings onto the side and rear', () => {

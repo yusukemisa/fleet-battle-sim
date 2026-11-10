@@ -87,6 +87,8 @@ export interface Ships {
   /** 1 while the ship is still sailing to its station. */
   approach: Uint8Array
   heading: Float32Array
+  /** Current yaw rate, radians per second. */
+  yaw: Float32Array
   alive: Uint8Array
   side: Uint8Array
   /** Index into {@link CLASS_STATS}. Every ship in a division shares one. */
@@ -160,6 +162,10 @@ export interface Division {
   broadsideOk: boolean
   /** Breakout or reform: turning away is the point. */
   yielding: boolean
+  /** Envelop or seize: this division may use its own speed. */
+  sprint: boolean
+  /** 守将 light divisions stay on a shallow flank instead of running to the rear. */
+  screen: boolean
   alive: number
   roster: number
 }
@@ -286,6 +292,8 @@ export interface SimState {
   withdrawSides: readonly [boolean, boolean]
   tally: GunneryTally
   scratch: CombatScratch
+  /** Damage dealt by battleship, cruiser, destroyer. */
+  classDamage: [number, number, number]
   rankAt: number
   fallingN: number
 }

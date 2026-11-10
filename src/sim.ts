@@ -1,6 +1,6 @@
-import { acquireSq, CLASS_STATS, FIELD, fleetLine, GUNNERY, hullHp, RANKS, SHIP_CLASS_IDS, SHIP_STATS, SIM_TIME_SCALE, SWEEP, volleyGap, volleyPhase, type ShipStats } from './balance.ts'
+import { acquireSq, CLASS_STATS, FIELD, fleetLine, GUNNERY, hullHp, RANKS, SHIP_CLASS_IDS, SHIP_STATS, SIM_TIME_SCALE, SWEEP, stepYaw, thrust, volleyGap, volleyPhase, type ShipStats } from './balance.ts'
 import { armorZone, inArc, inBattery, inFiringArc, wrapAngle } from './combat.ts'
-import { chooseTactic, COMMANDERS, type BattleFacts, type Bearing } from './commanders.ts'
+import { chooseTactic, COMMANDERS, employClass, type BattleFacts, type Bearing } from './commanders.ts'
 import { layoutFormation } from './formations.ts'
 import { batteryCooldown, cacheBows, cacheSpread, emptyTally, hasClearShot, pickBatteryTarget, pickTarget, setBatteryCooldown } from './gunnery.ts'
 import { refreshCover, rotateRanks } from './ranks.ts'
@@ -207,7 +207,10 @@ function issueOrders(state: SimState): void {
       const index = side * DIVISIONS_PER_SIDE + slot
       const division = state.divisions[index]
       if (!division || division.alive === 0) continue
-      const tacticId = chooseTactic(commander, factsFor(state, side, slot))
+      const facts = factsFor(state, side, slot)
+      const chosen = chooseTactic(commander, facts)
+      const tacticId = chosen ? employClass(commander, division.classId, chosen, facts) : null
+      division.screen = commander.id === 'guard' && division.classId !== 'battleship'
       if (!tacticId || tacticId === division.tacticId) continue
       applyTactic(state, index, tacticId)
       const line = `${fleet.name} ${division.name}: ${tacticById(tacticId).name}に切替`
@@ -331,6 +334,7 @@ function allocate(
       falling: new Uint8Array(count),
       approach: new Uint8Array(count),
       heading: new Float32Array(count),
+      yaw: new Float32Array(count),
       alive: new Uint8Array(count),
       side: new Uint8Array(count),
       shipClass: new Uint8Array(count),
@@ -377,6 +381,7 @@ function allocate(
     withdrawSides,
     tally: emptyTally(),
     scratch: createScratch(count, GUNNERY.cell),
+    classDamage: [0, 0, 0],
     rankAt: 0,
     fallingN: 0,
   }
@@ -424,6 +429,8 @@ function makeDivision(side: SideId, slot: DivisionSlot): Division {
     guardY: 0,
     broadsideOk: false,
     yielding: false,
+    sprint: false,
+    screen: false,
     alive: 0,
     roster: 0,
   }
@@ -457,7 +464,11 @@ function deploy(state: SimState): void {
   tally.deathTime = 0
   state.rankAt = 0
   state.fallingN = 0
+  state.classDamage[0] = 0
+  state.classDamage[1] = 0
+  state.classDamage[2] = 0
   state.ships.falling.fill(0)
+  state.ships.yaw.fill(0)
   state.scratch.look.fill(-1)
   for (const division of state.divisions) division.alive = 0
   const sides: SideId[] = [0, 1]
@@ -621,6 +632,7 @@ function step(state: SimState, dt: number): void {
     const enemy: SideId = division.side === 0 ? 1 : 0
     const fleet = state.fleets[division.side]
     division.yielding = fleet.maneuver === 'breakout' || fleet.maneuver === 'reform'
+    division.sprint = fleet.maneuver === 'envelop' || fleet.maneuver === 'seize'
     const manual = fleet.commanderId === 'manual'
     if (division.ordered && !manual) division.ordered = false
     if (division.ordered && manual) {
@@ -695,9 +707,8 @@ function moveShips(state: SimState, dt: number): void {
   for (let i = 0; i < ships.count; i++) {
     if (ships.alive[i] === 0) continue
     const stats = CLASS_STATS[ships.shipClass[i] ?? 0] ?? state.stats
-    const maxTurn = stats.turnRate * dt
     const reverse = stats.maxSpeed * stats.reverse
-    const accel = stats.response * 160 * dt
+    const accel = thrust(stats.response) * dt
     const division = state.divisions[ships.division[i] ?? 0]
     if (!division) continue
     const x = ships.x[i] ?? 0
@@ -735,8 +746,10 @@ function moveShips(state: SimState, dt: number): void {
     const prevHeading = ships.heading[i] ?? desired
     const prevSpeed = (ships.vx[i] ?? 0) * Math.cos(prevHeading) + (ships.vy[i] ?? 0) * Math.sin(prevHeading)
     let heading = prevHeading
-    const turn = wrapAngle(desired - heading)
-    heading += Math.max(-maxTurn, Math.min(maxTurn, turn))
+    const error = wrapAngle(desired - heading)
+    const spun = stepYaw(ships.yaw[i] ?? 0, error, stats.turnRate, stats.yawAccel, dt)
+    ships.yaw[i] = spun.yaw
+    heading += spun.delta
     ships.heading[i] = heading
     const hx = Math.cos(heading)
     const hy = Math.sin(heading)
@@ -745,6 +758,9 @@ function moveShips(state: SimState, dt: number): void {
     if (dist < 8) speed = along < 0 ? -reverse * 0.2 : Math.min(stats.maxSpeed * 0.2, dist)
     else if (along > 0.2) speed = Math.min(stats.maxSpeed, dist * 1.5)
     else if (along < -0.2) speed = -reverse
+    const off = Math.abs(error)
+    if (off > 0.8) speed *= 0.45
+    else if (off > 0.35) speed *= 0.75
     const stepSpeed = prevSpeed + Math.max(-accel, Math.min(accel, speed - prevSpeed))
     speed = stepSpeed
     ships.vx[i] = hx * speed
@@ -998,7 +1014,10 @@ function shootBattery(state: SimState, index: number, target: number, batteryInd
   state.hits[zone][side] += 1
   const before = ships.hp[target] ?? 0
   state.tally.hits += 1
-  state.tally.damage += Math.min(before, blow)
+  const dealt = Math.min(before, blow)
+  state.tally.damage += dealt
+  const shooterClass = ships.shipClass[index] ?? 0
+  state.classDamage[shooterClass] = (state.classDamage[shooterClass] ?? 0) + dealt
   ships.hp[target] = before - blow
   ships.flash[target] = 1
   if ((ships.hp[target] ?? 0) <= 0) destroy(state, target)
