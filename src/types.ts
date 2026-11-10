@@ -220,6 +220,8 @@ export interface Beams {
   x2: Float32Array
   y2: Float32Array
   side: Uint8Array
+  /** 0 is the bow battery. 1 is either broadside. */
+  kind: Uint8Array
   head: number
 }
 

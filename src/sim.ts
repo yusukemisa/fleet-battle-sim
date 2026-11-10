@@ -1,4 +1,4 @@
-import { acquireSq, FIELD, GUNNERY, RANKS, SHIP_STATS, SIM_TIME_SCALE, SWEEP, type ShipStats } from './balance.ts'
+import { acquireSq, FIELD, GUNNERY, RANKS, SHIP_STATS, SIM_TIME_SCALE, SWEEP, volleyGap, volleyPhase, type ShipStats } from './balance.ts'
 import { armorZone, inArc, inBattery, inFiringArc, wrapAngle } from './combat.ts'
 import { chooseTactic, COMMANDERS, type BattleFacts, type Bearing } from './commanders.ts'
 import { layoutFormation } from './formations.ts'
@@ -313,6 +313,7 @@ function allocate(
       x2: new Float32Array(FIELD.maxBeams),
       y2: new Float32Array(FIELD.maxBeams),
       side: new Uint8Array(FIELD.maxBeams),
+      kind: new Uint8Array(FIELD.maxBeams),
       head: 0,
     },
     booms: {
@@ -682,6 +683,7 @@ function fight(state: SimState, dt: number): void {
   for (let i = 0; i < ships.count; i++) {
     if (ships.alive[i] === 0) continue
     tickBatteries(state, i, dt)
+    scatterWaiting(state, i, dt)
     if (anyBatteryReady(state, i)) {
       const look = state.scratch.look[i] ?? -1
       let fresh = false
@@ -729,6 +731,28 @@ function tickBatteries(state: SimState, index: number, dt: number): void {
   }
 }
 
+/** A battery that already sat ready does not join the next contact volley. */
+function scatterWaiting(state: SimState, index: number, dt: number): void {
+  const batteries = state.stats.batteries
+  for (let b = 0; b < batteries.length; b++) {
+    const now = batteryCooldown(state, index, b)
+    if (now > COOLDOWN_SLACK || now + dt >= -COOLDOWN_SLACK) continue
+    const battery = batteries[b]
+    if (!battery) continue
+    setBatteryCooldown(state, index, b, volleyPhase(state.rng, index, b, battery.cooldown))
+  }
+}
+
+/** The window elapsed with nothing to shoot. Keep this battery on its own clock. */
+function holdBattery(state: SimState, index: number, batteryIndex: number, dt: number): void {
+  const overdue = batteryCooldown(state, index, batteryIndex)
+  if (overdue > COOLDOWN_SLACK) return
+  const battery = state.stats.batteries[batteryIndex]
+  if (!battery) return
+  const carry = overdue < -dt - COOLDOWN_SLACK ? 0 : overdue
+  setBatteryCooldown(state, index, batteryIndex, volleyGap(state.rng, index, batteryIndex, battery.cooldown) + carry)
+}
+
 function fightLegacy(state: SimState, dt: number): void {
   const ships = state.ships
   const stagger = FIELD.stagger
@@ -736,6 +760,7 @@ function fightLegacy(state: SimState, dt: number): void {
   for (let i = 0; i < ships.count; i++) {
     if (ships.alive[i] === 0) continue
     tickBatteries(state, i, dt)
+    scatterWaiting(state, i, dt)
     const target = ships.target[i] ?? -1
     const needs = target < 0 || ships.alive[target] === 0 || i % stagger === frame % stagger
     if (needs) acquire(state, i)
@@ -818,6 +843,7 @@ function fireBatteries(state: SimState, index: number, dt: number, legacy: boole
   const cdx = (state.centroidX[enemy] ?? 0) - sx
   const cdy = (state.centroidY[enemy] ?? 0) - sy
   if (cdx * cdx + cdy * cdy > (maxR + 220) * (maxR + 220)) {
+    for (let b = 0; b < batteries.length; b++) holdBattery(state, index, b, dt)
     if (batteryCooldown(state, index, 0) <= COOLDOWN_SLACK) noteIdle(state, index, dt, true)
     return
   }
@@ -834,10 +860,10 @@ function fireBatteries(state: SimState, index: number, dt: number, legacy: boole
       ships.target[index] = target
       bowTried = true
     }
-    if (target < 0) continue
-    if (shootBattery(state, index, target, b, dt)) {
+    const fired = target >= 0 && shootBattery(state, index, target, b, dt)
+    if (fired) {
       if (b === 0) bowFired = true
-    }
+    } else holdBattery(state, index, b, dt)
   }
   if (bowTried && !bowFired) noteIdle(state, index, dt, true)
 }
@@ -856,7 +882,7 @@ function shootBattery(state: SimState, index: number, target: number, batteryInd
   if (!inBattery(hx, hy, sx, sy, tx, ty, battery)) return false
   const overdue = batteryCooldown(state, index, batteryIndex)
   const carry = overdue < -dt - COOLDOWN_SLACK ? 0 : overdue
-  setBatteryCooldown(state, index, batteryIndex, battery.cooldown + carry)
+  setBatteryCooldown(state, index, batteryIndex, volleyGap(state.rng, index, batteryIndex, battery.cooldown) + carry)
   const side = ships.side[index] === 1 ? 1 : 0
   const zone = armorZone(ships.heading[target] ?? 0, tx, ty, sx, sy, state.stats)
   const factor = zone === 'front' ? state.stats.armorFront : zone === 'rear' ? state.stats.armorRear : state.stats.armorSide
@@ -872,7 +898,7 @@ function shootBattery(state: SimState, index: number, target: number, batteryInd
   const ox = (rand(state) - 0.5) * spread
   const oy = (rand(state) - 0.5) * spread
   const mount = batteryMount(hx, hy, battery.id)
-  spawnBeam(state, sx + mount.x, sy + mount.y, tx + ox, ty + oy, side)
+  spawnBeam(state, sx + mount.x, sy + mount.y, tx + ox, ty + oy, side, batteryIndex === 0 ? 0 : 1)
   if (!hit) return true
   state.hits[zone][side] += 1
   const before = ships.hp[target] ?? 0
@@ -912,15 +938,16 @@ function destroy(state: SimState, index: number): void {
   state.booms.side[slot] = side
 }
 
-function spawnBeam(state: SimState, x1: number, y1: number, x2: number, y2: number, side: number): void {
+function spawnBeam(state: SimState, x1: number, y1: number, x2: number, y2: number, side: number, kind: number): void {
   const slot = state.beams.head
   state.beams.head = (slot + 1) % FIELD.maxBeams
   state.beams.x1[slot] = x1
   state.beams.y1[slot] = y1
   state.beams.x2[slot] = x2
   state.beams.y2[slot] = y2
-  state.beams.life[slot] = FIELD.beamLife
+  state.beams.life[slot] = kind === 0 ? FIELD.beamLife : FIELD.beamLifeSide
   state.beams.side[slot] = side
+  state.beams.kind[slot] = kind
 }
 
 function fadeEffects(state: SimState, dt: number): void {

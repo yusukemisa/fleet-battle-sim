@@ -240,7 +240,7 @@ function enveloped(maneuver: ManeuverMode): { alive: number; time: number; break
   state = dispatch(state, { type: 'start' })
   let steps = 0
   let breakouts = 0
-  while (state.phase.kind === 'running' && state.time < 16 && steps < 3000) {
+  while (state.phase.kind === 'running' && state.time < 24 && steps < 4000) {
     state = dispatch(state, { type: 'tick', dt: 0.05 })
     if (state.fleets[0].maneuver === 'breakout' || state.fleets[0].maneuver === 'reform') breakouts += 1
     steps += 1

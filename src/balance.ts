@@ -37,13 +37,48 @@ export interface BatterySpec {
 const DEG = Math.PI / 180
 
 /**
+ * One battery fires about every 4s. The gap is the base plus a seeded ±10% so volleys
+ * do not land on the same tick. 3.6s to 4.4s.
+ */
+export const FIRE = {
+  cooldown: 4,
+  jitter: 0.1,
+} as const
+
+/** Next gap for one battery. Hashed from the seed so it does not consume the hit rolls. */
+export function volleyGap(seed: number, ship: number, battery: number, base: number = FIRE.cooldown): number {
+  let x = (seed ^ Math.imul(ship + 1, 0x9e3779b1) ^ Math.imul(battery + 1, 0x85ebca6b)) | 0
+  x ^= x << 13
+  x ^= x >>> 17
+  x ^= x << 5
+  const unit = (x >>> 0) / 4294967296
+  return base * (1 + (unit * 2 - 1) * FIRE.jitter)
+}
+
+/**
+ * Where a battery that has been waiting sits inside the next window.
+ * Spreads a fleet that would otherwise fire on the first frame a target appears.
+ */
+export function volleyPhase(seed: number, ship: number, battery: number, base: number = FIRE.cooldown): number {
+  let x = (seed ^ Math.imul(ship + 1, 0x6c078965) ^ Math.imul(battery + 3, 0x27d4eb2d)) | 0
+  x ^= x << 13
+  x ^= x >>> 17
+  x ^= x << 5
+  const unit = (x >>> 0) / 4294967296
+  const gap = volleyGap(seed, ship, battery, base)
+  return gap * (0.08 + 0.84 * unit)
+}
+
+/**
  * 40 guns. The bow reaches past the broadsides and cannot fire inside its minimum.
  * Each broadside covers its own side from 40° to 140° off the bow, out to a shorter range.
+ * Per-gun power is above the 2s-cooldown values (bow 0.9, broadside 0.32) so a 4s
+ * interval does not stretch a battle past about 1.5× its old length.
  */
 export const BATTERIES = [
-  { id: 'bow', guns: 8, power: 0.9, center: 0, half: 40 * DEG, minRange: 280, maxRange: 900, cooldown: 2 },
-  { id: 'port', guns: 16, power: 0.32, center: 90 * DEG, half: 50 * DEG, minRange: 0, maxRange: 420, cooldown: 2 },
-  { id: 'starboard', guns: 16, power: 0.32, center: -90 * DEG, half: 50 * DEG, minRange: 0, maxRange: 420, cooldown: 2 },
+  { id: 'bow', guns: 8, power: 1.4, center: 0, half: 40 * DEG, minRange: 280, maxRange: 900, cooldown: FIRE.cooldown },
+  { id: 'port', guns: 16, power: 0.5, center: 90 * DEG, half: 50 * DEG, minRange: 0, maxRange: 420, cooldown: FIRE.cooldown },
+  { id: 'starboard', guns: 16, power: 0.5, center: -90 * DEG, half: 50 * DEG, minRange: 0, maxRange: 420, cooldown: FIRE.cooldown },
 ] as const satisfies readonly BatterySpec[]
 
 export const SHIP_STATS = {
@@ -51,7 +86,7 @@ export const SHIP_STATS = {
   damage: 7,
   range: 900,
   acquire: 980,
-  cooldown: 2,
+  cooldown: FIRE.cooldown,
   hitChance: 0.86,
   maxSpeed: 70,
   response: 5.2,
@@ -91,7 +126,10 @@ export const SWEEP = {
 
 export const FIELD = {
   fleetCenter: 580,
-  beamLife: 0.22,
+  beamLife: 0.16,
+  beamLifeSide: 0.08,
+  beamAlpha: 0.38,
+  beamAlphaSide: 0.2,
   boomLife: 0.4,
   maxBeams: 1600,
   maxBooms: 360,

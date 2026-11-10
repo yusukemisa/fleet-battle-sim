@@ -140,18 +140,50 @@ function strokeBeams(
   width: number,
   height: number,
 ): void {
-  ctx.beginPath()
-  ctx.strokeStyle = 'rgba(226, 206, 122, 0.42)'
-  ctx.lineWidth = 1
+  ctx.globalCompositeOperation = 'source-over'
+  ctx.globalAlpha = 1
+  ctx.lineCap = 'butt'
+  const density = beamDensity(state.shipCount, camera.zoom)
+  const stride = state.shipCount >= 10000 ? 2 : 1
   const life = state.beams.life
-  for (let i = 0; i < life.length; i++) {
-    if ((life[i] ?? 0) <= 0) continue
-    const a = worldToScreen(state.beams.x1[i] ?? 0, state.beams.y1[i] ?? 0, camera, width, height)
-    const b = worldToScreen(state.beams.x2[i] ?? 0, state.beams.y2[i] ?? 0, camera, width, height)
-    ctx.moveTo(a.x, a.y)
-    ctx.lineTo(b.x, b.y)
+  const kind = state.beams.kind
+  const styles = [
+    { max: FIELD.beamLife, alpha: FIELD.beamAlpha * density, width: Math.max(0.55, 1.05 * Math.min(1, density + 0.4)) },
+    { max: FIELD.beamLifeSide, alpha: FIELD.beamAlphaSide * density, width: Math.max(0.4, 0.65 * Math.min(1, density + 0.4)) },
+  ]
+  const buckets = 5
+  for (let style = 0; style < styles.length; style++) {
+    const spec = styles[style]
+    if (!spec) continue
+    for (let bucket = 1; bucket <= buckets; bucket++) {
+      ctx.beginPath()
+      let any = false
+      for (let i = 0; i < life.length; i++) {
+        if (stride > 1 && i % stride !== 0) continue
+        const remaining = life[i] ?? 0
+        if (remaining <= 0 || (kind[i] ?? 0) !== style) continue
+        const fade = Math.max(0, Math.min(1, remaining / spec.max))
+        const slot = Math.min(buckets, Math.max(1, Math.ceil(fade * buckets)))
+        if (slot !== bucket) continue
+        const a = worldToScreen(state.beams.x1[i] ?? 0, state.beams.y1[i] ?? 0, camera, width, height)
+        const b = worldToScreen(state.beams.x2[i] ?? 0, state.beams.y2[i] ?? 0, camera, width, height)
+        ctx.moveTo(a.x, a.y)
+        ctx.lineTo(b.x, b.y)
+        any = true
+      }
+      if (!any) continue
+      const alpha = spec.alpha * (bucket / buckets)
+      ctx.strokeStyle = `rgba(226, 206, 122, ${alpha.toFixed(3)})`
+      ctx.lineWidth = spec.width
+      ctx.stroke()
+    }
   }
-  ctx.stroke()
+}
+
+function beamDensity(count: number, zoom: number): number {
+  const byCount = count >= 10000 ? 0.28 : count >= 1000 ? 0.55 : 1
+  const byZoom = Math.min(1, Math.max(0.6, zoom / 0.5))
+  return byCount * byZoom
 }
 
 function strokeBooms(

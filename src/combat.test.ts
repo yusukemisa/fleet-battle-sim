@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { SHIP_STATS } from './balance.ts'
+import { FIRE, SHIP_STATS } from './balance.ts'
 import { armorMultiplier, inFiringArc } from './combat.ts'
 import { createSim, dispatch } from './sim.ts'
 import type { SideId, SimState, Speed } from './types.ts'
@@ -37,8 +37,10 @@ describe('directional combat', () => {
     expect(fromRear).toBeGreaterThan(fromFront)
   })
 
-  it('fires once per 2s of sim time, at any frame step or speed', () => {
-    expect(SHIP_STATS.cooldown).toBe(2)
+  it('fires about every 4s, inside the jitter, at any frame step or speed', () => {
+    expect(SHIP_STATS.cooldown).toBe(FIRE.cooldown)
+    const low = FIRE.cooldown * (1 - FIRE.jitter) - 0.05
+    const high = FIRE.cooldown * (1 + FIRE.jitter) + 0.05
     const cases: ReadonlyArray<readonly [number, Speed]> = [
       [1 / 60, 1],
       [1 / 30, 1],
@@ -48,16 +50,16 @@ describe('directional combat', () => {
       [0.05, 4],
     ]
     for (const [dt, speed] of cases) {
-      const times = shotTimes(dt, speed, SHIP_STATS.cooldown * 4 + 0.05)
-      expect(times).toHaveLength(4)
-      for (let window = 0; window < 4; window++) {
-        const start = SHIP_STATS.cooldown * window
-        const end = start + SHIP_STATS.cooldown
-        const hits = times.filter((time) => time > start + 1e-3 && time <= end + 1e-3)
-        expect(hits).toHaveLength(1)
-        expect(hits[0]).toBeCloseTo(end, 3)
+      const times = shotTimes(dt, speed, FIRE.cooldown * 5 + 0.2)
+      expect(times.length).toBeGreaterThanOrEqual(4)
+      for (let i = 1; i < times.length; i++) {
+        const gap = (times[i] ?? 0) - (times[i - 1] ?? 0)
+        expect(gap).toBeGreaterThanOrEqual(low)
+        expect(gap).toBeLessThanOrEqual(high)
       }
     }
+    const again = shotTimes(0.05, 1, FIRE.cooldown * 5 + 0.2)
+    expect(again).toEqual(shotTimes(0.05, 1, FIRE.cooldown * 5 + 0.2))
   })
 
   it('wins from the flank more often than from the front', () => {
