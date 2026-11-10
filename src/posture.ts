@@ -467,7 +467,9 @@ function chooseCounter(state: SimState, fleet: Fleet, sit: Situation): void {
   const foe = state.fleets[fleet.enemyFleet]
   let next: Fleet['plan'] = 'none'
   if (foe && rushAxis(state, fleet, sit)) {
-    if (fleet.formationId === 'houen' && foe.formationId !== 'houen' && foe.formationId !== 'gyorin') next = 'ring'
+    if (fleet.formationId === 'houen' && foe.formationId === 'gyorin') next = 'spear'
+    else if (fleet.formationId === 'houen' && foe.formationId === 'hoshi') next = 'offset'
+    else if (fleet.formationId === 'houen' && foe.formationId !== 'houen') next = 'ring'
     else if (fleet.formationId === 'kakuyoku') next = 'crane'
   }
   if (next === fleet.plan) return
@@ -536,6 +538,8 @@ function directLights(state: SimState, side: SideId, fleetIndex?: number): void 
         if (fleetIndex !== undefined && heavy.fleet !== fleetIndex) continue
         heavy.screen = true
         if (home.plan === 'ring') heavy.phase = 5
+        else if (home.plan === 'spear') heavy.phase = 7
+        else if (home.plan === 'offset') heavy.phase = 8
       }
     }
     if (commander === 'balanced' && home?.plan === 'crane' && division.classId === 'destroyer' && ownBb && enemyBbs[0]) {

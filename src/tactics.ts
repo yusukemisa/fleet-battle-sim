@@ -416,6 +416,14 @@ function holdSpread(div: Division, ctx: TacticContext, dt: number): void {
     reach = 780
     lat = (div.slot - 2) * 120
     speed = range < 700 ? 56 : range > 900 ? 24 : 8
+  } else if (div.phase === 7) {
+    reach = 560
+    lat = (div.slot - 2) * 120
+    speed = range < 480 ? 56 : range > 700 ? 24 : 8
+  } else if (div.phase === 8) {
+    reach = 820
+    lat = 340
+    speed = range < 740 ? 56 : range > 980 ? 22 : 8
   }
   const gx = tx - ux * reach - uy * lat
   const gy = ty - uy * reach + ux * lat
@@ -528,7 +536,7 @@ function backFromDestroyer(div: Division, ctx: TacticContext, dt: number): boole
 }
 
 export function stepDivision(div: Division, ctx: TacticContext, dt: number, wheel = true): void {
-  if (div.phase === 5 && div.classId === 'battleship') {
+  if ((div.phase === 5 || div.phase === 7 || div.phase === 8) && div.classId === 'battleship') {
     div.shaped = false
     div.sweeping = false
     tagged(div, true, ctx)
