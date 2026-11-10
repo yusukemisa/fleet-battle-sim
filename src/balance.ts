@@ -335,14 +335,28 @@ export const SWEEP = {
   lead: 240,
 } as const
 
-/** Per-fleet ship presets. A battle cannot exceed {@link MAX_SHIPS}. */
-export const FLEET_SHIP_PRESETS = [100, 500, 1000, 2000] as const
+/**
+ * One fleet can be any multiple of {@link FLEET_SHIP_STEP} in this range.
+ * Presets are shortcuts on the same scale.
+ */
+export const FLEET_SHIP_MIN = 50
+export const FLEET_SHIP_MAX = 10000
+export const FLEET_SHIP_STEP = 50
+export const FLEET_SHIP_PRESETS = [100, 500, 1000, 2000, 5000, 10000] as const
 export type FleetShipPreset = (typeof FLEET_SHIP_PRESETS)[number]
-/** Same budget as the existing 10k battle, which stays inside a 60fps step. */
-export const MAX_SHIPS = 10000
-/** Gap between friendly fleets, and how close two of them may drift. */
-export const FLEET_GAP = 920
+/**
+ * Whole-battle cap. Headless Chrome on a 4-core Xeon (no GPU, 1440×900)
+ * held 60fps at 20,000 ships (median work 8.1ms, max 12.6ms). 30,000 ships
+ * fell to 56fps (median 12.0ms), so a slower laptop would miss the frame.
+ * Beam drawing thins from 10,000 ships up; see `beamStride` in draw.ts.
+ */
+export const MAX_SHIPS = 20000
+/** How close two friendly centroids may drift before they are pushed apart. */
 export const FLEET_SEPARATION = 680
+/** Clear gap kept between the edges of two friendly fleets. */
+export const FLEET_PAD = 160
+/** A fleet's nose stays at least this far from the center line. */
+export const FLEET_STANDOFF = 240
 
 export const FIELD = {
   fleetCenter: 580,

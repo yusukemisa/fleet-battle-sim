@@ -1,4 +1,5 @@
 import { SHIP_CLASS_IDS, type ShipClassId } from './balance.ts'
+import { snapFleetShips } from './fleets.ts'
 import {
   COMMANDER_IDS,
   FORMATION_IDS,
@@ -17,6 +18,14 @@ export function parseShipCount(value: string): ShipCount | null {
     if (count === n) return count
   }
   return null
+}
+
+/** Fleet size field. Empty or garbage is rejected; numbers snap to the step. */
+export function parseFleetShips(value: string): number | null {
+  if (value.trim() === '') return null
+  const n = Number(value)
+  if (!Number.isFinite(n)) return null
+  return snapFleetShips(n)
 }
 
 export function parseFormationId(value: string): FormationId | null {

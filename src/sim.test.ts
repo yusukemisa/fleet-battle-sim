@@ -93,6 +93,7 @@ describe('parse', () => {
     expect(parseShipCount('100')).toBe(100)
     expect(parseShipCount('1000')).toBe(1000)
     expect(parseShipCount('10000')).toBe(10000)
+    expect(parseShipCount('20000')).toBe(20000)
     expect(parseShipCount('500')).toBeNull()
     expect(parseFormationId('oujin')).toBe('oujin')
     expect(parseFormationId('kakuyoku')).toBe('kakuyoku')

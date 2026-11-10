@@ -332,8 +332,8 @@ function slotBox(state: SimState, index: number): { minX: number; maxX: number; 
 }
 
 function blockSize(zoom: number, count: number): number {
-  const unit = count >= 10000 ? 2.6 : count >= 1000 ? 4 : 9
-  return Math.max(1.6, Math.min(13, zoom * unit))
+  const unit = count >= 24000 ? 1.5 : count >= 16000 ? 2 : count >= 10000 ? 2.6 : count >= 1000 ? 4 : 9
+  return Math.max(1.2, Math.min(13, zoom * unit))
 }
 
 function worldToScreen(x: number, y: number, camera: Camera, width: number, height: number): { x: number; y: number } {
@@ -354,7 +354,7 @@ function strokeBeams(
   ctx.globalAlpha = 1
   ctx.lineCap = 'butt'
   const density = beamDensity(state.shipCount, camera.zoom)
-  const stride = state.shipCount >= 10000 ? 2 : 1
+  const stride = beamStride(state.shipCount)
   const life = state.beams.life
   const kind = state.beams.kind
   const styles = [
@@ -390,8 +390,15 @@ function strokeBeams(
   }
 }
 
+function beamStride(count: number): number {
+  if (count >= 24000) return 4
+  if (count >= 16000) return 3
+  if (count >= 10000) return 2
+  return 1
+}
+
 function beamDensity(count: number, zoom: number): number {
-  const byCount = count >= 10000 ? 0.28 : count >= 1000 ? 0.55 : 1
+  const byCount = count >= 24000 ? 0.14 : count >= 16000 ? 0.2 : count >= 10000 ? 0.28 : count >= 1000 ? 0.55 : 1
   const byZoom = Math.min(1, Math.max(0.6, zoom / 0.5))
   return byCount * byZoom
 }

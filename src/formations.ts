@@ -57,7 +57,7 @@ function placeOujin(layout: FormationLayout): void {
     if (extra > 0) extra -= 1
     sizes.push(size)
   }
-  const pitch = n > 2500 ? 7 : n > 400 ? 11 : 16
+  const pitch = n > 2500 ? 10 : n > 400 ? 11 : 16
   const gap = pitch * 2.4
   const specs = sizes.map((size) => {
     const cols = Math.max(1, Math.ceil(Math.sqrt(size * 1.35)))
@@ -86,26 +86,31 @@ function placeOujin(layout: FormationLayout): void {
 
 function placeKakuyoku(layout: FormationLayout): void {
   const n = layout.count
-  const ranks = n > 2000 ? 11 : n > 200 ? 6 : 3
   const left = Math.floor(n / 2)
   const arms = [left, n - left]
   let written = 0
   for (let arm = 0; arm < 2; arm++) {
     const sign = arm === 0 ? -1 : 1
     const take = arms[arm] ?? 0
-    const along = Math.max(1, Math.ceil(take / ranks))
+    const ranks = n <= 800 ? (n > 200 ? 6 : 3) : Math.max(6, Math.min(40, Math.round(Math.sqrt(take) / 2.1)))
+    const along = Math.max(1, Math.ceil(take / Math.max(1, ranks)))
+    const pitch = n > 2500 ? 10 : n > 400 ? 12 : 14
+    const length = n <= 800 ? Math.hypot(390, 470) : pitch * Math.max(along - 1, 1)
+    const thickPitch = n <= 800 ? 6 : pitch
     const dx = sign * 390
     const dy = 470
     const len = Math.hypot(dx, dy)
     const px = -dy / len
     const py = dx / len
+    const halfBand = ((ranks - 1) * thickPitch) / 2
+    const hinge = n <= 800 ? 0 : halfBand + thickPitch
     for (let i = 0; i < take; i++) {
       const rank = i % ranks
       const step = Math.floor(i / ranks)
       const u = along <= 1 ? 1 : step / (along - 1)
-      const thick = (rank - (ranks - 1) / 2) * 6
-      layout.x[written] = (dx / len) * (u * len) + px * thick
-      layout.y[written] = (dy / len) * (u * len) + py * thick
+      const thick = (rank - (ranks - 1) / 2) * thickPitch
+      layout.x[written] = sign * hinge + (dx / len) * (u * length) + px * thick
+      layout.y[written] = (dy / len) * (u * length) + py * thick
       layout.division[written] = sign < 0 ? 0 : 4
       written += 1
     }
@@ -116,25 +121,37 @@ function placeEngetsu(layout: FormationLayout): void {
   const n = layout.count
   const command = Math.max(5, Math.round(n * 0.18))
   const wing = n - command
-  const ranks = Math.max(2, Math.min(18, Math.round(Math.sqrt(wing) / 2.4)))
+  const classic = n <= 800
+  const ranks = classic
+    ? Math.max(2, Math.min(18, Math.round(Math.sqrt(wing) / 2.4)))
+    : Math.max(2, Math.round(Math.sqrt(wing) / 2.6))
   const per = Math.ceil(wing / ranks)
   const arc = Math.PI * 0.78
-  const gap = 460 / per
+  const shipGap = n > 2500 ? 10 : n > 400 ? 12 : 16
+  const gap = classic ? 460 / per : shipGap
   const radius = (gap * Math.max(per - 1, 1)) / arc
   for (let i = 0; i < wing; i++) {
     const rank = i % ranks
     const along = Math.floor(i / ranks)
     const t = per === 1 ? 0.5 : along / (per - 1)
     const centered = t - 0.5
-    const u = 0.5 + Math.sign(centered) * Math.pow(Math.abs(centered) * 2, 1.35) / 2
+    const u = classic
+      ? 0.5 + Math.sign(centered) * Math.pow(Math.abs(centered) * 2, 1.35) / 2
+      : t
     const ang = (u - 0.5) * arc
-    const r = radius + rank * gap * 0.45
-    layout.x[i] = Math.sin(ang) * r * 1.12
-    layout.y[i] = Math.cos(ang) * radius * 0.72 - rank * gap * 0.35
+    if (classic) {
+      const r = radius + rank * gap * 0.45
+      layout.x[i] = Math.sin(ang) * r * 1.12
+      layout.y[i] = Math.cos(ang) * radius * 0.72 - rank * gap * 0.35
+    } else {
+      const r = radius + rank * gap * 1.35
+      layout.x[i] = Math.sin(ang) * r
+      layout.y[i] = Math.cos(ang) * r * 0.82
+    }
     layout.division[i] = band(u)
   }
   const cols = Math.max(3, Math.round(Math.sqrt(command * 1.4)))
-  const pitch = Math.min(18, 220 / cols)
+  const pitch = classic ? Math.min(18, 220 / cols) : shipGap
   for (let i = 0; i < command; i++) {
     const col = i % cols
     const row = Math.floor(i / cols)
@@ -152,8 +169,9 @@ function placeGyorin(layout: FormationLayout): void {
   let rows = 1
   while ((rows * (rows + 1)) / 2 < scales) rows += 1
   scales = (rows * (rows + 1)) / 2
-  const pitch = 520 / Math.max(rows, 1)
-  const disk = pitch * 0.3
+  const growth = Math.sqrt(Math.max(n, 500) / 500)
+  const pitch = (520 / Math.max(rows, 1)) * growth
+  const disk = pitch * (n > 800 ? 0.4 : 0.3)
   const rowGap = pitch * 0.9
   const frontY = ((rows - 1) * rowGap) / 2
   const counts = new Array<number>(scales).fill(Math.floor(n / scales))
@@ -185,9 +203,12 @@ function placeGyorin(layout: FormationLayout): void {
 
 function placeHoshi(layout: FormationLayout): void {
   const n = layout.count
-  const rows = Math.max(6, Math.min(42, Math.round(Math.sqrt(n))))
-  const length = 520
-  const baseHalf = 230
+  const scale = Math.sqrt(Math.max(n, 500) / 500)
+  const rows = scale === 1
+    ? Math.max(6, Math.min(42, Math.round(Math.sqrt(n))))
+    : Math.max(6, Math.round(Math.sqrt(n) * 1.2))
+  const length = 520 * scale
+  const baseHalf = 230 * scale
   const weight = new Array<number>(rows)
   let sum = 0
   for (let r = 0; r < rows; r++) {
@@ -201,7 +222,8 @@ function placeHoshi(layout: FormationLayout): void {
     const t = rows === 1 ? 1 : r / (rows - 1)
     const share = r === rows - 1 ? n - ship : Math.max(1, Math.round((n * (weight[r] ?? 1)) / sum))
     const take = Math.min(Math.max(share, 0), n - ship)
-    const half = Math.max(2, baseHalf * Math.pow(Math.max(t, 0.04), 0.9))
+    const fitted = scale > 1 ? ((take - 1) * 8) / 2 : 0
+    const half = Math.max(2, baseHalf * Math.pow(Math.max(t, 0.04), 0.9), fitted)
     const y = length * 0.46 - t * length
     for (let k = 0; k < take; k++) {
       const u = take === 1 ? 0.5 : k / (take - 1)
@@ -214,11 +236,21 @@ function placeHoshi(layout: FormationLayout): void {
   }
 }
 
+function ringRadii(count: number): number[] {
+  const radii: number[] = []
+  for (let i = 0; i < count; i++) {
+    const t = count === 1 ? 1 : i / (count - 1)
+    radii.push(120 + t * 190)
+  }
+  return radii
+}
+
 function placeHouen(layout: FormationLayout): void {
   const n = layout.count
   const innerCount = Math.max(5, Math.round(n * 0.16))
   const outerCount = n - innerCount
-  const innerR = 42
+  const scale = Math.sqrt(Math.max(n, 500) / 500)
+  const innerR = 42 * scale * (scale > 1 ? 1.4 : 1)
   for (let i = 0; i < innerCount; i++) {
     const ang = i * GOLDEN
     const rr = innerR * Math.sqrt((i + 0.5) / innerCount)
@@ -226,8 +258,22 @@ function placeHouen(layout: FormationLayout): void {
     layout.y[i] = Math.sin(ang) * rr
     layout.division[i] = 2
   }
-  const ringCount = n > 2000 ? 4 : n > 180 ? 3 : 2
-  const radii = ringCount === 2 ? [150, 250] : ringCount === 3 ? [130, 190, 255] : [120, 165, 210, 260]
+  const ringCount = scale > 1 ? Math.min(7, Math.max(4, Math.round(4 + Math.log2(scale)))) : n > 2000 ? 4 : n > 180 ? 3 : 2
+  const ringBase = ringCount <= 2 ? [150, 250] : ringCount === 3 ? [130, 190, 255] : ringRadii(ringCount)
+  let radii = ringBase.map((radius) => radius * scale)
+  if (scale > 1) {
+    const weight0 = radii.reduce((sum, radius) => sum + radius, 0)
+    let tight = Infinity
+    let left = outerCount
+    for (let ring = 0; ring < radii.length; ring++) {
+      const radius = radii[ring] ?? 1
+      const share = ring === radii.length - 1 ? left : Math.max(1, Math.round((outerCount * radius) / weight0))
+      const take = Math.min(share, left)
+      left -= take
+      tight = Math.min(tight, (2 * Math.PI * radius) / Math.max(1, take))
+    }
+    if (tight < 9 && tight > 0) radii = radii.map((radius) => radius * (9 / tight))
+  }
   const weight = radii.reduce((sum, r) => sum + r, 0)
   let ship = innerCount
   const outerIndex = new Array<number>(outerCount)
@@ -320,6 +366,19 @@ export const FORMATIONS = {
     place: finishRadial(placeHouen),
   },
 } satisfies Record<FormationId, Formation>
+
+/** Lateral half-width and how far the nose reaches toward the enemy. */
+export function formationExtent(id: FormationId, count: number): { halfY: number; forward: number } {
+  if (count <= 0) return { halfY: 0, forward: 0 }
+  const layout = layoutFormation(id, count)
+  let halfY = 0
+  let forward = 0
+  for (let i = 0; i < count; i++) {
+    halfY = Math.max(halfY, Math.abs(layout.x[i] ?? 0))
+    forward = Math.max(forward, layout.y[i] ?? 0)
+  }
+  return { halfY, forward }
+}
 
 export function layoutFormation(id: FormationId, count: number): FormationLayout {
   const layout: FormationLayout = {

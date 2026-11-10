@@ -1,4 +1,4 @@
-import { FIELD, FLEET_GAP, FLEET_SEPARATION, MAX_SHIPS } from './balance.ts'
+import { FIELD, FLEET_PAD, FLEET_SEPARATION, FLEET_SHIP_MAX, FLEET_SHIP_MIN, FLEET_SHIP_STEP, FLEET_STANDOFF, MAX_SHIPS } from './balance.ts'
 import type { Fleet, FleetSetup, SideId, SimState } from './types.ts'
 
 export const FLEET_NAMES: readonly [readonly string[], readonly string[]] = [
@@ -11,27 +11,64 @@ export function fleetIndex(side: SideId, ordinal: number): number {
   return ordinal * 2 + side
 }
 
-export function fleetAnchor(side: SideId, ordinal: number): { x: number; y: number } {
-  const sign = side === 0 ? -1 : 1
-  const y = ordinal === 1 ? FLEET_GAP : ordinal === 2 ? -FLEET_GAP : 0
-  const back = ordinal === 0 ? 0 : 160
-  return { x: sign * (FIELD.fleetCenter + back), y }
+/** Snap a requested fleet size onto the slider step, inside the per-fleet range. */
+export function snapFleetShips(value: number): number {
+  if (!Number.isFinite(value)) return FLEET_SHIP_MIN
+  const clamped = Math.min(FLEET_SHIP_MAX, Math.max(FLEET_SHIP_MIN, value))
+  const steps = Math.round((clamped - FLEET_SHIP_MIN) / FLEET_SHIP_STEP)
+  return Math.min(FLEET_SHIP_MAX, FLEET_SHIP_MIN + steps * FLEET_SHIP_STEP)
 }
 
-export function clampGroups(groups: readonly FleetSetup[]): FleetSetup[] {
+/** Keep at most three fleets a side and snap each count. Does not apply the battle cap. */
+export function normalizeGroups(groups: readonly FleetSetup[]): FleetSetup[] {
   const next: FleetSetup[] = []
-  let used = 0
   const seen: [number, number] = [0, 0]
   for (const group of groups) {
+    if (group.side !== 0 && group.side !== 1) continue
     if (seen[group.side] >= 3) continue
-    const room = MAX_SHIPS - used
-    const ships = Math.max(0, Math.min(Math.round(group.ships), room))
-    if (ships < 20) continue
-    next.push({ ...group, ships })
-    used += ships
+    next.push({ ...group, ships: snapFleetShips(group.ships) })
     seen[group.side] += 1
   }
   return next
+}
+
+/**
+ * Fit fleets into {@link MAX_SHIPS}. Over-cap requests are scaled by the same
+ * ratio and reported; counts are never cut without a notice.
+ */
+export function fitGroups(groups: readonly FleetSetup[]): { requested: FleetSetup[]; groups: FleetSetup[]; notice: string | null } {
+  const requested = normalizeGroups(groups)
+  const asked = requested.reduce((sum, group) => sum + group.ships, 0)
+  if (requested.length === 0 || asked <= MAX_SHIPS) {
+    return { requested, groups: requested.map((group) => ({ ...group })), notice: null }
+  }
+  const scaled = scaleToCap(requested, MAX_SHIPS)
+  const placed = scaled.reduce((sum, group) => sum + group.ships, 0)
+  const notice = `要求 ${formatCount(asked)} 隻は上限 ${formatCount(MAX_SHIPS)} を超えるため、各艦隊を同じ割合で ${formatCount(placed)} 隻に収めました。`
+  return { requested, groups: scaled, notice }
+}
+
+export interface AnchorInput {
+  ordinal: number
+  /** Lateral half-extent (world Y). */
+  halfY: number
+  /** How far the nose reaches toward the enemy (local +Y). */
+  forward: number
+}
+
+/** Stack a side's fleets so their footprints do not overlap. */
+export function anchorFleets(side: SideId, items: readonly AnchorInput[]): { x: number; y: number }[] {
+  const center = items.find((item) => item.ordinal === 0) ?? items[0]
+  const centerHalf = center?.halfY ?? 0
+  const sign = side === 0 ? -1 : 1
+  return items.map((item) => {
+    const dir = item.ordinal === 1 ? 1 : item.ordinal === 2 ? -1 : 0
+    const edge = centerHalf + item.halfY + FLEET_PAD
+    const y = dir * Math.max(edge, dir === 0 ? 0 : FLEET_SEPARATION)
+    const back = item.ordinal === 0 ? 0 : 80
+    const x = sign * Math.max(FIELD.fleetCenter + back, item.forward + FLEET_STANDOFF)
+    return { x, y }
+  })
 }
 
 export function fleetAlive(state: SimState, fleet: Fleet): number {
@@ -92,8 +129,9 @@ export function separateFleets(state: SimState): void {
         const dx = b.meanX - a.meanX
         const dy = b.meanY - a.meanY
         const dist = Math.hypot(dx, dy) || 1
-        if (dist >= FLEET_SEPARATION) continue
-        const push = ((FLEET_SEPARATION - dist) * 0.22) / dist
+        const need = Math.max(FLEET_SEPARATION, a.reach + b.reach + FLEET_PAD)
+        if (dist >= need) continue
+        const push = ((need - dist) * 0.22) / dist
         nudge(state, a.index, -dx * push, -dy * push)
         nudge(state, b.index, dx * push, dy * push)
       }
@@ -136,6 +174,47 @@ function freeOrNearest(fleet: Fleet, enemies: readonly Fleet[], claimed: Readonl
     }
   }
   return near
+}
+
+function scaleToCap(groups: readonly FleetSetup[], cap: number): FleetSetup[] {
+  const minEach = groups.length * FLEET_SHIP_MIN <= cap ? FLEET_SHIP_MIN : 0
+  const counts = new Array<number>(groups.length).fill(minEach)
+  const budget = cap - minEach * groups.length
+  const weights = groups.map((group) => Math.max(0, group.ships - minEach))
+  const weightSum = weights.reduce((sum, weight) => sum + weight, 0)
+  if (budget > 0 && weightSum > 0) {
+    const exact = weights.map((weight) => (weight * budget) / weightSum)
+    const extra = exact.map((value) => Math.floor(value / FLEET_SHIP_STEP) * FLEET_SHIP_STEP)
+    let usedExtra = 0
+    for (let i = 0; i < counts.length; i++) {
+      const add = Math.min(extra[i] ?? 0, Math.max(0, FLEET_SHIP_MAX - (counts[i] ?? 0)))
+      counts[i] = (counts[i] ?? 0) + add
+      usedExtra += add
+    }
+    const order = exact
+      .map((value, index) => ({ index, rem: value - (extra[index] ?? 0) }))
+      .sort((a, b) => b.rem - a.rem || a.index - b.index)
+    let cursor = 0
+    let stuck = 0
+    while (usedExtra + FLEET_SHIP_STEP <= budget && order.length > 0 && stuck < order.length) {
+      const item = order[cursor % order.length]
+      cursor += 1
+      if (!item) break
+      const count = counts[item.index] ?? 0
+      if (count + FLEET_SHIP_STEP > FLEET_SHIP_MAX) {
+        stuck += 1
+        continue
+      }
+      counts[item.index] = count + FLEET_SHIP_STEP
+      usedExtra += FLEET_SHIP_STEP
+      stuck = 0
+    }
+  }
+  return groups.map((group, index) => ({ ...group, ships: counts[index] ?? minEach }))
+}
+
+function formatCount(value: number): string {
+  return value.toLocaleString('ja-JP')
 }
 
 function centroidDistance(a: Fleet, b: Fleet): number {

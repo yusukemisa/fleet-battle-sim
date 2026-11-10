@@ -1,7 +1,7 @@
 import type { ShipClassId, ShipStats } from './balance.ts'
 import type { CombatScratch } from './spatial.ts'
 
-export const SHIP_COUNTS = [100, 1000, 10000] as const
+export const SHIP_COUNTS = [100, 1000, 10000, 20000] as const
 export type ShipCount = (typeof SHIP_COUNTS)[number]
 
 export const FORMATION_IDS = ['oujin', 'kakuyoku', 'engetsu', 'gyorin', 'hoshi', 'houen'] as const
@@ -114,6 +114,8 @@ export interface Fleet {
   side: SideId
   name: string
   ships: number
+  /** Count asked for in setup. `ships` is what actually deploys after the cap. */
+  requested: number
   formationId: FormationId
   commanderId: CommanderId
   centerX: number
@@ -145,6 +147,8 @@ export interface Fleet {
   prey: number
   /** Which side of the enemy the fleet committed to. */
   bias: number
+  /** Lateral half-extent at deployment. Friendly fleets stay this far apart. */
+  reach: number
 }
 
 export interface Division {
@@ -348,4 +352,9 @@ export interface SimState {
   classOnClass: number[]
   rankAt: number
   fallingN: number
+  /**
+   * Set while setup counts were scaled to {@link MAX_SHIPS}.
+   * Null when the requested fleets already fit.
+   */
+  fitNotice: string | null
 }

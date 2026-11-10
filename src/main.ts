@@ -152,6 +152,7 @@ const api = {
   get drawMs() { return drawMs },
   get frameMs() { return frameMs },
   get shipCount() { return sim.shipCount },
+  get notice() { return sim.fitNotice },
   get phase() { return sim.phase.kind },
   get alive() { return [sim.alive[0], sim.alive[1]] as const },
   get lost() { return [sim.lost[0], sim.lost[1]] as const },
@@ -192,7 +193,7 @@ function loop(now: number): void {
   sampleAcc += dt
   sampleFrames += 1
   frameSamples.push({ frame: frameMs, sim: simMs, draw: drawMs })
-  if (frameSamples.length > 240) frameSamples.shift()
+  if (frameSamples.length > 720) frameSamples.shift()
   if (sampleAcc >= 0.5) {
     fps = sampleFrames / sampleAcc
     sampleFrames = 0
@@ -338,6 +339,7 @@ declare global {
       drawMs: number
       frameMs: number
       shipCount: number
+      notice: string | null
       phase: string
       alive: readonly [number, number]
       lost: readonly [number, number]
