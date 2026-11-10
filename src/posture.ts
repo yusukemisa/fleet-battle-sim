@@ -1,4 +1,4 @@
-import { MANEUVER } from './balance.ts'
+import { anchorPace, CLASS_MODS, CLASS_STATS, classIndex, MANEUVER } from './balance.ts'
 import type { PostureWeights } from './commanders.ts'
 import { COMMANDERS } from './commanders.ts'
 import { wheelDivision } from './tactics.ts'
@@ -30,9 +30,10 @@ function steer(div: Division, mx: number, my: number, speed: number, dt: number)
   const len = hypot(mx, my)
   let tvx = 0
   let tvy = 0
-  if (len > 0.8 && speed > 0) {
-    tvx = (mx / len) * speed
-    tvy = (my / len) * speed
+  const paced = speed * anchorPace(div.classId)
+  if (len > 0.8 && paced > 0) {
+    tvx = (mx / len) * paced
+    tvy = (my / len) * paced
   }
   const a = 1 - Math.exp(-1.7 * dt)
   div.vx += (tvx - div.vx) * a
@@ -48,7 +49,7 @@ function face(div: Division, tx: number, ty: number, dt: number): void {
   if (len < 1e-4) return
   fx /= len
   fy /= len
-  const a = 1 - Math.exp(-2.4 * dt)
+  const a = 1 - Math.exp(-2.4 * CLASS_MODS[div.classId].turn * dt)
   div.fx += (fx - div.fx) * a
   div.fy += (fy - div.fy) * a
   const fl = hypot(div.fx, div.fy) || 1
@@ -248,7 +249,7 @@ function stepPlaced(div: Division, sit: Situation, fleetManeuver: ManeuverId, dt
   const fy = dy / span
   const lx = -fy
   const ly = fx
-  const across = slotOffset(div.slot)
+  const across = slotOffset(div.slot) * CLASS_MODS[div.classId].wing
   if (fleetManeuver === 'reform' || (fleetManeuver === 'refuse' && !sit.flankThreatened)) {
     drive(
       div,
@@ -327,8 +328,9 @@ export function stepPlan(state: SimState, div: Division, dt: number): void {
     div.shaped = false
     return
   }
-  const bow = state.stats.batteries[0]
-  const sideGun = state.stats.batteries[1]
+  const guns = CLASS_STATS[classIndex(div.classId)] ?? state.stats
+  const bow = guns.batteries[0]
+  const sideGun = guns.batteries[1]
   const bowMin = bow?.minRange ?? 280
   const sideMax = sideGun?.maxRange ?? 420
   const prey = state.divisions[fleet.prey >= 0 ? fleet.prey : sit.prey]
@@ -337,8 +339,9 @@ export function stepPlan(state: SimState, div: Division, dt: number): void {
     // Sit on the exposed beam and point the bow at it: their side is hit, our front faces them.
     const s = fleet.bias || sit.exposedSign || 1
     const fore = slotOffset(div.slot)
-    const gx = prey.ax + prey.fx * fore + prey.rx * s * 400
-    const gy = prey.ay + prey.fy * fore + prey.ry * s * 400
+    const reach = 400 * CLASS_MODS[div.classId].wing
+    const gx = prey.ax + prey.fx * fore + prey.rx * s * reach
+    const gy = prey.ay + prey.fy * fore + prey.ry * s * reach
     drive(div, gx, gy, prey.ax, prey.ay, 38, dt)
     return
   }
@@ -364,7 +367,7 @@ function presentBroadside(div: Division, ox: number, oy: number, sign: number, r
   const s = sign || 1
   const hx = -fy * s
   const hy = fx * s
-  const across = slotOffset(div.slot)
+  const across = slotOffset(div.slot) * CLASS_MODS[div.classId].wing
   const gx = ox - fx * range + lx * across
   const gy = oy - fy * range + ly * across
   drive(div, gx, gy, gx + hx * 180, gy + hy * 180, 36, dt)

@@ -1,4 +1,4 @@
-import type { ShipStats } from './balance.ts'
+import type { ShipClassId, ShipStats } from './balance.ts'
 import type { CombatScratch } from './spatial.ts'
 
 export const SHIP_COUNTS = [100, 1000, 10000] as const
@@ -89,6 +89,8 @@ export interface Ships {
   heading: Float32Array
   alive: Uint8Array
   side: Uint8Array
+  /** Index into {@link CLASS_STATS}. Every ship in a division shares one. */
+  shipClass: Uint8Array
   division: Uint8Array
   command: Uint8Array
   target: Int32Array
@@ -116,6 +118,7 @@ export interface Division {
   side: SideId
   slot: DivisionSlot
   name: string
+  classId: ShipClassId
   tacticId: TacticId
   ax: number
   ay: number
@@ -192,6 +195,7 @@ export type Command =
   | { type: 'set-tactic'; division: number; tacticId: TacticId }
   | { type: 'set-side-tactic'; side: SideId; tacticId: TacticId }
   | { type: 'set-commander'; side: SideId; commanderId: CommanderId }
+  | { type: 'set-class'; division: number; classId: ShipClassId }
   | { type: 'start' }
   | { type: 'pause' }
   | { type: 'resume' }
@@ -204,6 +208,8 @@ export interface SimConfig {
   formations?: readonly [FormationId, FormationId]
   tactics?: readonly TacticId[]
   commanders?: readonly [CommanderId, CommanderId]
+  /** Five entries apply to both fleets. Ten entries assign every division. */
+  classes?: readonly ShipClassId[]
   hp?: number
   damage?: readonly [number, number]
   gunnery?: GunneryMode

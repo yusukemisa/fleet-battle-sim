@@ -122,6 +122,7 @@ function scene(): SimState {
   for (let i = 0; i < 6; i++) {
     ships.alive[i] = 1
     ships.side[i] = 0
+    ships.shipClass[i] = 0
     ships.hp[i] = SHIP_STATS.hp
     ships.cooldown[i] = 0
     ships.x[i] = 0
@@ -134,6 +135,7 @@ function scene(): SimState {
   for (const at of [50, 51]) {
     ships.alive[at] = 1
     ships.side[at] = 1
+    ships.shipClass[at] = 0
     ships.hp[at] = SHIP_STATS.hp
     ships.cooldown[at] = 100
     ships.heading[at] = Math.PI

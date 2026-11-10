@@ -1,3 +1,4 @@
+import { SHIP_CLASS_IDS, type ShipClassId } from './balance.ts'
 import {
   COMMANDER_IDS,
   FORMATION_IDS,
@@ -27,6 +28,13 @@ export function parseFormationId(value: string): FormationId | null {
 
 export function parseCommanderId(value: string): CommanderId | null {
   for (const id of COMMANDER_IDS) {
+    if (id === value) return id
+  }
+  return null
+}
+
+export function parseClassId(value: string): ShipClassId | null {
+  for (const id of SHIP_CLASS_IDS) {
     if (id === value) return id
   }
   return null

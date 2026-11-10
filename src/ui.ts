@@ -1,6 +1,7 @@
+import { CLASS_MODS, SHIP_CLASS_IDS } from './balance.ts'
 import { COMMANDERS } from './commanders.ts'
 import { FORMATIONS } from './formations.ts'
-import { parseCommanderId, parseFormationId, parseShipCount, parseSpeed, parseTacticId } from './parse.ts'
+import { parseClassId, parseCommanderId, parseFormationId, parseShipCount, parseSpeed, parseTacticId } from './parse.ts'
 import { TACTICS } from './tactics.ts'
 import {
   COMMANDER_IDS,
@@ -16,6 +17,7 @@ export interface Hud {
   formation: [HTMLSelectElement, HTMLSelectElement]
   commander: [HTMLSelectElement, HTMLSelectElement]
   division: HTMLSelectElement[]
+  shipClass: HTMLSelectElement[]
   log: HTMLElement
   clock: HTMLElement
   fps: HTMLElement
@@ -51,7 +53,7 @@ export function mountHud(
     </header>
     <ol id="log"></ol>
     <details id="orders">
-      <summary title="戦闘中も、分艦隊ごとと全軍に変更できます">分艦隊の戦術</summary>
+      <summary title="艦種は開戦前、戦術は戦闘中も、分艦隊ごとに変更できます">分艦隊の艦種と戦術</summary>
       <div class="order-grid">
         <section data-side="0"></section>
         <section data-side="1"></section>
@@ -117,6 +119,7 @@ export function mountHud(
   const commander: [HTMLSelectElement, HTMLSelectElement] = [commander0, commander1]
 
   const division: HTMLSelectElement[] = []
+  const shipClass: HTMLSelectElement[] = []
   const sections = parent.querySelectorAll('#orders section')
   sections.forEach((section, side) => {
     const fleetTactic = document.createElement('div')
@@ -140,6 +143,19 @@ export function mountHud(
       const name = document.createElement('span')
       const count = document.createElement('span')
       count.className = 'remain'
+      const klass = document.createElement('select')
+      klass.className = 'class-select'
+      for (const id of SHIP_CLASS_IDS) {
+        const option = document.createElement('option')
+        option.value = id
+        option.textContent = CLASS_MODS[id].name
+        option.title = CLASS_MODS[id].summary
+        klass.append(option)
+      }
+      klass.addEventListener('change', () => {
+        const classId = parseClassId(klass.value)
+        if (classId !== null) onCommand({ type: 'set-class', division: index, classId })
+      })
       const select = document.createElement('select')
       fillTactics(select)
       const index = side * 5 + slot
@@ -147,9 +163,10 @@ export function mountHud(
         const tacticId = parseTacticId(select.value)
         if (tacticId !== null) onCommand({ type: 'set-tactic', division: index, tacticId })
       })
-      row.append(name, count, select)
+      row.append(name, klass, count, select)
       section.append(row)
       division[index] = select
+      shipClass[index] = klass
       row.dataset.index = String(index)
     }
   })
@@ -178,6 +195,7 @@ export function mountHud(
     formation,
     commander,
     division,
+    shipClass,
     log: required(parent, '#log', HTMLElement),
     clock: required(parent, '#clock', HTMLElement),
     fps: required(parent, '#fps', HTMLElement),
@@ -229,6 +247,11 @@ export function syncHud(parent: HTMLElement, hud: Hud, state: SimState): void {
     const remain = row.querySelector('.remain')
     if (name) name.textContent = division.name
     if (remain) remain.textContent = division.alive.toLocaleString('ja-JP')
+    const klass = hud.shipClass[index]
+    if (klass) {
+      if (klass.value !== division.classId) klass.value = division.classId
+      klass.disabled = !setup
+    }
     if (select.value !== division.tacticId) select.value = division.tacticId
     select.disabled = state.phase.kind === 'finished'
   })

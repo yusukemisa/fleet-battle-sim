@@ -101,6 +101,179 @@ export const SHIP_STATS = {
   batteries: BATTERIES,
 } satisfies ShipStats
 
+export const SHIP_CLASS_IDS = ['battleship', 'cruiser', 'destroyer'] as const
+export type ShipClassId = (typeof SHIP_CLASS_IDS)[number]
+
+/**
+ * Multipliers on the battleship. Gun counts are rounded, ranges are rounded,
+ * and a battery never drops below one gun. `wing` pushes a division off the fleet axis.
+ */
+export interface ClassMods {
+  id: ShipClassId
+  name: string
+  summary: string
+  hp: number
+  armor: number
+  speed: number
+  accel: number
+  turn: number
+  wing: number
+  bowGuns: number
+  bowPower: number
+  bowRange: number
+  bowArc: number
+  sideGuns: number
+  sidePower: number
+  sideRange: number
+  sideArc: number
+  girth: number
+  length: number
+}
+
+export const CLASS_MODS = {
+  battleship: {
+    id: 'battleship',
+    name: '戦艦',
+    summary: '耐久と艦首砲の射程で戦線を支える。',
+    hp: 1,
+    armor: 1,
+    speed: 1,
+    accel: 1,
+    turn: 1,
+    wing: 0.82,
+    bowGuns: 1,
+    bowPower: 1,
+    bowRange: 1,
+    bowArc: 1,
+    sideGuns: 1,
+    sidePower: 1,
+    sideRange: 1,
+    sideArc: 1,
+    girth: 1.45,
+    length: 1.15,
+  },
+  cruiser: {
+    id: 'cruiser',
+    name: '巡航艦',
+    summary: '戦艦より軽く、速く、よく曲がる。射程と威力は一回り小さい。',
+    hp: 0.64,
+    armor: 1.2,
+    speed: 1.28,
+    accel: 1.4,
+    turn: 1.6,
+    wing: 1.08,
+    bowGuns: 0.75,
+    bowPower: 0.85,
+    bowRange: 0.86,
+    bowArc: 1,
+    sideGuns: 0.75,
+    sidePower: 0.85,
+    sideRange: 0.9,
+    sideArc: 1,
+    girth: 0.62,
+    length: 1.7,
+  },
+  destroyer: {
+    id: 'destroyer',
+    name: '駆逐艦',
+    summary: '脆い代わりに速く、舷側砲を近づけて撃つ。',
+    hp: 0.34,
+    armor: 1.45,
+    speed: 1.58,
+    accel: 1.8,
+    turn: 2.2,
+    wing: 1.38,
+    bowGuns: 0.5,
+    bowPower: 0.55,
+    bowRange: 0.52,
+    bowArc: 0.8,
+    sideGuns: 0.75,
+    sidePower: 1.1,
+    sideRange: 0.82,
+    sideArc: 1.16,
+    girth: 0.32,
+    length: 2.35,
+  },
+} as const satisfies Record<ShipClassId, ClassMods>
+
+/** Wings, then the guards, battleships in the center. Both fleets use this unless told otherwise. */
+export const DEFAULT_LINE: readonly ShipClassId[] = ['destroyer', 'cruiser', 'battleship', 'cruiser', 'destroyer']
+
+function scaleBattery(base: BatterySpec, mods: ClassMods, bow: boolean): BatterySpec {
+  const guns = Math.max(1, Math.round(base.guns * (bow ? mods.bowGuns : mods.sideGuns)))
+  const power = base.power * (bow ? mods.bowPower : mods.sidePower)
+  const range = bow ? mods.bowRange : mods.sideRange
+  const arc = bow ? mods.bowArc : mods.sideArc
+  return {
+    id: base.id,
+    guns,
+    power,
+    center: base.center,
+    half: base.half * arc,
+    minRange: bow ? Math.round(base.minRange * mods.bowRange) : 0,
+    maxRange: Math.round(base.maxRange * range),
+    cooldown: base.cooldown,
+  }
+}
+
+function deriveClass(id: ShipClassId): ShipStats {
+  const mods = CLASS_MODS[id]
+  const bow = BATTERIES[0]
+  const port = BATTERIES[1]
+  const starboard = BATTERIES[2]
+  if (!bow || !port || !starboard) return SHIP_STATS
+  return {
+    hp: Math.max(1, Math.round(SHIP_STATS.hp * mods.hp)),
+    damage: SHIP_STATS.damage,
+    range: Math.round(bow.maxRange * mods.bowRange),
+    acquire: Math.round(SHIP_STATS.acquire * mods.bowRange),
+    cooldown: SHIP_STATS.cooldown,
+    hitChance: SHIP_STATS.hitChance,
+    maxSpeed: SHIP_STATS.maxSpeed * mods.speed,
+    response: SHIP_STATS.response * mods.accel,
+    turnRate: SHIP_STATS.turnRate * mods.turn,
+    reverse: SHIP_STATS.reverse,
+    arc: SHIP_STATS.arc * mods.bowArc,
+    armorFront: SHIP_STATS.armorFront * mods.armor,
+    armorSide: SHIP_STATS.armorSide * mods.armor,
+    armorRear: SHIP_STATS.armorRear * mods.armor,
+    armorBow: SHIP_STATS.armorBow,
+    armorStern: SHIP_STATS.armorStern,
+    batteries: [scaleBattery(bow, mods, true), scaleBattery(port, mods, false), scaleBattery(starboard, mods, false)],
+  }
+}
+
+export const CLASS_STATS: readonly ShipStats[] = SHIP_CLASS_IDS.map((id) => deriveClass(id))
+
+export function classIndex(id: ShipClassId): number {
+  const index = SHIP_CLASS_IDS.indexOf(id)
+  return index < 0 ? 0 : index
+}
+
+export function classMods(index: number): ClassMods {
+  const id = SHIP_CLASS_IDS[index] ?? 'battleship'
+  return CLASS_MODS[id]
+}
+
+/** Five classes are copied onto both fleets. Ten classes assign each division. */
+export function fleetLine(classes: readonly ShipClassId[] | undefined): ShipClassId[] {
+  const row = DEFAULT_LINE.map((id, index) => classes?.[index] ?? id)
+  if (classes && classes.length >= 10) return classes.slice(0, 10)
+  return [...row, ...row]
+}
+
+/** Hull points when a scenario scales every battleship, and the other classes follow. */
+export function hullHp(index: number, battleshipHp: number): number {
+  const base = CLASS_STATS[index]?.hp ?? SHIP_STATS.hp
+  if (battleshipHp === SHIP_STATS.hp) return base
+  return Math.max(1, Math.round((base * battleshipHp) / SHIP_STATS.hp))
+}
+
+/** Division anchors take part of the class speed so a wing leads without leaving the fleet. */
+export function anchorPace(id: ShipClassId): number {
+  return 1 + (CLASS_MODS[id].speed - 1) * 0.45
+}
+
 /**
  * Sim seconds advanced per wall-clock second at ×1.
  * ×2 and ×4 still speed the battle up. Fire cooldown stays in sim seconds.

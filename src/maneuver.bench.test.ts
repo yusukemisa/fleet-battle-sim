@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { inArc, wrapAngle } from './combat.ts'
 import { createSim, dispatch } from './sim.ts'
+import type { ShipClassId } from './balance.ts'
 import type { CommanderId, ManeuverMode, SimState } from './types.ts'
 
 const CASES: ReadonlyArray<{ seed: number; commanders: readonly [CommanderId, CommanderId] }> = [
@@ -32,18 +33,22 @@ describe('maneuver waste', () => {
 
 describe('formation maneuvers', () => {
   it('breaks out of an envelopment and keeps more ships', () => {
-    const legacy = enveloped('legacy')
-    const shaped = enveloped('shaped')
+    const line: ShipClassId[] = ['battleship', 'battleship', 'battleship', 'battleship', 'battleship']
+    const legacy = enveloped('legacy', line)
+    const shaped = enveloped('shaped', line)
+    const mixed = enveloped('shaped')
     console.log(
-      `breakout alive legacy ${legacy.alive} shaped ${shaped.alive} breakouts ${legacy.breakouts}/${shaped.breakouts}`,
+      `breakout alive legacy ${legacy.alive} shaped ${shaped.alive} breakouts ${legacy.breakouts}/${shaped.breakouts} mixed ${mixed.breakouts}`,
     )
     expect(shaped.alive).toBeGreaterThan(legacy.alive)
     expect(shaped.breakouts).toBeGreaterThan(0)
+    expect(mixed.breakouts).toBeGreaterThan(0)
   })
 
   it('exploits an exposed enemy flank', () => {
-    const legacy = flank('legacy')
-    const shaped = flank('shaped')
+    const line: ShipClassId[] = ['battleship', 'battleship', 'battleship', 'battleship', 'battleship']
+    const legacy = flank('legacy', line)
+    const shaped = flank('shaped', line)
     console.log(
       `flank side-hits legacy ${legacy.sideHits} shaped ${shaped.sideHits} beam ${legacy.beam}/${shaped.beam}`,
     )
@@ -211,11 +216,15 @@ function wasteTable(before: Waste & { travelPerDamage: number }, after: Waste & 
   ].join('\n')
 }
 
-function enveloped(maneuver: ManeuverMode): { alive: number; time: number; breakouts: number } {
+function enveloped(
+  maneuver: ManeuverMode,
+  classes?: readonly ShipClassId[],
+): { alive: number; time: number; breakouts: number } {
   let state = createSim({
     shipCount: 100,
     commanders: ['balanced', 'manual'],
     maneuver,
+    classes,
   })
   state.rng = 0x51ed
   for (let slot = 0; slot < 5; slot++) park(state, slot, (slot - 2) * 36, 0, 0)
@@ -248,11 +257,12 @@ function enveloped(maneuver: ManeuverMode): { alive: number; time: number; break
   return { alive: state.alive[0], time: state.time, breakouts }
 }
 
-function flank(maneuver: ManeuverMode): { sideHits: number; beam: number } {
+function flank(maneuver: ManeuverMode, classes?: readonly ShipClassId[]): { sideHits: number; beam: number } {
   let state = createSim({
     shipCount: 100,
     commanders: ['cunning', 'manual'],
     maneuver,
+    classes,
   })
   state.rng = 0x85eb
   for (let slot = 0; slot < 5; slot++) park(state, slot, -40, (slot - 2) * 70, 0)

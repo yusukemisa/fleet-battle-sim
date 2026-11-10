@@ -1,4 +1,4 @@
-import { SWEEP } from './balance.ts'
+import { anchorPace, CLASS_MODS, SWEEP } from './balance.ts'
 import type { Division, Tactic, TacticContext, TacticId } from './types.ts'
 
 function hypot(x: number, y: number): number {
@@ -9,9 +9,10 @@ function steer(div: Division, mx: number, my: number, speed: number, dt: number)
   const len = hypot(mx, my)
   let tvx = 0
   let tvy = 0
-  if (len > 0.8 && speed > 0) {
-    tvx = (mx / len) * speed
-    tvy = (my / len) * speed
+  const paced = speed * anchorPace(div.classId)
+  if (len > 0.8 && paced > 0) {
+    tvx = (mx / len) * paced
+    tvy = (my / len) * paced
   }
   const a = 1 - Math.exp(-1.7 * dt)
   div.vx += (tvx - div.vx) * a
@@ -21,7 +22,7 @@ function steer(div: Division, mx: number, my: number, speed: number, dt: number)
 }
 
 function face(div: Division, tx: number, ty: number, dt: number): void {
-  faceDirection(div, tx - div.ax, ty - div.ay, dt, 1.5)
+  faceDirection(div, tx - div.ax, ty - div.ay, dt, 1.5 * CLASS_MODS[div.classId].turn)
 }
 
 function faceDirection(div: Division, fx: number, fy: number, dt: number, rate: number): void {
