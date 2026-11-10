@@ -28,6 +28,7 @@ export interface BattleFacts {
   enemy: readonly DivisionFact[]
   enemyOnUs: Bearing
   usOnEnemy: Bearing
+  enemyCommander?: CommanderId
 }
 
 type TacticWeights = Record<TacticId, number>
@@ -103,7 +104,7 @@ export const COMMANDERS = {
   fierce: {
     id: 'fierce',
     name: '猛将',
-    summary: '戦艦で正面を突き、巡航艦と駆逐艦は側面と背面へ回す。深手だけ少し下がる。',
+    summary: '駆逐艦を早い段階で敵戦艦の艦首射程の内側へ突っ込む。巡航艦は近づいた敵駆逐艦を受ける。',
     auto: true,
     base: { ...EMPTY, charge: 5, breakthrough: 4, flank: 1 },
     prefer: ['breakthrough', 'charge', 'flank', 'focus', 'encircle', 'feint', 'hold'],
@@ -123,7 +124,7 @@ export const COMMANDERS = {
   cunning: {
     id: 'cunning',
     name: '智将',
-    summary: '戦艦で正面を釘付けにし、速い隊は艦首射程の外から挟む。傷ついた艦は後ろで機会を待つ。',
+    summary: '戦艦で釘付けにし、駆逐艦は射界の外から艦首の内側へ潜る。来た駆逐艦は巡航艦が受ける。',
     auto: true,
     base: { ...EMPTY, pin: 1, broadside: 1, rear: 1 },
     prefer: ['rear', 'broadside', 'pin', 'focus', 'hold', 'flank', 'charge', 'encircle', 'breakthrough', 'feint'],
@@ -148,7 +149,7 @@ export const COMMANDERS = {
   guard: {
     id: 'guard',
     name: '守将',
-    summary: '戦艦で陣を守り、軽い隊は側近として敵の回り込みを叩く。傷ついた艦は列の後ろへ下がる。',
+    summary: '駆逐艦を味方戦艦の前に置き、敵駆逐艦が潜る前に迎え撃つ。傷ついた艦は列の後ろへ下がる。',
     auto: true,
     base: { ...EMPTY, hold: 5, focus: 4 },
     prefer: ['charge', 'focus', 'hold', 'breakthrough', 'flank', 'encircle', 'feint'],
@@ -171,7 +172,7 @@ export const COMMANDERS = {
   balanced: {
     id: 'balanced',
     name: '常勝',
-    summary: '戦艦で戦列を保ち、側面が空けば速い隊をそこへ送る。傷ついた艦は前の列に隠れる。',
+    summary: '敵の駆逐艦が戦艦を離れたときだけ潜り、片方は迎撃に残す。戦艦は一つの敵隊に弾を集める。',
     auto: true,
     base: { ...EMPTY, charge: 3, hold: 1, flank: 1, focus: 1, breakthrough: 1 },
     prefer: ['breakthrough', 'encircle', 'hold', 'charge', 'focus', 'flank', 'feint'],
@@ -195,7 +196,7 @@ export const COMMANDERS = {
       },
     ],
     withdraw: { hp: 0.52, reengage: 0.78, depth: 70, shot: 0.5, threat: 8 },
-    posture: { press: 2, seize: 4, envelop: 3, wheel: 2, breakout: 4, refuse: 3, reform: 3, commit: 7 },
+    posture: { press: 8, seize: 2, envelop: 1, wheel: 0, breakout: 0, refuse: 1, reform: 0, commit: 20 },
   },
 } satisfies Record<CommanderId, Commander>
 
@@ -206,6 +207,7 @@ export function employClass(commander: Commander, classId: 'battleship' | 'cruis
   if (!commander.auto) return chosen
   const light = classId !== 'battleship'
   if (!light) {
+    if (commander.id === 'balanced') return 'focus'
     if (LINE_TACTICS.has(chosen)) return chosen
     if (commander.id === 'fierce') return 'breakthrough'
     if (commander.id === 'guard') return 'hold'
@@ -218,11 +220,44 @@ export function employClass(commander: Commander, classId: 'battleship' | 'cruis
     if (facts.enemyOnUs === 'side' || facts.enemyOnUs === 'rear') return 'broadside'
     return 'flank'
   }
-  if (facts.usOnEnemy === 'rear') return 'rear'
-  if (facts.usOnEnemy === 'side' || facts.enemyOnUs === 'side' || facts.enemyOnUs === 'rear') {
-    return classId === 'destroyer' ? 'rear' : 'broadside'
+  if ((facts.enemyOnUs === 'side' || facts.enemyOnUs === 'rear') && classId === 'destroyer') return 'broadside'
+  return classId === 'destroyer' ? 'rear' : 'broadside'
+}
+
+export type LightDuty = 'under' | 'screen' | 'wide'
+
+/**
+ * Who closes inside a battleship's bow range, and who stays back to meet enemy destroyers.
+ * `incoming` is how many enemy destroyer divisions are already near our battleships.
+ * `enemyScreenHome` means one of their destroyer divisions is still beside their battleships.
+ */
+export function lightDuty(
+  commander: CommanderId,
+  classId: 'battleship' | 'cruiser' | 'destroyer',
+  incoming: number,
+  enemyScreenHome: boolean,
+  slot: DivisionSlot,
+): LightDuty {
+  if (classId === 'battleship') return 'wide'
+  if (commander === 'guard') {
+    if (classId === 'destroyer') return 'screen'
+    if (incoming > 1) return 'screen'
+    return 'wide'
   }
-  return 'flank'
+  if (commander === 'fierce') {
+    if (classId === 'cruiser' && incoming > 0 && slot === 1) return 'screen'
+    return classId === 'destroyer' ? 'under' : 'wide'
+  }
+  if (commander === 'cunning') {
+    if (classId === 'cruiser' && incoming > 0 && slot === 1) return 'screen'
+    return classId === 'destroyer' ? 'under' : 'wide'
+  }
+  if (commander !== 'balanced') return 'wide'
+  // One destroyer stays back once enemy destroyers are near. The other still goes under.
+  if (classId === 'destroyer' && slot === 0 && (incoming > 0 || (enemyScreenHome && incoming > 1))) return 'screen'
+  if (classId === 'destroyer') return 'under'
+  if (incoming > 0 && (slot === 1 || incoming > 1)) return 'screen'
+  return 'wide'
 }
 
 export function chooseTactic(commander: Commander, facts: BattleFacts): TacticId | null {

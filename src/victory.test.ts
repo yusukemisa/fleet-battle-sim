@@ -1,0 +1,44 @@
+import { describe, expect, it } from 'vitest'
+import { createSim, dispatch } from './sim.ts'
+import type { CommanderId } from './types.ts'
+
+const FOES = ['fierce', 'cunning', 'guard'] as const
+const SEEDS = [1, 2, 3, 4, 5, 6, 7, 8] as const
+
+describe('常勝', () => {
+  it('beats each other commander on a fixed set of seeds', () => {
+    for (const foe of FOES) {
+      let wins = 0
+      let games = 0
+      for (const seed of SEEDS) {
+        for (const swap of [false, true]) {
+          const blue: CommanderId = swap ? foe : 'balanced'
+          const red: CommanderId = swap ? 'balanced' : foe
+          const winner = fight(blue, red, (seed * 0x9e3779b1 + (swap ? 17 : 0)) | 0)
+          games += 1
+          const won = swap ? winner === 1 : winner === 0
+          if (won) wins += 1
+        }
+      }
+      expect(wins).toBeGreaterThanOrEqual(Math.ceil(games * 0.7))
+    }
+  })
+})
+
+function fight(blue: CommanderId, red: CommanderId, seed: number): 0 | 1 | 'draw' {
+  let state = createSim({ shipCount: 100, commanders: [blue, red], formations: ['oujin', 'oujin'] })
+  state.rng = seed
+  state = dispatch(state, { type: 'set-speed', speed: 4 })
+  state = dispatch(state, { type: 'start' })
+  let steps = 0
+  while (state.phase.kind === 'running' && state.time < 200 && steps < 16000) {
+    state = dispatch(state, { type: 'tick', dt: 0.05 })
+    steps += 1
+  }
+  if (state.phase.kind === 'finished') return state.phase.winner
+  const a = state.alive[0]
+  const b = state.alive[1]
+  if (a >= b * 1.2 && a - b >= 5) return 0
+  if (b >= a * 1.2 && b - a >= 5) return 1
+  return 'draw'
+}

@@ -43,6 +43,12 @@ function faceDirection(div: Division, fx: number, fy: number, dt: number, rate: 
 }
 
 function aim(div: Division, ctx: TacticContext): void {
+  const hunted = div.hunt >= 0 ? ctx.divisions[div.hunt] : undefined
+  if (hunted && hunted.side !== div.side && hunted.alive > 0) {
+    div.focusX = hunted.ax
+    div.focusY = hunted.ay
+    return
+  }
   let bestX = ctx.enemyX
   let bestY = ctx.enemyY
   let best = Infinity
@@ -150,6 +156,8 @@ function sailBow(
 }
 
 function preyFor(div: Division, ctx: TacticContext): Division | null {
+  const hunted = div.hunt >= 0 ? ctx.divisions[div.hunt] : undefined
+  if (hunted && hunted.side !== div.side && hunted.alive > 0) return hunted
   let best: Division | null = null
   let bestScore = Infinity
   const side = div.flankSign === 0 ? 1 : div.flankSign
@@ -178,9 +186,17 @@ function polarPoint(prey: Division, side: number, angle: number, range: number):
 }
 
 function hook(div: Division, ctx: TacticContext, dt: number, speed: number, mode: 'side' | 'rear'): void {
+  if (div.screen) {
+    intercept(div, ctx, dt)
+    return
+  }
   const prey = preyFor(div, ctx)
   if (!prey) {
     charge(div, ctx, dt, speed)
+    return
+  }
+  if (div.classId === 'destroyer' && prey.classId === 'battleship' && (div.headOn || !div.rush)) {
+    underGuns(div, dt, prey, speed)
     return
   }
   const side = div.flankSign === 0 ? 1 : div.flankSign
@@ -210,7 +226,105 @@ function hook(div: Division, ctx: TacticContext, dt: number, speed: number, mode
   }
 }
 
-function pin(div: Division, ctx: TacticContext, dt: number): void {
+function ownBattleship(div: Division, ctx: TacticContext): Division | null {
+  let best: Division | null = null
+  for (const other of ctx.divisions) {
+    if (other.side !== div.side || other.classId !== 'battleship' || other.alive === 0) continue
+    best = other
+  }
+  return best
+}
+
+/** Meet an incoming destroyer on the way to our battleships, or stand picket if none has come. */
+function intercept(div: Division, ctx: TacticContext, dt: number): void {
+  const bb = ownBattleship(div, ctx)
+  const hunted = div.hunt >= 0 ? ctx.divisions[div.hunt] : undefined
+  const prey = hunted && hunted.alive > 0 && hunted.side !== div.side ? hunted : null
+  if (!bb) {
+    charge(div, ctx, dt, 48)
+    return
+  }
+  let gx = bb.ax
+  let gy = bb.ay
+  if (prey) {
+    const ax = prey.ax - bb.ax
+    const ay = prey.ay - bb.ay
+    const len = hypot(ax, ay) || 1
+    const meet = len < 720 ? Math.max(200, len - 140) : Math.min(400, len * 0.38)
+    gx = bb.ax + (ax / len) * meet
+    gy = bb.ay + (ay / len) * meet
+  } else {
+    const ax = ctx.enemyX - bb.ax
+    const ay = ctx.enemyY - bb.ay
+    const len = hypot(ax, ay) || 1
+    const side = div.flankSign === 0 ? 1 : div.flankSign
+    gx = bb.ax + (ax / len) * 260 + (-ay / len) * side * 150
+    gy = bb.ay + (ay / len) * 260 + (ax / len) * side * 150
+  }
+  div.markX = gx
+  div.markY = gy
+  const faceX = prey ? prey.ax : ctx.enemyX
+  const faceY = prey ? prey.ay : ctx.enemyY
+  sailBow(div, gx, gy, faceX, faceY, 60, dt, 0.35)
+}
+
+/**
+ * Get inside the battleship bow's minimum range from outside its arc, or head-on.
+ * Broadside is presented only after that arc is cleared and the range is inside the bow minimum.
+ */
+function underGuns(div: Division, dt: number, prey: Division, speed: number): void {
+  const bowHalf = 0.7
+  const bowMin = 280
+  const bowMax = 900
+  const relX = div.ax - prey.ax
+  const relY = div.ay - prey.ay
+  const along = relX * prey.fx + relY * prey.fy
+  const cross = relX * prey.rx + relY * prey.ry
+  const range = hypot(relX, relY) || 1
+  const preferred = div.flankSign === 0 ? 1 : div.flankSign
+  const side = Math.abs(cross) > 28 ? Math.sign(cross) || preferred : preferred
+  const angle = Math.atan2(side * cross, along)
+  const inFront = angle < bowHalf + 0.12
+  const nest = 190
+  const dash = Math.max(speed, 62)
+  const pocket = !inFront && range < bowMin - 30
+  const safe = bowMax + 70
+  let gx = prey.ax
+  let gy = prey.ay
+  if (div.headOn && range > bowMin - 20) {
+    gx = prey.ax
+    gy = prey.ay
+  } else if (inFront && range > bowMin) {
+    const point = polarPoint(prey, side, Math.max(0.2, angle) + 0.48, Math.max(range + 24, safe))
+    gx = point.x
+    gy = point.y
+  } else if (inFront) {
+    const point = polarPoint(prey, side, angle + 0.6, Math.max(nest, Math.min(range, bowMin - 40)))
+    gx = point.x
+    gy = point.y
+  } else {
+    const wantAngle = 2.1
+    const goalAngle = Math.min(wantAngle, Math.max(angle, bowHalf + 0.28))
+    const span = Math.max(0.25, wantAngle - bowHalf)
+    const t = Math.min(1, Math.max(0, (goalAngle - bowHalf) / span))
+    const goalRange = range < bowMin ? nest : safe + (nest - safe) * t
+    const point = polarPoint(prey, side, goalAngle, goalRange)
+    gx = point.x
+    gy = point.y
+  }
+  div.markX = gx
+  div.markY = gy
+  if (pocket) {
+    steer(div, gx - div.ax, gy - div.ay, dash, dt)
+    const dx = prey.ax - div.ax
+    const dy = prey.ay - div.ay
+    face(div, div.ax - dy, div.ay + dx, dt)
+    return
+  }
+  sailBow(div, gx, gy, prey.ax, prey.ay, dash, dt, 0.42)
+}
+
+function pin(div: Division, ctx: TacticContext, dt: number, reach = 520): void {
   const prey = preyFor(div, ctx)
   const tx = prey ? prey.ax : ctx.enemyX
   const ty = prey ? prey.ay : ctx.enemyY
@@ -219,8 +333,8 @@ function pin(div: Division, ctx: TacticContext, dt: number): void {
   const len = Math.hypot(fx, fy) || 1
   fx /= len
   fy /= len
-  const gx = tx + fx * 520
-  const gy = ty + fy * 520
+  const gx = tx + fx * reach
+  const gy = ty + fy * reach
   div.markX = gx
   div.markY = gy
   const dist = Math.hypot(gx - div.ax, gy - div.ay)
@@ -290,7 +404,30 @@ export function wheelDivision(div: Division, ctx: TacticContext, dt: number): vo
   sweepDivision(div, ctx, dt)
 }
 
+function backFromDestroyer(div: Division, ctx: TacticContext, dt: number): boolean {
+  if (div.classId !== 'battleship') return false
+  let dd: Division | null = null
+  let ddDist = 540
+  let battleshipClose = false
+  for (const other of ctx.divisions) {
+    if (other.side === div.side || other.alive === 0) continue
+    const dist = hypot(other.ax - div.ax, other.ay - div.ay)
+    if (other.classId === 'battleship' && dist < 420) battleshipClose = true
+    if (other.classId === 'destroyer' && dist < ddDist) {
+      ddDist = dist
+      dd = other
+    }
+  }
+  if (!dd || battleshipClose) return false
+  steer(div, div.ax - dd.ax, div.ay - dd.ay, 30, dt)
+  face(div, dd.ax, dd.ay, dt)
+  div.shaped = false
+  div.sweeping = false
+  return true
+}
+
 export function stepDivision(div: Division, ctx: TacticContext, dt: number, wheel = true): void {
+  if (backFromDestroyer(div, ctx, dt)) return
   div.shaped = false
   const tactic = TACTICS[div.tacticId]
   const dist = hypot(ctx.enemyX - ctx.ownX, ctx.enemyY - ctx.ownY)
@@ -426,6 +563,14 @@ export const TACTICS = {
     sweep: false,
     step(div, ctx, dt) {
       tagged(div, true, ctx)
+      if (div.standoff) {
+        pin(div, ctx, dt, 800)
+        return
+      }
+      if (div.classId === 'battleship' && div.hunt >= 0) {
+        pin(div, ctx, dt, 560)
+        return
+      }
       charge(div, ctx, dt, 18)
     },
   },

@@ -140,6 +140,14 @@ export interface Division {
   focus: boolean
   focusX: number
   focusY: number
+  /** Enemy division index this division has committed to. -1 picks a local target. */
+  hunt: number
+  /** Battleships of 常勝 hold outside the enemy's close range and shoot the hunted division. */
+  standoff: boolean
+  /** Light divisions of 常勝 close as soon as the bow arc is clear. */
+  rush: boolean
+  /** 猛将 destroyers drive straight at the battleship instead of swinging wide. */
+  headOn: boolean
   /** Point this division is steering toward. */
   markX: number
   markY: number
@@ -294,6 +302,8 @@ export interface SimState {
   scratch: CombatScratch
   /** Damage dealt by battleship, cruiser, destroyer. */
   classDamage: [number, number, number]
+  /** Damage by shooter class onto victim class, row-major. 0 battleship, 1 cruiser, 2 destroyer. */
+  classOnClass: number[]
   rankAt: number
   fallingN: number
 }

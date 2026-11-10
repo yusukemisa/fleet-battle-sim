@@ -28,6 +28,11 @@ export function rotateRanks(state: SimState): void {
     const policy = withdrawalFor(state, division.side)
     // A destroyer wing falls apart if it peels after the first hit. The line still rotates.
     if (!policy || division.classId === 'destroyer') continue
+    // Against a charge, peeling the battleships opens the line they are trying to break.
+    const foe = state.fleets[division.side === 0 ? 1 : 0].commanderId
+    if (division.classId === 'battleship' && state.fleets[division.side].commanderId === 'balanced' && foe === 'fierce') {
+      continue
+    }
     const limitOf = (ship: number) => hullHp(ships.shipClass[ship] ?? 0, state.stats.hp) * policy.hp
     let hurt = false
     for (const ship of members) {

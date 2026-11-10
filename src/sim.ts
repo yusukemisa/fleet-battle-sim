@@ -206,7 +206,7 @@ function issueOrders(state: SimState): void {
     for (const slot of slots) {
       const index = side * DIVISIONS_PER_SIDE + slot
       const division = state.divisions[index]
-      if (!division || division.alive === 0) continue
+      if (!division || division.alive === 0 || division.classId !== 'battleship') continue
       const facts = factsFor(state, side, slot)
       const chosen = chooseTactic(commander, facts)
       const tacticId = chosen ? employClass(commander, division.classId, chosen, facts) : null
@@ -265,6 +265,7 @@ function factsFor(state: SimState, side: SideId, slot: DivisionSlot): BattleFact
       state.centroidX[side] ?? 0,
       state.centroidY[side] ?? 0,
     ),
+    enemyCommander: state.fleets[enemy].commanderId,
   }
 }
 
@@ -382,6 +383,7 @@ function allocate(
     tally: emptyTally(),
     scratch: createScratch(count, GUNNERY.cell),
     classDamage: [0, 0, 0],
+    classOnClass: [0, 0, 0, 0, 0, 0, 0, 0, 0],
     rankAt: 0,
     fallingN: 0,
   }
@@ -413,6 +415,10 @@ function makeDivision(side: SideId, slot: DivisionSlot): Division {
     focus: false,
     focusX: 0,
     focusY: 0,
+    hunt: -1,
+    standoff: false,
+    rush: false,
+    headOn: false,
     markX: 0,
     markY: 0,
     sweepAlong: 0,
@@ -467,6 +473,7 @@ function deploy(state: SimState): void {
   state.classDamage[0] = 0
   state.classDamage[1] = 0
   state.classDamage[2] = 0
+  for (let i = 0; i < state.classOnClass.length; i++) state.classOnClass[i] = 0
   state.ships.falling.fill(0)
   state.ships.yaw.fill(0)
   state.scratch.look.fill(-1)
@@ -555,6 +562,10 @@ function placeSide(state: SimState, side: SideId, half: number): void {
     division.focus = tacticById(division.tacticId).focus
     division.focusX = enemyX
     division.focusY = 0
+    division.hunt = -1
+    division.standoff = false
+    division.rush = false
+    division.headOn = false
     division.ordered = false
   }
   for (let i = 0; i < half; i++) {
@@ -1018,6 +1029,8 @@ function shootBattery(state: SimState, index: number, target: number, batteryInd
   state.tally.damage += dealt
   const shooterClass = ships.shipClass[index] ?? 0
   state.classDamage[shooterClass] = (state.classDamage[shooterClass] ?? 0) + dealt
+  const victimClass = ships.shipClass[target] ?? 0
+  state.classOnClass[shooterClass * 3 + victimClass] = (state.classOnClass[shooterClass * 3 + victimClass] ?? 0) + dealt
   ships.hp[target] = before - blow
   ships.flash[target] = 1
   if ((ships.hp[target] ?? 0) <= 0) destroy(state, target)
