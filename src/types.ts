@@ -129,8 +129,10 @@ export interface Fleet {
    * Formation-scoped answer to an enemy rush. Other formations stay `none`.
    * `ring` flattens 方円 onto the threat axis. `crane` pulls 鶴翼 wings back.
    * `spear` meets 魚鱗 inside bow range. `offset` slides off the 鋒矢 axis.
+   * `tip` holds 魚鱗 destroyers behind the battleship against a 横陣 rush.
+   * `steady` is 方円 against a 守将 line, which does not rush.
    */
-  plan: 'none' | 'ring' | 'crane' | 'spear' | 'offset'
+  plan: 'none' | 'ring' | 'crane' | 'spear' | 'offset' | 'tip' | 'steady' | 'crescent'
   /** Do not switch plans before this time. */
   planUntil: number
   facingX: number

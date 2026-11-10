@@ -466,11 +466,13 @@ function chooseCounter(state: SimState, fleet: Fleet, sit: Situation): void {
   if (state.time > 6 && fleet.plan !== 'none') return
   const foe = state.fleets[fleet.enemyFleet]
   let next: Fleet['plan'] = 'none'
-  if (foe && rushAxis(state, fleet, sit)) {
+  if (foe && fleet.formationId === 'houen' && foe.commanderId === 'guard' && foe.formationId === 'oujin') next = 'steady'
+  else if (foe && rushAxis(state, fleet, sit)) {
     if (fleet.formationId === 'houen' && foe.formationId === 'gyorin') next = 'spear'
     else if (fleet.formationId === 'houen' && foe.formationId === 'hoshi') next = 'offset'
     else if (fleet.formationId === 'houen' && foe.formationId !== 'houen') next = 'ring'
     else if (fleet.formationId === 'kakuyoku') next = 'crane'
+    else if (fleet.formationId === 'gyorin' && foe.formationId === 'oujin') next = 'tip'
   }
   if (next === fleet.plan) return
   fleet.plan = next
@@ -531,13 +533,21 @@ function directLights(state: SimState, side: SideId, fleetIndex?: number): void 
     const duty = lightDuty(commander, division.classId, incoming, enemyScreenHome, division.slot)
     const home = state.fleets[fleetIndex ?? side]
     const foeCommander = enemyBbs[0] ? state.fleets[enemyBbs[0].fleet]?.commanderId : undefined
+    if (home?.plan === 'steady') home.cover = true
     if (home && commander === 'balanced' && home.formationId === 'houen' && foeCommander !== 'guard') home.cover = true
+    if (home?.plan === 'tip') {
+      for (const heavy of state.divisions) {
+        if (heavy.side !== side || heavy.classId !== 'battleship') continue
+        if (fleetIndex !== undefined && heavy.fleet !== fleetIndex) continue
+        heavy.phase = 5
+      }
+    }
     if (home?.cover && commander === 'balanced') {
       for (const heavy of state.divisions) {
         if (heavy.side !== side || heavy.classId !== 'battleship') continue
         if (fleetIndex !== undefined && heavy.fleet !== fleetIndex) continue
         heavy.screen = true
-        if (home.plan === 'ring') heavy.phase = 5
+        if (home.plan === 'ring' || home.plan === 'steady') heavy.phase = 5
         else if (home.plan === 'spear') heavy.phase = 7
         else if (home.plan === 'offset') heavy.phase = 8
       }
@@ -570,6 +580,21 @@ function directLights(state: SimState, side: SideId, fleetIndex?: number): void 
         continue
       }
       if (division.phase === 4) division.phase = 0
+    }
+    if (commander === 'balanced' && home?.plan === 'tip' && division.classId === 'destroyer' && ownBb && enemyBbs[0]) {
+      const preyBb = enemyBbs[0]
+      const rushRange = Math.hypot(preyBb.ax - ownBb.ax, preyBb.ay - ownBb.ay)
+      if (rushRange > 680) {
+        division.screen = true
+        division.headOn = false
+        division.standoff = false
+        const threat = threats[0]
+        division.hunt = threat ? state.divisions.indexOf(threat) : -1
+        setDuty(state, division, 'flank')
+        division.phase = 9
+        continue
+      }
+      if (division.phase === 9) division.phase = 0
     }
     if (commander === 'balanced' && home?.cover) {
       division.screen = true

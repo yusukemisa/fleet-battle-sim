@@ -295,6 +295,16 @@ function intercept(div: Division, ctx: TacticContext, dt: number): void {
         face(div, prey.ax, prey.ay, dt)
         return
       }
+      if (div.phase === 9) {
+        const side = div.flankSign || 1
+        gx = bb.ax - (ax / len) * 160 + (-ay / len) * side * 100
+        gy = bb.ay - (ay / len) * 160 + (ax / len) * side * 100
+        div.markX = gx
+        div.markY = gy
+        steer(div, gx - div.ax, gy - div.ay, 64, dt)
+        face(div, prey.ax, prey.ay, dt)
+        return
+      }
     }
     if (div.standoff && div.classId !== 'battleship') {
       const back = div.classId === 'destroyer' ? 420 : 80
