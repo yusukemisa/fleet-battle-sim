@@ -427,9 +427,9 @@ function holdSpread(div: Division, ctx: TacticContext, dt: number): void {
     lat = (div.slot - 2) * 120
     speed = range < 700 ? 56 : range > 900 ? 24 : 8
   } else if (div.phase === 7) {
-    reach = 560
+    reach = 500
     lat = (div.slot - 2) * 120
-    speed = range < 480 ? 56 : range > 700 ? 24 : 8
+    speed = range < 420 ? 56 : range > 640 ? 24 : 8
   } else if (div.phase === 8) {
     reach = 820
     lat = 340
