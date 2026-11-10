@@ -145,6 +145,7 @@ export function pickBatteryTarget(
       const fd = Math.hypot(ox - division.focusX, oy - division.focusY)
       score /= 1 + fd * GUNNERY.focus
     }
+    if (division && division.hunt >= 0 && (ships.division[other] ?? -1) === division.hunt) score *= 3
     score -= dist * GUNNERY.near
     if (other === prefer && battery.id === 'bow') preferScore = score
     if (score > bestScore || (score === bestScore && other < best)) {
@@ -234,6 +235,7 @@ export function pickTarget(state: SimState, index: number): number {
       const fd = Math.hypot(ox - division.focusX, oy - division.focusY)
       score /= 1 + fd * GUNNERY.focus
     }
+    if (division && division.hunt >= 0 && (ships.division[other] ?? -1) === division.hunt) score *= 3
     score -= dist * GUNNERY.near
     if (other === prefer) preferScore = score
     if (score > bestScore || (score === bestScore && other < best)) {

@@ -110,6 +110,9 @@ export function wideFlankGoal(div: Division, prey: Division, mode: 'side' | 'rea
     if (inFront) {
       goalAngle = angle + 0.42
       goalRange = Math.max(range + 30, safeRange)
+    } else if (div.rush && angle > bowHalf + 0.2) {
+      goalAngle = Math.min(wantAngle, Math.max(angle, bowHalf + 0.25))
+      goalRange = wantRange
     } else {
       goalAngle = Math.min(wantAngle, Math.max(angle, bowHalf + 0.25))
       const span = Math.max(0.25, wantAngle - bowHalf)

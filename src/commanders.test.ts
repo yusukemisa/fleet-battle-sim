@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { chooseTactic, COMMANDERS, employClass, type BattleFacts, type DivisionFact } from './commanders.ts'
+import { chooseTactic, COMMANDERS, employClass, lightDuty, type BattleFacts, type DivisionFact } from './commanders.ts'
 import { createSim, dispatch } from './sim.ts'
 
 const quietEnemy: DivisionFact = { alive: 100, tacticId: 'charge', phase: 0, ax: 400, ay: 0, fx: -1, fy: 0 }
@@ -48,8 +48,9 @@ describe('commanders', () => {
     expect(employClass(COMMANDERS.guard, 'destroyer', 'hold', facts({ slot: 0, enemyOnUs: 'side' }))).toBe('broadside')
     expect(employClass(COMMANDERS.guard, 'battleship', 'rear', facts({ slot: 2 }))).toBe('hold')
     expect(employClass(COMMANDERS.balanced, 'destroyer', 'charge', facts({ slot: 0, usOnEnemy: 'side' }))).toBe('rear')
-    expect(employClass(COMMANDERS.balanced, 'cruiser', 'charge', facts({ slot: 1 }))).toBe('flank')
-    expect(employClass(COMMANDERS.balanced, 'battleship', 'encircle', facts({ slot: 2 }))).toBe('charge')
+    expect(employClass(COMMANDERS.balanced, 'destroyer', 'charge', facts({ slot: 0, enemyOnUs: 'side' }))).toBe('broadside')
+    expect(employClass(COMMANDERS.balanced, 'cruiser', 'charge', facts({ slot: 1 }))).toBe('broadside')
+    expect(employClass(COMMANDERS.balanced, 'battleship', 'encircle', facts({ slot: 2 }))).toBe('focus')
   })
 
   it('lets 智将 pin the center and hook the wings onto the side and rear', () => {
@@ -86,6 +87,42 @@ describe('commanders', () => {
     expect(chooseTactic(COMMANDERS.cunning, facts({ usOnEnemy: 'rear', slot: 0 }))).toBe('rear')
     expect(chooseTactic(COMMANDERS.guard, facts({ enemyOnUs: 'side' }))).toBe('focus')
     expect(chooseTactic(COMMANDERS.balanced, facts({ enemyOnUs: 'rear' }))).toBe('focus')
+  })
+
+  it('drives 猛将 destroyers inside bow range while 守将 screens', () => {
+    let state = createSim({ shipCount: 100, commanders: ['fierce', 'guard'] })
+    state.rng = 4
+    state = dispatch(state, { type: 'set-speed', speed: 4 })
+    state = dispatch(state, { type: 'start' })
+    for (let i = 0; i < 8; i++) state = dispatch(state, { type: 'tick', dt: 0.05 })
+    expect(state.divisions[0]?.headOn).toBe(true)
+    expect(state.divisions[0]?.tacticId).toBe('rear')
+    expect(state.divisions[5]?.screen).toBe(true)
+    const bb = state.divisions[7]
+    let near = Infinity
+    for (let i = 0; i < 200; i++) {
+      state = dispatch(state, { type: 'tick', dt: 0.05 })
+      for (const slot of [0, 4]) {
+        const dd = state.divisions[slot]
+        if (!dd || !bb) continue
+        near = Math.min(near, Math.hypot(dd.ax - bb.ax, dd.ay - bb.ay))
+      }
+    }
+    expect(near).toBeLessThan(280)
+  })
+
+  it('sends destroyers under battleship guns or out to screen them', () => {
+    expect(lightDuty('fierce', 'destroyer', 2, true, 0)).toBe('under')
+    expect(lightDuty('fierce', 'cruiser', 1, true, 1)).toBe('screen')
+    expect(lightDuty('cunning', 'destroyer', 0, true, 4)).toBe('under')
+    expect(lightDuty('cunning', 'cruiser', 1, false, 1)).toBe('screen')
+    expect(lightDuty('guard', 'destroyer', 0, false, 4)).toBe('screen')
+    expect(lightDuty('guard', 'cruiser', 2, false, 1)).toBe('screen')
+    expect(lightDuty('balanced', 'destroyer', 1, false, 0)).toBe('screen')
+    expect(lightDuty('balanced', 'destroyer', 1, true, 4)).toBe('under')
+    expect(lightDuty('balanced', 'destroyer', 1, false, 4)).toBe('under')
+    expect(lightDuty('balanced', 'cruiser', 1, true, 1)).toBe('screen')
+    expect(lightDuty('balanced', 'cruiser', 0, false, 1)).toBe('wide')
   })
 
   it('leaves tactics alone for 手動', () => {

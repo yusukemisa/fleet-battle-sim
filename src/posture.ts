@@ -1,9 +1,9 @@
 import { anchorPace, CLASS_MODS, CLASS_STATS, classIndex, MANEUVER } from './balance.ts'
 import type { PostureWeights } from './commanders.ts'
-import { COMMANDERS } from './commanders.ts'
+import { COMMANDERS, lightDuty } from './commanders.ts'
 import { aimUnderThreat, wideFlankGoal } from './threat.ts'
-import { stepDivision, wheelDivision } from './tactics.ts'
-import type { Division, ManeuverId, SideId, SimState, TacticContext } from './types.ts'
+import { stepDivision, tacticById, wheelDivision } from './tactics.ts'
+import type { CommanderId, Division, ManeuverId, SideId, SimState, TacticContext, TacticId } from './types.ts'
 import { MANEUVER_IDS } from './types.ts'
 
 export interface Situation {
@@ -406,6 +406,128 @@ export function updatePlan(state: SimState, side: SideId): void {
     fleet.maneuverUntil = state.time + commander.posture.commit
     fleet.bias = sit.exposedSign || 1
   }
-  const preyAlive = (state.divisions[fleet.prey]?.alive ?? 0) > 0
-  if (sit.prey >= 0 && (!preyAlive || !committed)) fleet.prey = sit.prey
+  if (commander.id === 'balanced') commitPrey(state, side)
+  else {
+    const preyAlive = (state.divisions[fleet.prey]?.alive ?? 0) > 0
+    if (sit.prey >= 0 && (!preyAlive || !committed)) fleet.prey = sit.prey
+  }
+  directLights(state, side)
+}
+
+function setDuty(state: SimState, div: Division, tactic: TacticId): void {
+  if (div.tacticId === tactic) return
+  div.tacticId = tactic
+  div.phase = 0
+  div.phaseT = 0
+  div.holdArmed = false
+  div.focus = tactic === 'focus'
+  const fleet = state.fleets[div.side]
+  state.log.push(`${fleet.name} ${div.name}: ${tacticById(tactic).name}に切替`)
+  if (state.log.length > 8) state.log.shift()
+}
+
+/** Destroyers either duck under a battleship's bow or stand in front of our own. */
+function directLights(state: SimState, side: SideId): void {
+  const commander = state.fleets[side].commanderId
+  const enemy: SideId = side === 0 ? 1 : 0
+  let ownBb: Division | undefined
+  const enemyBbs: Division[] = []
+  const enemyDds: Division[] = []
+  for (const division of state.divisions) {
+    if (division.alive === 0) continue
+    if (division.side === side && division.classId === 'battleship') ownBb = division
+    if (division.side === enemy && division.classId === 'battleship') enemyBbs.push(division)
+    if (division.side === enemy && division.classId === 'destroyer') enemyDds.push(division)
+  }
+  const incoming = enemyDds.filter((division) => {
+    if (!ownBb) return false
+    return Math.hypot(division.ax - ownBb.ax, division.ay - ownBb.ay) < 820
+  }).length
+  const enemyScreenHome =
+    enemyDds.length > 0 &&
+    enemyDds.some((division) => {
+      let near = Infinity
+      for (const bb of enemyBbs) {
+        const dist = Math.hypot(division.ax - bb.ax, division.ay - bb.ay)
+        if (dist < near) near = dist
+      }
+      return near < 380
+    })
+  const threats = enemyDds.slice().sort((a, b) => {
+    if (!ownBb) return 0
+    return Math.hypot(a.ax - ownBb.ax, a.ay - ownBb.ay) - Math.hypot(b.ax - ownBb.ax, b.ay - ownBb.ay)
+  })
+  let threatAt = 0
+  const prey = enemyBbs[0]
+  for (const division of state.divisions) {
+    if (division.side !== side || division.alive === 0 || division.classId === 'battleship') continue
+    const duty = lightDuty(commander, division.classId, incoming, enemyScreenHome, division.slot)
+    if (duty === 'screen') {
+      division.screen = true
+      division.headOn = false
+      const threat = threats[threatAt] ?? threats[0]
+      if (threat) threatAt += 1
+      division.hunt = threat ? state.divisions.indexOf(threat) : -1
+      setDuty(state, division, 'flank')
+      continue
+    }
+    division.screen = false
+    division.headOn = duty === 'under' && commander === 'fierce'
+    division.hunt = prey ? state.divisions.indexOf(prey) : -1
+    setDuty(state, division, duty === 'under' ? 'rear' : 'broadside')
+  }
+}
+
+function preyValue(division: Division, enemyCommander: CommanderId, ex: number, ey: number, ox: number, oy: number): number {
+  const roster = Math.max(1, division.roster)
+  const hurt = 1 - division.alive / roster
+  const weight = division.classId === 'battleship' ? 5 : division.classId === 'cruiser' ? 2.1 : 0.75
+  let score = weight * (0.6 + hurt)
+  if (hurt >= 0.28 && weight >= 2) score += 2.4
+  const isolated = Math.hypot(division.ax - ex, division.ay - ey)
+  if (enemyCommander === 'fierce' && division.classId === 'battleship') score += 2.2
+  if (enemyCommander === 'guard' && (division.slot === 0 || division.slot === 4)) score += 0.6
+  if (enemyCommander === 'cunning' && isolated > 160 && division.classId !== 'battleship') score += 1.15
+  const dist = Math.hypot(division.ax - ox, division.ay - oy)
+  const flanking =
+    division.tacticId === 'flank' ||
+    division.tacticId === 'broadside' ||
+    division.tacticId === 'rear' ||
+    division.tacticId === 'encircle'
+  if (flanking && dist < 620 && division.classId !== 'battleship') score += 1.8
+  return score
+}
+
+/** One enemy division at a time. Stick with it until it is almost gone. */
+function commitPrey(state: SimState, side: SideId): void {
+  const fleet = state.fleets[side]
+  const enemy: SideId = side === 0 ? 1 : 0
+  const enemyCommander = state.fleets[enemy].commanderId
+  const ex = state.centroidX[enemy] ?? 0
+  const ey = state.centroidY[enemy] ?? 0
+  const ox = state.centroidX[side] ?? 0
+  const oy = state.centroidY[side] ?? 0
+  let best = -1
+  let bestScore = -Infinity
+  for (let index = 0; index < state.divisions.length; index++) {
+    const division = state.divisions[index]
+    if (!division || division.side !== enemy || division.alive === 0) continue
+    const score = preyValue(division, enemyCommander, ex, ey, ox, oy)
+    if (score > bestScore) {
+      bestScore = score
+      best = index
+    }
+  }
+  const current = state.divisions[fleet.prey]
+  if (current && current.side === enemy && current.alive >= 4 && fleet.prey !== best) {
+    const stuck = preyValue(current, enemyCommander, ex, ey, ox, oy)
+    if (stuck >= bestScore * 0.82) best = fleet.prey
+  }
+  if (best >= 0) fleet.prey = best
+  for (const division of state.divisions) {
+    if (division.side !== side) continue
+    division.hunt = fleet.prey
+    division.standoff = division.classId === 'battleship' && enemyCommander !== 'guard'
+    division.rush = division.classId !== 'battleship'
+  }
 }
