@@ -487,6 +487,21 @@ function directLights(state: SimState, side: SideId, fleetIndex?: number): void 
     if (division.side !== side || division.alive === 0 || division.classId === 'battleship') continue
     if (fleetIndex !== undefined && division.fleet !== fleetIndex) continue
     const duty = lightDuty(commander, division.classId, incoming, enemyScreenHome, division.slot)
+    if (commander === 'balanced' && ownBb && enemyBbs[0] && division.classId !== 'battleship') {
+      const preyBb = enemyBbs[0]
+      const fx = preyBb.ax - ownBb.ax
+      const fy = preyBb.ay - ownBb.ay
+      const flen = Math.hypot(fx, fy) || 1
+      const lead = ((division.ax - ownBb.ax) * fx + (division.ay - ownBb.ay) * fy) / flen
+      if (lead > 100) {
+        division.screen = true
+        division.headOn = false
+        const threat = threats[0]
+        division.hunt = threat ? state.divisions.indexOf(threat) : -1
+        setDuty(state, division, 'flank')
+        continue
+      }
+    }
     if (duty === 'screen') {
       division.screen = true
       division.headOn = false

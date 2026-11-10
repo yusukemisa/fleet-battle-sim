@@ -185,6 +185,37 @@ function polarPoint(prey: Division, side: number, angle: number, range: number):
   }
 }
 
+function deadZone(div: Division, ctx: TacticContext, dt: number): boolean {
+  if (!div.rush || div.classId !== 'destroyer') return false
+  let threat: Division | null = null
+  let threatRange = Infinity
+  for (const other of ctx.divisions) {
+    if (other.side === div.side || other.classId !== 'battleship' || other.alive === 0) continue
+    const dx = div.ax - other.ax
+    const dy = div.ay - other.ay
+    const range = hypot(dx, dy)
+    if (range < 500 || range > 960 || range > threatRange) continue
+    const along = dx * other.fx + dy * other.fy
+    const cross = dx * other.rx + dy * other.ry
+    if (along <= 0) continue
+    if (Math.abs(Math.atan2(cross, along)) > 0.8) continue
+    threat = other
+    threatRange = range
+  }
+  if (!threat) return false
+  const dx = div.ax - threat.ax
+  const dy = div.ay - threat.ay
+  const cross = dx * threat.rx + dy * threat.ry
+  const along = dx * threat.fx + dy * threat.fy
+  const side = Math.sign(cross) || div.flankSign || 1
+  const angle = Math.atan2(side * cross, along)
+  const goal = polarPoint(threat, side, Math.max(0.15, angle) + 0.5, Math.max(threatRange + 20, 960))
+  div.markX = goal.x
+  div.markY = goal.y
+  sailBow(div, goal.x, goal.y, threat.ax, threat.ay, 64, dt, 0.4)
+  return true
+}
+
 function hook(div: Division, ctx: TacticContext, dt: number, speed: number, mode: 'side' | 'rear'): void {
   if (div.screen) {
     intercept(div, ctx, dt)
@@ -195,6 +226,7 @@ function hook(div: Division, ctx: TacticContext, dt: number, speed: number, mode
     charge(div, ctx, dt, speed)
     return
   }
+  if (deadZone(div, ctx, dt)) return
   if (div.classId === 'destroyer' && prey.classId === 'battleship' && (div.headOn || !div.rush)) {
     underGuns(div, dt, prey, speed)
     return
@@ -250,7 +282,11 @@ function intercept(div: Division, ctx: TacticContext, dt: number): void {
     const ax = prey.ax - bb.ax
     const ay = prey.ay - bb.ay
     const len = hypot(ax, ay) || 1
-    const meet = len < 720 ? Math.max(200, len - 140) : Math.min(400, len * 0.38)
+    let meet = len < 720 ? Math.max(200, len - 140) : Math.min(400, len * 0.38)
+    if (div.rush) {
+      const lead = ((div.ax - bb.ax) * ax + (div.ay - bb.ay) * ay) / len
+      if (lead > 80) meet = Math.min(meet, 70)
+    }
     gx = bb.ax + (ax / len) * meet
     gy = bb.ay + (ay / len) * meet
   } else {
