@@ -115,6 +115,21 @@ button:disabled { opacity: 0.45; cursor: default; }
   margin-top: 8px;
 }
 
+.fleet-head {
+  display: grid;
+  grid-template-columns: 72px 88px 72px 72px 1fr auto;
+  gap: 6px;
+  align-items: center;
+  margin-top: 10px;
+}
+
+.shade-0 { box-shadow: inset 3px 0 0 #3c90d6; }
+.side.red .shade-0, section[data-side="1"] .shade-0 { box-shadow: inset 3px 0 0 #e16858; }
+section[data-side="0"] .shade-1 { box-shadow: inset 3px 0 0 #8fc0ea; }
+section[data-side="1"] .shade-1 { box-shadow: inset 3px 0 0 #f2b2a8; }
+section[data-side="0"] .shade-2 { box-shadow: inset 3px 0 0 #1d4f7a; }
+section[data-side="1"] .shade-2 { box-shadow: inset 3px 0 0 #8c342c; }
+
 .fleet-tactic, .div-row {
   display: grid;
   grid-template-columns: 1fr auto;

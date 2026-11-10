@@ -237,7 +237,7 @@ function setSelected(next: readonly number[]): void {
 
 function isManual(index: number): boolean {
   const division = sim.divisions[index]
-  return division !== undefined && sim.fleets[division.side].commanderId === 'manual'
+  return division !== undefined && (sim.fleets[division.fleet] ?? sim.fleets[division.side])?.commanderId === 'manual'
 }
 
 function manualSelection(): number[] {

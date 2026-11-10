@@ -13,12 +13,13 @@ export function withdrawalFor(state: SimState, side: SideId): Withdrawal | null 
 
 export function rotateRanks(state: SimState): void {
   const ships = state.ships
-  const groups: number[][] = [[], [], [], [], [], [], [], [], [], []]
+  const groups: number[][] = []
   let fallingN = 0
   for (let i = 0; i < ships.count; i++) {
     ships.falling[i] = 0
     if (ships.alive[i] === 0) continue
-    groups[ships.division[i] ?? 0]?.push(i)
+    const division = ships.division[i] ?? 0
+    ;(groups[division] ??= []).push(i)
   }
   for (let d = 0; d < groups.length; d++) {
     const members = groups[d]
@@ -29,8 +30,9 @@ export function rotateRanks(state: SimState): void {
     // A destroyer wing falls apart if it peels after the first hit. The line still rotates.
     if (!policy || division.classId === 'destroyer') continue
     // Against a charge, peeling the battleships opens the line they are trying to break.
-    const foe = state.fleets[division.side === 0 ? 1 : 0].commanderId
-    if (division.classId === 'battleship' && state.fleets[division.side].commanderId === 'balanced' && foe === 'fierce') {
+    const ownFleet = state.fleets[division.fleet] ?? state.fleets[division.side]
+    const foeFleet = state.fleets[ownFleet?.enemyFleet ?? (division.side === 0 ? 1 : 0)] ?? state.fleets[division.side === 0 ? 1 : 0]
+    if (division.classId === 'battleship' && ownFleet?.commanderId === 'balanced' && foeFleet?.commanderId === 'fierce') {
       continue
     }
     const limitOf = (ship: number) => hullHp(ships.shipClass[ship] ?? 0, state.stats.hp) * policy.hp

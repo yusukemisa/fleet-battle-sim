@@ -98,13 +98,31 @@ export interface Ships {
   target: Int32Array
 }
 
+export interface FleetSetup {
+  side: SideId
+  ships: number
+  formationId?: FormationId
+  commanderId?: CommanderId
+  classes?: readonly ShipClassId[]
+}
+
 export interface Fleet {
+  /** Stable index. 0 and 1 are the original fleets of each side. */
+  index: number
+  /** 0, 1, or 2 within the side. */
+  ordinal: number
   side: SideId
   name: string
+  ships: number
   formationId: FormationId
   commanderId: CommanderId
   centerX: number
   centerY: number
+  /** Living centroid, refreshed every step. */
+  meanX: number
+  meanY: number
+  /** Enemy fleet this fleet is steering toward. */
+  enemyFleet: number
   facingX: number
   facingY: number
   /** 0 while closing in, 1 while sliding past. Shared by the sweeping divisions. */
@@ -118,6 +136,8 @@ export interface Fleet {
 
 export interface Division {
   side: SideId
+  /** Index into {@link SimState.fleets}. */
+  fleet: number
   slot: DivisionSlot
   name: string
   classId: ShipClassId
@@ -218,9 +238,14 @@ export interface Tactic {
 
 export type Command =
   | { type: 'set-ship-count'; count: ShipCount }
+  | { type: 'set-fleet-count'; side: SideId; count: 1 | 2 | 3 }
+  | { type: 'set-fleet-ships'; fleet: number; ships: number }
+  | { type: 'set-fleet-formation'; fleet: number; formationId: FormationId }
+  | { type: 'set-fleet-commander'; fleet: number; commanderId: CommanderId }
   | { type: 'set-formation'; side: SideId; formationId: FormationId }
   | { type: 'set-tactic'; division: number; tacticId: TacticId }
   | { type: 'set-side-tactic'; side: SideId; tacticId: TacticId }
+  | { type: 'set-fleet-tactic'; fleet: number; tacticId: TacticId }
   | { type: 'set-commander'; side: SideId; commanderId: CommanderId }
   | { type: 'set-class'; division: number; classId: ShipClassId }
   | { type: 'order-move'; divisions: readonly number[]; x: number; y: number; heading: number }
@@ -234,6 +259,8 @@ export type Command =
 
 export interface SimConfig {
   shipCount: ShipCount
+  /** When set, each entry is one fleet. The two sides may differ in length, up to 3 each. */
+  groups?: readonly FleetSetup[]
   formations?: readonly [FormationId, FormationId]
   tactics?: readonly TacticId[]
   commanders?: readonly [CommanderId, CommanderId]
@@ -276,10 +303,12 @@ export interface ArmorHits {
 }
 
 export interface SimState {
-  shipCount: ShipCount
+  shipCount: number
+  /** Null keeps the original one-fleet-per-side battle. */
+  groups: FleetSetup[] | null
   phase: BattlePhase
   ships: Ships
-  fleets: [Fleet, Fleet]
+  fleets: Fleet[]
   divisions: Division[]
   alive: [number, number]
   lost: [number, number]

@@ -335,6 +335,15 @@ export const SWEEP = {
   lead: 240,
 } as const
 
+/** Per-fleet ship presets. A battle cannot exceed {@link MAX_SHIPS}. */
+export const FLEET_SHIP_PRESETS = [100, 500, 1000, 2000] as const
+export type FleetShipPreset = (typeof FLEET_SHIP_PRESETS)[number]
+/** Same budget as the existing 10k battle, which stays inside a 60fps step. */
+export const MAX_SHIPS = 10000
+/** Gap between friendly fleets, and how close two of them may drift. */
+export const FLEET_GAP = 920
+export const FLEET_SEPARATION = 680
+
 export const FIELD = {
   fleetCenter: 580,
   beamLife: 0.16,
