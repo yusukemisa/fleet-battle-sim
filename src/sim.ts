@@ -5,6 +5,7 @@ import { layoutFormation } from './formations.ts'
 import { batteryCooldown, cacheBows, cacheSpread, emptyTally, hasClearShot, pickBatteryTarget, pickTarget, setBatteryCooldown } from './gunnery.ts'
 import { refreshCover, rotateRanks } from './ranks.ts'
 import { collectNear, createScratch, fillSpatialHash } from './spatial.ts'
+import { orderPoints, stepMoveOrder } from './move.ts'
 import { stepPlan, updatePlan } from './posture.ts'
 import { TACTICS, stepDivision, tacticById } from './tactics.ts'
 import {
@@ -88,6 +89,10 @@ export function dispatch(state: SimState, command: Command): SimState {
       deploy(state)
       return state
     }
+    case 'order-move':
+      return orderMove(state, command.divisions, command.x, command.y, command.heading)
+    case 'order-clear':
+      return clearMove(state, command.divisions)
     case 'set-tactic':
       return applyTactic(state, command.division, command.tacticId)
     case 'set-side-tactic': {
@@ -144,6 +149,33 @@ function setSpeed(state: SimState, speed: Speed): SimState {
   const phase = state.phase
   if (phase.kind === 'finished') return state
   state.phase = { ...phase, speed }
+  return state
+}
+
+function orderMove(state: SimState, indexes: readonly number[], x: number, y: number, heading: number): SimState {
+  if (state.phase.kind === 'finished') return state
+  const allowed = indexes.filter((index) => {
+    const division = state.divisions[index]
+    return division !== undefined && state.fleets[division.side].commanderId === 'manual'
+  })
+  const points = orderPoints(state.divisions, allowed, x, y)
+  const face = wrapAngle(heading)
+  for (const point of points) {
+    const division = state.divisions[point.index]
+    if (!division) continue
+    division.ordered = true
+    division.orderX = point.x
+    division.orderY = point.y
+    division.orderH = face
+  }
+  return state
+}
+
+function clearMove(state: SimState, indexes: readonly number[]): SimState {
+  for (const index of indexes) {
+    const division = state.divisions[index]
+    if (division) division.ordered = false
+  }
   return state
 }
 
@@ -382,6 +414,10 @@ function makeDivision(side: SideId, slot: DivisionSlot): Division {
     sweepLocked: false,
     sweeping: false,
     shaped: false,
+    ordered: false,
+    orderX: 0,
+    orderY: 0,
+    orderH: 0,
     alive: 0,
     roster: 0,
   }
@@ -502,6 +538,7 @@ function placeSide(state: SimState, side: SideId, half: number): void {
     division.focus = tacticById(division.tacticId).focus
     division.focusX = enemyX
     division.focusY = 0
+    division.ordered = false
   }
   for (let i = 0; i < half; i++) {
     const at = offset + i
@@ -565,6 +602,12 @@ function step(state: SimState, dt: number): void {
     if (division.alive === 0) continue
     const enemy: SideId = division.side === 0 ? 1 : 0
     const fleet = state.fleets[division.side]
+    const manual = fleet.commanderId === 'manual'
+    if (division.ordered && !manual) division.ordered = false
+    if (division.ordered && manual) {
+      stepMoveOrder(division, dt)
+      continue
+    }
     const shaped = state.maneuver === 'shaped' && COMMANDERS[fleet.commanderId].auto
     const apart = Math.hypot(
       (state.centroidX[division.side] ?? 0) - (state.centroidX[enemy] ?? 0),

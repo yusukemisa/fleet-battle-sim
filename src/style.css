@@ -124,6 +124,8 @@ button:disabled { opacity: 0.45; cursor: default; }
 }
 
 .div-row { grid-template-columns: 42px 78px 40px 1fr; font-size: 12px; }
+.div-row.picked { background: rgba(226, 206, 122, 0.16); }
+.div-name { cursor: pointer; }
 
 .class-select { min-width: 0; }
 
