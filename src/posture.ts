@@ -3,7 +3,7 @@ import type { PostureWeights } from './commanders.ts'
 import { COMMANDERS, lightDuty } from './commanders.ts'
 import { aimUnderThreat, wideFlankGoal } from './threat.ts'
 import { stepDivision, tacticById, wheelDivision } from './tactics.ts'
-import type { CommanderId, Division, ManeuverId, SideId, SimState, TacticContext, TacticId } from './types.ts'
+import type { CommanderId, Division, Fleet, ManeuverId, SideId, SimState, TacticContext, TacticId } from './types.ts'
 import { MANEUVER_IDS } from './types.ts'
 
 export interface Situation {
@@ -432,7 +432,47 @@ export function updatePlan(state: SimState, side: SideId, fleetIndex?: number): 
     const preyAlive = (state.divisions[fleet.prey]?.alive ?? 0) > 0
     if (sit.prey >= 0 && (!preyAlive || !committed)) fleet.prey = sit.prey
   }
+  chooseCounter(state, fleet, sit)
   directLights(state, fleet.side, fleetIndex)
+}
+
+/**
+ * A fierce fleet is rushing when it still faces us and its battleships are closing.
+ * The opening second has no velocity yet, so facing alone is enough to lock a plan.
+ */
+function rushAxis(state: SimState, fleet: Fleet, sit: Situation): boolean {
+  const foe = state.fleets[fleet.enemyFleet]
+  if (!foe || foe.commanderId !== 'fierce') return false
+  const dx = sit.ownX - sit.enemyX
+  const dy = sit.ownY - sit.enemyY
+  const dist = hypot(dx, dy) || 1
+  const facing = foe.facingX * (dx / dist) + foe.facingY * (dy / dist)
+  if (facing < 0.15) return false
+  if (state.time < 1.5) return true
+  let closing = 0
+  let seen = 0
+  for (const division of state.divisions) {
+    if (division.fleet !== foe.index || division.alive === 0 || division.classId !== 'battleship') continue
+    closing += (-division.vx * dx - division.vy * dy) / dist
+    seen += 1
+  }
+  return seen === 0 || closing > 8
+}
+
+/** Pick one counter and keep it. Only 方円 and 鶴翼 against a rush leave the normal line. */
+function chooseCounter(state: SimState, fleet: Fleet, sit: Situation): void {
+  if (fleet.commanderId !== 'balanced') return
+  if (fleet.plan !== 'none' && state.time < fleet.planUntil) return
+  if (state.time > 6 && fleet.plan !== 'none') return
+  const foe = state.fleets[fleet.enemyFleet]
+  let next: Fleet['plan'] = 'none'
+  if (foe && rushAxis(state, fleet, sit)) {
+    if (fleet.formationId === 'houen' && foe.formationId !== 'houen' && foe.formationId !== 'gyorin') next = 'ring'
+    else if (fleet.formationId === 'kakuyoku') next = 'crane'
+  }
+  if (next === fleet.plan) return
+  fleet.plan = next
+  fleet.planUntil = state.time + 18
 }
 
 function setDuty(state: SimState, div: Division, tactic: TacticId): void {
@@ -495,7 +535,37 @@ function directLights(state: SimState, side: SideId, fleetIndex?: number): void 
         if (heavy.side !== side || heavy.classId !== 'battleship') continue
         if (fleetIndex !== undefined && heavy.fleet !== fleetIndex) continue
         heavy.screen = true
+        if (home.plan === 'ring') heavy.phase = 5
       }
+    }
+    if (commander === 'balanced' && home?.plan === 'crane' && division.classId === 'destroyer' && ownBb && enemyBbs[0]) {
+      const preyBb = enemyBbs[0]
+      const fx = preyBb.ax - ownBb.ax
+      const fy = preyBb.ay - ownBb.ay
+      const flen = Math.hypot(fx, fy) || 1
+      const lead = ((division.ax - ownBb.ax) * fx + (division.ay - ownBb.ay) * fy) / flen
+      const rushRange = Math.hypot(preyBb.ax - ownBb.ax, preyBb.ay - ownBb.ay)
+      if (lead > 80) {
+        division.screen = true
+        division.headOn = false
+        division.standoff = false
+        const threat = threats[0]
+        division.hunt = threat ? state.divisions.indexOf(threat) : -1
+        setDuty(state, division, 'flank')
+        division.phase = 4
+        continue
+      }
+      if (rushRange > 760) {
+        division.screen = true
+        division.headOn = false
+        division.standoff = false
+        const threat = threats[0]
+        division.hunt = threat ? state.divisions.indexOf(threat) : -1
+        setDuty(state, division, 'flank')
+        division.phase = 0
+        continue
+      }
+      if (division.phase === 4) division.phase = 0
     }
     if (commander === 'balanced' && home?.cover) {
       division.screen = true

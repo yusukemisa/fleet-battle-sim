@@ -286,6 +286,15 @@ function intercept(div: Division, ctx: TacticContext, dt: number): void {
     if (div.rush) {
       const lead = ((div.ax - bb.ax) * ax + (div.ay - bb.ay) * ay) / len
       if (lead > 80) meet = Math.min(meet, 70)
+      if (div.phase === 4) {
+        gx = bb.ax + (ax / len) * meet
+        gy = bb.ay + (ay / len) * meet
+        div.markX = gx
+        div.markY = gy
+        steer(div, gx - div.ax, gy - div.ay, 64, dt)
+        face(div, prey.ax, prey.ay, dt)
+        return
+      }
     }
     if (div.standoff && div.classId !== 'battleship') {
       const back = div.classId === 'destroyer' ? 420 : 80
@@ -393,20 +402,26 @@ function holdSpread(div: Division, ctx: TacticContext, dt: number): void {
   const prey = preyFor(div, ctx)
   const tx = prey ? prey.ax : ctx.enemyX
   const ty = prey ? prey.ay : ctx.enemyY
-  const reach = 640
   const ax = tx - ctx.ownX
   const ay = ty - ctx.ownY
   const len = hypot(ax, ay) || 1
   const ux = ax / len
   const uy = ay / len
-  const lat = (div.ax - ctx.ownX) * -uy + (div.ay - ctx.ownY) * ux
-  const clamped = Math.max(-280, Math.min(280, lat))
-  const gx = tx - ux * reach - uy * clamped
-  const gy = ty - uy * reach + ux * clamped
+  let reach = 640
+  let lat = (div.ax - ctx.ownX) * -uy + (div.ay - ctx.ownY) * ux
+  lat = Math.max(-280, Math.min(280, lat))
+  const range = hypot(tx - div.ax, ty - div.ay)
+  let speed = range < reach ? 50 : 22
+  if (div.phase === 5) {
+    reach = 780
+    lat = (div.slot - 2) * 120
+    speed = range < 700 ? 56 : range > 900 ? 24 : 8
+  }
+  const gx = tx - ux * reach - uy * lat
+  const gy = ty - uy * reach + ux * lat
   div.markX = gx
   div.markY = gy
-  const range = hypot(tx - div.ax, ty - div.ay)
-  steer(div, gx - div.ax, gy - div.ay, range < reach ? 50 : 22, dt)
+  steer(div, gx - div.ax, gy - div.ay, speed, dt)
   face(div, tx, ty, dt)
 }
 
@@ -513,6 +528,13 @@ function backFromDestroyer(div: Division, ctx: TacticContext, dt: number): boole
 }
 
 export function stepDivision(div: Division, ctx: TacticContext, dt: number, wheel = true): void {
+  if (div.phase === 5 && div.classId === 'battleship') {
+    div.shaped = false
+    div.sweeping = false
+    tagged(div, true, ctx)
+    holdSpread(div, ctx, dt)
+    return
+  }
   if (backFromDestroyer(div, ctx, dt)) return
   div.shaped = false
   const tactic = TACTICS[div.tacticId]

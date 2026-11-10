@@ -125,6 +125,14 @@ export interface Fleet {
   enemyFleet: number
   /** Latched when the fleet starts as a ring around its battleships. */
   cover: boolean
+  /**
+   * Formation-scoped answer to an enemy rush.
+   * `ring` flattens 方円 onto the threat axis. `crane` pulls 鶴翼 wings back.
+   * Other formations stay `none`.
+   */
+  plan: 'none' | 'ring' | 'crane'
+  /** Do not switch plans before this time. */
+  planUntil: number
   facingX: number
   facingY: number
   /** 0 while closing in, 1 while sliding past. Shared by the sweeping divisions. */
