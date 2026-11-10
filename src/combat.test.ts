@@ -86,6 +86,8 @@ function damageFrom(targetHeading: number, shooterX: number): number {
   state.stats.hitChance = 1
   const ships = state.ships
   for (let i = 0; i < ships.count; i++) ships.cooldown[i] = 5
+  ships.shipClass[0] = 0
+  ships.shipClass[50] = 0
   ships.x[0] = shooterX
   ships.y[0] = 0
   ships.heading[0] = Math.atan2(0, -shooterX)
@@ -162,6 +164,8 @@ function aimingShip(speed: Speed): SimState {
     ships.cooldown[i] = 100
     if (i !== 0 && i !== 50) ships.alive[i] = 0
   }
+  ships.shipClass[0] = 0
+  ships.shipClass[50] = 0
   ships.x[0] = 0
   ships.y[0] = 0
   ships.heading[0] = 0

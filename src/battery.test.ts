@@ -92,6 +92,7 @@ function duel(heading: number, targetAngle: number, distance: number): SimState 
   }
   ships.alive[0] = 1
   ships.side[0] = 0
+  ships.shipClass[0] = 0
   ships.hp[0] = SHIP_STATS.hp
   ships.cooldown[0] = 0
   ships.x[0] = 0
@@ -99,6 +100,7 @@ function duel(heading: number, targetAngle: number, distance: number): SimState 
   ships.heading[0] = heading
   ships.alive[50] = 1
   ships.side[50] = 1
+  ships.shipClass[50] = 0
   ships.hp[50] = SHIP_STATS.hp
   ships.cooldown[50] = 100
   ships.x[50] = Math.cos(targetAngle) * distance

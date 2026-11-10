@@ -1,4 +1,4 @@
-import { GUNNERY, type BatterySpec } from './balance.ts'
+import { CLASS_STATS, GUNNERY, hullHp, type BatterySpec } from './balance.ts'
 import { armorFactor, inArc, inBattery } from './combat.ts'
 import { withdrawalFor } from './ranks.ts'
 import { collectNear } from './spatial.ts'
@@ -31,7 +31,8 @@ function outOfReach(state: SimState, index: number): boolean {
   const enemy = side === 0 ? 1 : 0
   const dx = (state.centroidX[enemy] ?? 0) - (ships.x[index] ?? 0)
   const dy = (state.centroidY[enemy] ?? 0) - (ships.y[index] ?? 0)
-  const need = state.stats.range + (state.scratch.spread[enemy] ?? 0)
+  const reach = CLASS_STATS[ships.shipClass[index] ?? 0]?.range ?? state.stats.range
+  const need = reach + (state.scratch.spread[enemy] ?? 0)
   return dx * dx + dy * dy > need * need
 }
 
@@ -110,6 +111,7 @@ export function pickBatteryTarget(
       }
       continue
     }
+    const victim = CLASS_STATS[ships.shipClass[other] ?? 0] ?? stats
     const factor = armorFactor(
       scratch.bowX[other] ?? 1,
       scratch.bowY[other] ?? 0,
@@ -117,7 +119,7 @@ export function pickBatteryTarget(
       oy,
       sx,
       sy,
-      stats,
+      victim,
       scratch.cosBow,
       scratch.cosStern,
     )
@@ -137,7 +139,7 @@ export function pickBatteryTarget(
     }
     const killing = blow >= hpLeft
     const finish = killing ? GUNNERY.finish : 1
-    const low = 1 + GUNNERY.lowHp * (1 - hp / Math.max(1, stats.hp))
+    const low = 1 + GUNNERY.lowHp * (1 - hp / Math.max(1, hullHp(ships.shipClass[other] ?? 0, state.stats.hp)))
     let score = blow * finish * low
     if (focus && division) {
       const fd = Math.hypot(ox - division.focusX, oy - division.focusY)
@@ -161,7 +163,7 @@ export function pickBatteryTarget(
 /** Best in-arc target by expected damage, or -1 when a withdrawing ship should hold fire. */
 export function pickTarget(state: SimState, index: number): number {
   const ships = state.ships
-  const stats = state.stats
+  const stats = CLASS_STATS[ships.shipClass[index] ?? 0] ?? state.stats
   const scratch = state.scratch
   const sx = ships.x[index] ?? 0
   const sy = ships.y[index] ?? 0
@@ -196,9 +198,10 @@ export function pickTarget(state: SimState, index: number): number {
     if (d2 > rangeSq || d2 < 1e-6) continue
     const forward = dx * hx + dy * hy
     if (forward <= 0) continue
-    const cosArc = scratch.cosArc
+    const cosArc = Math.cos(stats.arc)
     if (forward * forward < d2 * cosArc * cosArc) continue
     const dist = Math.sqrt(d2)
+    const victim = CLASS_STATS[ships.shipClass[other] ?? 0] ?? stats
     const factor = armorFactor(
       scratch.bowX[other] ?? 1,
       scratch.bowY[other] ?? 0,
@@ -206,7 +209,7 @@ export function pickTarget(state: SimState, index: number): number {
       oy,
       sx,
       sy,
-      stats,
+      victim,
       scratch.cosBow,
       scratch.cosStern,
     )
@@ -225,7 +228,7 @@ export function pickTarget(state: SimState, index: number): number {
     }
     const killing = blow >= hpLeft
     const finish = killing ? GUNNERY.finish : 1
-    const low = 1 + GUNNERY.lowHp * (1 - hp / Math.max(1, stats.hp))
+    const low = 1 + GUNNERY.lowHp * (1 - hp / Math.max(1, hullHp(ships.shipClass[other] ?? 0, state.stats.hp)))
     let score = blow * finish * low
     if (focus && division) {
       const fd = Math.hypot(ox - division.focusX, oy - division.focusY)
@@ -247,7 +250,7 @@ export function pickTarget(state: SimState, index: number): number {
 /** Living enemy inside weapon range and the bow arc, ignoring armor and reservations. */
 export function hasClearShot(state: SimState, index: number): boolean {
   const ships = state.ships
-  const stats = state.stats
+  const stats = CLASS_STATS[ships.shipClass[index] ?? 0] ?? state.stats
   const scratch = state.scratch
   if (outOfReach(state, index)) return false
   const sx = ships.x[index] ?? 0
@@ -266,7 +269,7 @@ export function hasClearShot(state: SimState, index: number): boolean {
     const dx = ox - sx
     const dy = oy - sy
     if (dx * dx + dy * dy > rangeSq) continue
-    if (inArc(hx, hy, sx, sy, ox, oy, scratch.cosArc)) return true
+    if (inArc(hx, hy, sx, sy, ox, oy, Math.cos(stats.arc))) return true
   }
   return false
 }

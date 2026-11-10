@@ -1,3 +1,4 @@
+import { hullHp } from './balance.ts'
 import { COMMANDERS, type Withdrawal } from './commanders.ts'
 import { inArc } from './combat.ts'
 import { collectNear, fillSpatialHash } from './spatial.ts'
@@ -25,11 +26,12 @@ export function rotateRanks(state: SimState): void {
     const division = state.divisions[d]
     if (!division) continue
     const policy = withdrawalFor(state, division.side)
-    if (!policy) continue
-    const limit = state.stats.hp * policy.hp
+    // A destroyer wing falls apart if it peels after the first hit. The line still rotates.
+    if (!policy || division.classId === 'destroyer') continue
+    const limitOf = (ship: number) => hullHp(ships.shipClass[ship] ?? 0, state.stats.hp) * policy.hp
     let hurt = false
     for (const ship of members) {
-      if ((ships.hp[ship] ?? 0) < limit) hurt = true
+      if ((ships.hp[ship] ?? 0) < limitOf(ship)) hurt = true
     }
     if (!hurt) {
       for (const ship of members) {
@@ -63,7 +65,7 @@ export function rotateRanks(state: SimState): void {
       if (ship === undefined || !slot) continue
       ships.slotX[ship] = slot.x
       ships.slotY[ship] = slot.y - policy.depth
-      if ((ships.hp[ship] ?? 0) < limit) {
+      if ((ships.hp[ship] ?? 0) < limitOf(ship)) {
         ships.falling[ship] = 1
         fallingN += 1
       }

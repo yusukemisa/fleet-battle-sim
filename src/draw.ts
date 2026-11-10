@@ -1,4 +1,4 @@
-import { FIELD } from './balance.ts'
+import { CLASS_MODS, FIELD, SHIP_CLASS_IDS, classMods } from './balance.ts'
 import { FORMATIONS } from './formations.ts'
 import type { SimState } from './types.ts'
 
@@ -35,6 +35,7 @@ export function draw(ctx: CanvasRenderingContext2D, state: SimState, camera: Cam
   strokeBeams(ctx, state, camera, width, height)
   strokeBooms(ctx, state, camera, width, height)
   drawLegend(ctx, state, height)
+  drawClassKey(ctx, width, height)
 }
 
 export function fitCamera(state: SimState, width: number, height: number): Camera {
@@ -93,32 +94,35 @@ function paintShips(
   color: string,
 ): void {
   const ships = state.ships
-  const hullW = Math.max(1.5, size * 0.64)
-  const halfLen = hullW
   ctx.strokeStyle = color
   ctx.lineCap = 'butt'
-  ctx.lineWidth = hullW
-  ctx.beginPath()
-  const bow = new Path2D()
-  for (let i = 0; i < ships.count; i++) {
-    if (ships.alive[i] === 0) continue
-    const flash = (ships.flash[i] ?? 0) > 0.55
-    if (side === 'flash' ? !flash : flash || ships.side[i] !== side) continue
-    const p = worldToScreen(ships.x[i] ?? 0, ships.y[i] ?? 0, camera, width, height)
-    const heading = ships.heading[i] ?? 0
-    const hx = Math.cos(heading)
-    const hy = -Math.sin(heading)
-    const fx = hx * halfLen
-    const fy = hy * halfLen
-    ctx.moveTo(p.x - fx, p.y - fy)
-    ctx.lineTo(p.x + fx, p.y + fy)
-    const nose = halfLen + hullW * 0.22
-    bow.moveTo(p.x + hx * nose, p.y + hy * nose)
-    bow.lineTo(p.x + hx * (nose + hullW * 0.55), p.y + hy * (nose + hullW * 0.55))
+  for (let klass = 0; klass < SHIP_CLASS_IDS.length; klass++) {
+    const mods = classMods(klass)
+    const hullW = Math.max(0.5, size * 0.7 * mods.girth)
+    const halfLen = Math.max(hullW * 0.9, size * 0.9 * mods.length)
+    ctx.lineWidth = hullW
+    ctx.beginPath()
+    const bow = new Path2D()
+    for (let i = 0; i < ships.count; i++) {
+      if (ships.alive[i] === 0 || (ships.shipClass[i] ?? 0) !== klass) continue
+      const flash = (ships.flash[i] ?? 0) > 0.55
+      if (side === 'flash' ? !flash : flash || ships.side[i] !== side) continue
+      const p = worldToScreen(ships.x[i] ?? 0, ships.y[i] ?? 0, camera, width, height)
+      const heading = ships.heading[i] ?? 0
+      const hx = Math.cos(heading)
+      const hy = -Math.sin(heading)
+      const fx = hx * halfLen
+      const fy = hy * halfLen
+      ctx.moveTo(p.x - fx, p.y - fy)
+      ctx.lineTo(p.x + fx, p.y + fy)
+      const nose = halfLen + hullW * 0.22
+      bow.moveTo(p.x + hx * nose, p.y + hy * nose)
+      bow.lineTo(p.x + hx * (nose + hullW * 0.55), p.y + hy * (nose + hullW * 0.55))
+    }
+    ctx.stroke()
+    ctx.lineWidth = Math.max(0.6, hullW * 0.62)
+    ctx.stroke(bow)
   }
-  ctx.stroke()
-  ctx.lineWidth = hullW * 0.62
-  ctx.stroke(bow)
 }
 
 function blockSize(zoom: number, count: number): number {
@@ -228,6 +232,33 @@ function drawLegend(ctx: CanvasRenderingContext2D, state: SimState, height: numb
     ctx.fillRect(x + 10, y + 14 + index * 22, 9, 9)
     ctx.fillStyle = '#d5dbe6'
     ctx.fillText(lines[index] ?? '', x + 26, y + 23 + index * 22)
+  })
+}
+
+function drawClassKey(ctx: CanvasRenderingContext2D, width: number, height: number): void {
+  const rows = SHIP_CLASS_IDS.map((id) => CLASS_MODS[id])
+  ctx.font = '12px "WenQuanYi Micro Hei", "Droid Sans Fallback", sans-serif'
+  const boxW = 108
+  const boxH = 16 + rows.length * 16
+  const x = width - boxW - 14
+  const y = height - boxH - 14
+  ctx.fillStyle = 'rgba(8, 12, 20, 0.82)'
+  ctx.strokeStyle = 'rgba(186, 198, 214, 0.35)'
+  ctx.lineWidth = 1
+  ctx.fillRect(x, y, boxW, boxH)
+  ctx.strokeRect(x + 0.5, y + 0.5, boxW - 1, boxH - 1)
+  rows.forEach((mods, index) => {
+    const rowY = y + 16 + index * 16
+    ctx.strokeStyle = '#d5dbe6'
+    ctx.lineWidth = Math.max(1, 3.2 * mods.girth)
+    ctx.lineCap = 'butt'
+    ctx.beginPath()
+    const len = 8 + 10 * mods.length
+    ctx.moveTo(x + 10, rowY - 3)
+    ctx.lineTo(x + 10 + len, rowY - 3)
+    ctx.stroke()
+    ctx.fillStyle = '#d5dbe6'
+    ctx.fillText(mods.name, x + 48, rowY)
   })
 }
 
