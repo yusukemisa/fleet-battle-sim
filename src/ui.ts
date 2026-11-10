@@ -30,6 +30,7 @@ export function mountHud(
   onCommand: (command: Command) => void,
   onFit: () => void,
   phaseKind: () => SimState['phase']['kind'],
+  onSelectDivision: (index: number, shift: boolean) => void = () => {},
 ): Hud {
   parent.innerHTML = `
     <header id="bar">
@@ -53,7 +54,7 @@ export function mountHud(
     </header>
     <ol id="log"></ol>
     <details id="orders">
-      <summary title="艦種は開戦前、戦術は戦闘中も、分艦隊ごとに変更できます">分艦隊の艦種と戦術</summary>
+      <summary title="手動の隊名をクリックして選び、地図を押してドラッグすると移動を命じます">分艦隊の艦種と戦術</summary>
       <div class="order-grid">
         <section data-side="0"></section>
         <section data-side="1"></section>
@@ -138,9 +139,10 @@ export function mountHud(
     fleetTactic.append(fleetSelect, apply)
     section.append(fleetTactic)
     for (let slot = 0; slot < 5; slot++) {
-      const row = document.createElement('label')
+      const row = document.createElement('div')
       row.className = 'div-row'
       const name = document.createElement('span')
+      name.className = 'div-name'
       const count = document.createElement('span')
       count.className = 'remain'
       const klass = document.createElement('select')
@@ -159,6 +161,11 @@ export function mountHud(
       const select = document.createElement('select')
       fillTactics(select)
       const index = side * 5 + slot
+      name.title = 'クリックで選択。Shift で追加。地図を押してドラッグすると着地点と向き。'
+      name.addEventListener('click', (event) => {
+        event.preventDefault()
+        onSelectDivision(index, event.shiftKey)
+      })
       select.addEventListener('change', () => {
         const tacticId = parseTacticId(select.value)
         if (tacticId !== null) onCommand({ type: 'set-tactic', division: index, tacticId })
@@ -204,7 +211,7 @@ export function mountHud(
   }
 }
 
-export function syncHud(parent: HTMLElement, hud: Hud, state: SimState): void {
+export function syncHud(parent: HTMLElement, hud: Hud, state: SimState, picked: readonly number[] = []): void {
   const setup = state.phase.kind === 'setup'
   hud.shipCount.disabled = !setup
   if (hud.shipCount.value !== String(state.shipCount)) hud.shipCount.value = String(state.shipCount)
@@ -243,6 +250,7 @@ export function syncHud(parent: HTMLElement, hud: Hud, state: SimState): void {
     const division = state.divisions[index]
     const select = hud.division[index]
     if (!division || !select) return
+    row.classList.toggle('picked', picked.includes(index))
     const name = row.querySelector('span')
     const remain = row.querySelector('.remain')
     if (name) name.textContent = division.name

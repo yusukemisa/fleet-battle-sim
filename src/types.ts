@@ -147,6 +147,11 @@ export interface Division {
   sweeping: boolean
   /** Shaped steering owns this division: bows follow the division, not a shifting slot. */
   shaped: boolean
+  /** Manual move order. The block sails to the point, then yaws onto `orderH`. */
+  ordered: boolean
+  orderX: number
+  orderY: number
+  orderH: number
   alive: number
   roster: number
 }
@@ -196,6 +201,8 @@ export type Command =
   | { type: 'set-side-tactic'; side: SideId; tacticId: TacticId }
   | { type: 'set-commander'; side: SideId; commanderId: CommanderId }
   | { type: 'set-class'; division: number; classId: ShipClassId }
+  | { type: 'order-move'; divisions: readonly number[]; x: number; y: number; heading: number }
+  | { type: 'order-clear'; divisions: readonly number[] }
   | { type: 'start' }
   | { type: 'pause' }
   | { type: 'resume' }

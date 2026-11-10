@@ -92,7 +92,7 @@ export const COMMANDERS = {
   manual: {
     id: 'manual',
     name: '手動',
-    summary: '戦術は自分で指定する。',
+    summary: '戦術は自分で指定する。隊をクリックし、地図をドラッグして移動を命じる。',
     auto: false,
     base: EMPTY,
     prefer: ['charge'],

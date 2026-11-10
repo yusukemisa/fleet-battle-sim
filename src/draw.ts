@@ -1,4 +1,5 @@
 import { CLASS_MODS, FIELD, SHIP_CLASS_IDS, classMods } from './balance.ts'
+import { orderPoints } from './move.ts'
 import { FORMATIONS } from './formations.ts'
 import type { SimState } from './types.ts'
 
@@ -16,7 +17,28 @@ let stars: { x: number; y: number; r: number; a: number }[] = []
 let starW = 0
 let starH = 0
 
-export function draw(ctx: CanvasRenderingContext2D, state: SimState, camera: Camera, width: number, height: number): void {
+export interface OrderDraft {
+  x: number
+  y: number
+  heading: number
+  divisions: readonly number[]
+}
+
+export interface OrderOverlay {
+  selected: readonly number[]
+  draft: OrderDraft | null
+}
+
+const NO_OVERLAY: OrderOverlay = { selected: [], draft: null }
+
+export function draw(
+  ctx: CanvasRenderingContext2D,
+  state: SimState,
+  camera: Camera,
+  width: number,
+  height: number,
+  overlay: OrderOverlay = NO_OVERLAY,
+): void {
   ensureStars(width, height)
   ctx.fillStyle = '#070b14'
   ctx.fillRect(0, 0, width, height)
@@ -34,6 +56,7 @@ export function draw(ctx: CanvasRenderingContext2D, state: SimState, camera: Cam
 
   strokeBeams(ctx, state, camera, width, height)
   strokeBooms(ctx, state, camera, width, height)
+  drawOrders(ctx, state, camera, width, height, overlay)
   drawLegend(ctx, state, height)
   drawClassKey(ctx, width, height)
 }
@@ -123,6 +146,134 @@ function paintShips(
     ctx.lineWidth = Math.max(0.6, hullW * 0.62)
     ctx.stroke(bow)
   }
+}
+
+function drawOrders(
+  ctx: CanvasRenderingContext2D,
+  state: SimState,
+  camera: Camera,
+  width: number,
+  height: number,
+  overlay: OrderOverlay,
+): void {
+  ctx.save()
+  ctx.lineCap = 'round'
+  ctx.lineJoin = 'round'
+  ctx.setLineDash([])
+  for (let index = 0; index < state.divisions.length; index++) {
+    const division = state.divisions[index]
+    if (!division || division.alive === 0) continue
+    if (state.fleets[division.side].commanderId !== 'manual') continue
+    const selected = overlay.selected.includes(index)
+    const at = worldToScreen(division.ax, division.ay, camera, width, height)
+    ctx.beginPath()
+    ctx.arc(at.x, at.y, selected ? 8 : 5, 0, Math.PI * 2)
+    ctx.strokeStyle = selected ? 'rgba(244, 236, 214, 0.95)' : 'rgba(186, 198, 214, 0.45)'
+    ctx.lineWidth = selected ? 1.6 : 1
+    ctx.stroke()
+  }
+  for (let index = 0; index < state.divisions.length; index++) {
+    const division = state.divisions[index]
+    if (!division?.ordered) continue
+    paintOrder(ctx, state, camera, width, height, index, division.orderX, division.orderY, division.orderH, 0.85)
+  }
+  if (overlay.draft && overlay.draft.divisions.length > 0) {
+    const points = orderPoints(state.divisions, overlay.draft.divisions, overlay.draft.x, overlay.draft.y)
+    for (const point of points) {
+      paintOrder(ctx, state, camera, width, height, point.index, point.x, point.y, overlay.draft.heading, 0.45)
+    }
+  }
+  ctx.restore()
+}
+
+function paintOrder(
+  ctx: CanvasRenderingContext2D,
+  state: SimState,
+  camera: Camera,
+  width: number,
+  height: number,
+  index: number,
+  x: number,
+  y: number,
+  heading: number,
+  alpha: number,
+): void {
+  const division = state.divisions[index]
+  if (!division) return
+  const from = worldToScreen(division.ax, division.ay, camera, width, height)
+  const to = worldToScreen(x, y, camera, width, height)
+  ctx.globalAlpha = alpha
+  ctx.setLineDash([7, 6])
+  ctx.strokeStyle = 'rgba(214, 226, 236, 0.9)'
+  ctx.lineWidth = 1.25
+  ctx.beginPath()
+  ctx.moveTo(from.x, from.y)
+  ctx.lineTo(to.x, to.y)
+  ctx.stroke()
+  ctx.setLineDash([])
+  const box = slotBox(state, index)
+  if (box) {
+    const fx = Math.cos(heading)
+    const fy = Math.sin(heading)
+    const rx = fy
+    const ry = -fx
+    const pad = 16
+    const corners: readonly (readonly [number, number])[] = [
+      [box.minX - pad, box.maxY + pad],
+      [box.maxX + pad, box.maxY + pad],
+      [box.maxX + pad, box.minY - pad],
+      [box.minX - pad, box.minY - pad],
+    ]
+    ctx.beginPath()
+    corners.forEach((corner, cornerIndex) => {
+      const wx = x + rx * corner[0] + fx * corner[1]
+      const wy = y + ry * corner[0] + fy * corner[1]
+      const p = worldToScreen(wx, wy, camera, width, height)
+      if (cornerIndex === 0) ctx.moveTo(p.x, p.y)
+      else ctx.lineTo(p.x, p.y)
+    })
+    ctx.closePath()
+    ctx.strokeStyle = 'rgba(214, 226, 236, 0.75)'
+    ctx.lineWidth = 1
+    ctx.stroke()
+  }
+  ctx.beginPath()
+  ctx.arc(to.x, to.y, 5, 0, Math.PI * 2)
+  ctx.strokeStyle = 'rgba(244, 236, 214, 0.95)'
+  ctx.lineWidth = 1.5
+  ctx.stroke()
+  const tip = worldToScreen(x + Math.cos(heading) * 52, y + Math.sin(heading) * 52, camera, width, height)
+  const left = worldToScreen(x + Math.cos(heading) * 34 + Math.sin(heading) * 10, y + Math.sin(heading) * 34 - Math.cos(heading) * 10, camera, width, height)
+  const right = worldToScreen(x + Math.cos(heading) * 34 - Math.sin(heading) * 10, y + Math.sin(heading) * 34 + Math.cos(heading) * 10, camera, width, height)
+  ctx.beginPath()
+  ctx.moveTo(to.x, to.y)
+  ctx.lineTo(tip.x, tip.y)
+  ctx.moveTo(left.x, left.y)
+  ctx.lineTo(tip.x, tip.y)
+  ctx.lineTo(right.x, right.y)
+  ctx.stroke()
+  ctx.globalAlpha = 1
+}
+
+function slotBox(state: SimState, index: number): { minX: number; maxX: number; minY: number; maxY: number } | null {
+  const ships = state.ships
+  let minX = Infinity
+  let maxX = -Infinity
+  let minY = Infinity
+  let maxY = -Infinity
+  let n = 0
+  for (let i = 0; i < ships.count; i++) {
+    if (ships.alive[i] === 0 || ships.division[i] !== index) continue
+    const sx = ships.slotX[i] ?? 0
+    const sy = ships.slotY[i] ?? 0
+    if (sx < minX) minX = sx
+    if (sx > maxX) maxX = sx
+    if (sy < minY) minY = sy
+    if (sy > maxY) maxY = sy
+    n += 1
+  }
+  if (n === 0) return null
+  return { minX, maxX, minY, maxY }
 }
 
 function blockSize(zoom: number, count: number): number {
