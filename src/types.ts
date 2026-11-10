@@ -123,6 +123,8 @@ export interface Fleet {
   meanY: number
   /** Enemy fleet this fleet is steering toward. */
   enemyFleet: number
+  /** Latched when the fleet starts as a ring around its battleships. */
+  cover: boolean
   facingX: number
   facingY: number
   /** 0 while closing in, 1 while sliding past. Shared by the sweeping divisions. */

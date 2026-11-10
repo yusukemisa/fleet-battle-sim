@@ -287,6 +287,29 @@ function intercept(div: Division, ctx: TacticContext, dt: number): void {
       const lead = ((div.ax - bb.ax) * ax + (div.ay - bb.ay) * ay) / len
       if (lead > 80) meet = Math.min(meet, 70)
     }
+    if (div.standoff && div.classId !== 'battleship') {
+      const back = div.classId === 'destroyer' ? 420 : 80
+      const side = div.flankSign || 1
+      let refX = ctx.enemyX
+      let refY = ctx.enemyY
+      for (const other of ctx.divisions) {
+        if (other.side !== div.side && other.classId === 'battleship' && other.alive > 0) {
+          refX = other.ax
+          refY = other.ay
+          break
+        }
+      }
+      const dx = bb.ax - refX
+      const dy = bb.ay - refY
+      const bl = hypot(dx, dy) || 1
+      gx = bb.ax + (dx / bl) * back + (-dy / bl) * side * 70
+      gy = bb.ay + (dy / bl) * back + (dx / bl) * side * 70
+      div.markX = gx
+      div.markY = gy
+      steer(div, gx - div.ax, gy - div.ay, 64, dt)
+      face(div, ctx.enemyX, ctx.enemyY, dt)
+      return
+    }
     gx = bb.ax + (ax / len) * meet
     gy = bb.ay + (ay / len) * meet
   } else {
@@ -301,6 +324,11 @@ function intercept(div: Division, ctx: TacticContext, dt: number): void {
   div.markY = gy
   const faceX = prey ? prey.ax : ctx.enemyX
   const faceY = prey ? prey.ay : ctx.enemyY
+  if (div.standoff && div.classId !== 'battleship') {
+    steer(div, gx - div.ax, gy - div.ay, 60, dt)
+    face(div, faceX, faceY, dt)
+    return
+  }
   sailBow(div, gx, gy, faceX, faceY, 60, dt, 0.35)
 }
 
@@ -358,6 +386,28 @@ function underGuns(div: Division, dt: number, prey: Division, speed: number): vo
     return
   }
   sailBow(div, gx, gy, prey.ax, prey.ay, dash, dt, 0.42)
+}
+
+/** Ring battleships keep their lateral spread and fall back to bow range instead of stacking on one pin point. */
+function holdSpread(div: Division, ctx: TacticContext, dt: number): void {
+  const prey = preyFor(div, ctx)
+  const tx = prey ? prey.ax : ctx.enemyX
+  const ty = prey ? prey.ay : ctx.enemyY
+  const reach = 640
+  const ax = tx - ctx.ownX
+  const ay = ty - ctx.ownY
+  const len = hypot(ax, ay) || 1
+  const ux = ax / len
+  const uy = ay / len
+  const lat = (div.ax - ctx.ownX) * -uy + (div.ay - ctx.ownY) * ux
+  const clamped = Math.max(-280, Math.min(280, lat))
+  const gx = tx - ux * reach - uy * clamped
+  const gy = ty - uy * reach + ux * clamped
+  div.markX = gx
+  div.markY = gy
+  const range = hypot(tx - div.ax, ty - div.ay)
+  steer(div, gx - div.ax, gy - div.ay, range < reach ? 50 : 22, dt)
+  face(div, tx, ty, dt)
 }
 
 function pin(div: Division, ctx: TacticContext, dt: number, reach = 520): void {
@@ -599,6 +649,10 @@ export const TACTICS = {
     sweep: false,
     step(div, ctx, dt) {
       tagged(div, true, ctx)
+      if (div.standoff && div.screen && div.classId === 'battleship') {
+        holdSpread(div, ctx, dt)
+        return
+      }
       if (div.standoff) {
         pin(div, ctx, dt, 800)
         return

@@ -487,7 +487,26 @@ function directLights(state: SimState, side: SideId, fleetIndex?: number): void 
     if (division.side !== side || division.alive === 0 || division.classId === 'battleship') continue
     if (fleetIndex !== undefined && division.fleet !== fleetIndex) continue
     const duty = lightDuty(commander, division.classId, incoming, enemyScreenHome, division.slot)
-    if (commander === 'balanced' && ownBb && enemyBbs[0] && division.classId !== 'battleship') {
+    const home = state.fleets[fleetIndex ?? side]
+    const foeCommander = enemyBbs[0] ? state.fleets[enemyBbs[0].fleet]?.commanderId : undefined
+    if (home && commander === 'balanced' && home.formationId === 'houen' && foeCommander !== 'guard') home.cover = true
+    if (home?.cover && commander === 'balanced') {
+      for (const heavy of state.divisions) {
+        if (heavy.side !== side || heavy.classId !== 'battleship') continue
+        if (fleetIndex !== undefined && heavy.fleet !== fleetIndex) continue
+        heavy.screen = true
+      }
+    }
+    if (commander === 'balanced' && home?.cover) {
+      division.screen = true
+      division.headOn = false
+      division.standoff = true
+      const threat = threats[0]
+      division.hunt = threat ? state.divisions.indexOf(threat) : -1
+      setDuty(state, division, 'flank')
+      continue
+    }
+    if (commander === 'balanced' && ownBb && enemyBbs[0]) {
       const preyBb = enemyBbs[0]
       const fx = preyBb.ax - ownBb.ax
       const fy = preyBb.ay - ownBb.ay
