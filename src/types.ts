@@ -152,6 +152,14 @@ export interface Division {
   orderX: number
   orderY: number
   orderH: number
+  /** Weight of enemy batteries that currently bear on this division. 0 is clear. */
+  guard: number
+  guardX: number
+  guardY: number
+  /** Presenting the broadside beats keeping the bow on the threat. */
+  broadsideOk: boolean
+  /** Breakout or reform: turning away is the point. */
+  yielding: boolean
   alive: number
   roster: number
 }

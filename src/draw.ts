@@ -1,5 +1,6 @@
 import { CLASS_MODS, FIELD, SHIP_CLASS_IDS, classMods } from './balance.ts'
 import { orderPoints } from './move.ts'
+import { pathCrossesBow } from './threat.ts'
 import { FORMATIONS } from './formations.ts'
 import type { SimState } from './types.ts'
 
@@ -203,8 +204,9 @@ function paintOrder(
   const from = worldToScreen(division.ax, division.ay, camera, width, height)
   const to = worldToScreen(x, y, camera, width, height)
   ctx.globalAlpha = alpha
+  const exposed = pathCrossesBow(state, division.side, division.ax, division.ay, x, y)
   ctx.setLineDash([7, 6])
-  ctx.strokeStyle = 'rgba(214, 226, 236, 0.9)'
+  ctx.strokeStyle = exposed ? 'rgba(214, 126, 96, 0.95)' : 'rgba(214, 226, 236, 0.9)'
   ctx.lineWidth = 1.25
   ctx.beginPath()
   ctx.moveTo(from.x, from.y)

@@ -1,5 +1,6 @@
 import { CLASS_STATS, classIndex } from './balance.ts'
 import { wrapAngle } from './combat.ts'
+import { aimUnderThreat } from './threat.ts'
 import type { Division } from './types.ts'
 
 /** Close enough to spin onto the ordered heading instead of chasing the point. */
@@ -55,7 +56,11 @@ export function stepMoveOrder(div: Division, dt: number): void {
   const dist = Math.hypot(dx, dy)
   const travel = dist > 1e-4 ? Math.atan2(dy, dx) : div.orderH
   const settling = dist <= 12
-  const desired = settling ? div.orderH : travel
+  let desired = settling ? div.orderH : travel
+  if (!settling) {
+    const aimed = aimUnderThreat(div, div.ax + Math.cos(desired), div.ay + Math.sin(desired))
+    desired = Math.atan2(aimed.y - div.ay, aimed.x - div.ax)
+  }
   const yaw = Math.max(-turnRate * dt, Math.min(turnRate * dt, wrapAngle(desired - current)))
   const next = current + yaw
   const fx = Math.cos(next)

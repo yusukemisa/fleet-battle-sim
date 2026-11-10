@@ -1,4 +1,5 @@
 import { anchorPace, CLASS_MODS, SWEEP } from './balance.ts'
+import { aimUnderThreat, wideFlankGoal } from './threat.ts'
 import type { Division, Tactic, TacticContext, TacticId } from './types.ts'
 
 function hypot(x: number, y: number): number {
@@ -22,7 +23,8 @@ function steer(div: Division, mx: number, my: number, speed: number, dt: number)
 }
 
 function face(div: Division, tx: number, ty: number, dt: number): void {
-  faceDirection(div, tx - div.ax, ty - div.ay, dt, 1.5 * CLASS_MODS[div.classId].turn)
+  const aimed = aimUnderThreat(div, tx, ty)
+  faceDirection(div, aimed.x - div.ax, aimed.y - div.ay, dt, 1.5 * CLASS_MODS[div.classId].turn)
 }
 
 function faceDirection(div: Division, fx: number, fy: number, dt: number, rate: number): void {
@@ -182,52 +184,26 @@ function hook(div: Division, ctx: TacticContext, dt: number, speed: number, mode
     return
   }
   const side = div.flankSign === 0 ? 1 : div.flankSign
-  const relX = div.ax - prey.ax
-  const relY = div.ay - prey.ay
-  const along = relX * prey.fx + relY * prey.fy
-  const cross = relX * prey.rx + relY * prey.ry
-  const range = Math.hypot(relX, relY) || 1
-  const angle = Math.atan2(side * cross, along)
-  const arc = (50 * Math.PI) / 180
-  const safeRange = 560
-  const wantAngle = mode === 'rear' ? (118 * Math.PI) / 180 : (96 * Math.PI) / 180
-  const wantRange = mode === 'rear' ? 360 : 420
-  const pocket = angle > wantAngle - 0.4 && range < wantRange + 110
-  if (pocket) div.phase = 2
-  else if (angle < arc) div.phase = 0
-
-  let goalAngle = wantAngle
-  let goalRange = wantRange
-  if (div.phase !== 2) {
-    if (angle < arc) {
-      goalAngle = angle + 0.55
-      goalRange = Math.max(range, safeRange)
-    } else {
-      goalAngle = Math.min(wantAngle, angle + 0.7)
-      const span = wantAngle - arc
-      const t = span <= 0 ? 1 : (goalAngle - arc) / span
-      goalRange = safeRange + (wantRange - safeRange) * Math.min(1, Math.max(0, t))
-    }
-  }
-  const goal = polarPoint(prey, side, goalAngle, goalRange)
+  const goal = wideFlankGoal(div, prey, mode)
+  if (goal.pocket) div.phase = 2
+  else if (goal.inFront) div.phase = 0
   div.markX = goal.x
   div.markY = goal.y
   if (div.phase === 2) {
     div.phaseT += dt
-    const orbit = Math.min(Math.PI + 0.15, angle + 0.4)
-    if (div.phaseT > 5 || angle > Math.PI - 0.35) {
+    const orbit = Math.min(Math.PI + 0.15, goal.angle + 0.4)
+    if (div.phaseT > 5 || goal.angle > Math.PI - 0.35) {
       div.phase = 0
       div.phaseT = 0
     }
-    const ahead = polarPoint(prey, side, orbit, wantRange)
+    const ahead = polarPoint(prey, side, orbit, mode === 'rear' ? 340 : 380)
     div.markX = ahead.x
     div.markY = ahead.y
     steer(div, ahead.x - div.ax, ahead.y - div.ay, speed * 0.9, dt)
     face(div, prey.ax, prey.ay, dt)
     return
   }
-  const threat = angle < arc + 0.2
-  if (threat) sailBow(div, goal.x, goal.y, prey.ax, prey.ay, speed, dt, 0.34)
+  if (goal.inFront) sailBow(div, goal.x, goal.y, prey.ax, prey.ay, speed, dt, 0.5)
   else {
     steer(div, goal.x - div.ax, goal.y - div.ay, speed, dt)
     face(div, prey.ax, prey.ay, dt)
@@ -305,7 +281,8 @@ function sweepDivision(div: Division, ctx: TacticContext, dt: number): void {
   div.sweeping = true
   div.focus = false
   steer(div, gx - div.ax, gy - div.ay, SWEEP.speed, dt)
-  faceDirection(div, heading.x, heading.y, dt, 3.4)
+  const aimed = aimUnderThreat(div, div.ax + heading.x, div.ay + heading.y)
+  faceDirection(div, aimed.x - div.ax, aimed.y - div.ay, dt, 3.4)
 }
 
 /** Clockwise close-range wheel. Shaped fleets pick this only when it is the committed maneuver. */

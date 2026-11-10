@@ -6,6 +6,7 @@ import { batteryCooldown, cacheBows, cacheSpread, emptyTally, hasClearShot, pick
 import { refreshCover, rotateRanks } from './ranks.ts'
 import { collectNear, createScratch, fillSpatialHash } from './spatial.ts'
 import { orderPoints, stepMoveOrder } from './move.ts'
+import { assessDivision, threatenedHeading } from './threat.ts'
 import { stepPlan, updatePlan } from './posture.ts'
 import { TACTICS, stepDivision, tacticById } from './tactics.ts'
 import {
@@ -418,6 +419,11 @@ function makeDivision(side: SideId, slot: DivisionSlot): Division {
     orderX: 0,
     orderY: 0,
     orderH: 0,
+    guard: 0,
+    guardX: 0,
+    guardY: 0,
+    broadsideOk: false,
+    yielding: false,
     alive: 0,
     roster: 0,
   }
@@ -599,9 +605,22 @@ function step(state: SimState, dt: number): void {
     updatePlan(state, 1)
   }
   for (const division of state.divisions) {
+    if (division.alive === 0) {
+      division.guard = 0
+      division.broadsideOk = false
+      continue
+    }
+    const threat = assessDivision(state, division)
+    division.guard = threat.weight
+    division.guardX = threat.x
+    division.guardY = threat.y
+    division.broadsideOk = threat.broadside
+  }
+  for (const division of state.divisions) {
     if (division.alive === 0) continue
     const enemy: SideId = division.side === 0 ? 1 : 0
     const fleet = state.fleets[division.side]
+    division.yielding = fleet.maneuver === 'breakout' || fleet.maneuver === 'reform'
     const manual = fleet.commanderId === 'manual'
     if (division.ordered && !manual) division.ordered = false
     if (division.ordered && manual) {
@@ -712,6 +731,7 @@ function moveShips(state: SimState, dt: number): void {
     } else if (target >= 0 && ships.alive[target] === 1) {
       desired = Math.atan2((ships.y[target] ?? 0) - y, (ships.x[target] ?? 0) - x)
     }
+    desired = threatenedHeading(division, desired, x, y)
     const prevHeading = ships.heading[i] ?? desired
     const prevSpeed = (ships.vx[i] ?? 0) * Math.cos(prevHeading) + (ships.vy[i] ?? 0) * Math.sin(prevHeading)
     let heading = prevHeading
