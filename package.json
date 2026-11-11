@@ -10,6 +10,9 @@
     "test": "vitest run",
     "eval:joshou": "vite-node scripts/eval-joshou.mjs",
     "train:policy": "vite-node scripts/train-policy.mjs",
+    "dt:collect": "vite-node tools/dt/collect.mjs",
+    "dt:train": "python3 tools/dt/train.py",
+    "eval:dt": "vite-node scripts/eval-dt.mjs",
     "fit:formation": "vite-node scripts/fit-formation.mjs",
     "eval:personality": "vite-node scripts/eval-personality.mjs",
     "preview": "vite preview --host 0.0.0.0 --port 43173 --strictPort"

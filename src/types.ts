@@ -26,7 +26,7 @@ export type CommanderId = (typeof COMMANDER_IDS)[number]
 export const DEFAULT_COMMANDER: CommanderId = 'balanced'
 
 /** `rule` is the code commander. `ai` asks a model and keeps the last valid orders. */
-export type BrainMode = 'rule' | 'ai'
+export type BrainMode = 'rule' | 'ai' | 'dt'
 
 export interface BrainMove {
   x: number

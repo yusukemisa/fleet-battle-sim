@@ -9,6 +9,8 @@ import { collectNear, createScratch, fillSpatialHash } from './spatial.ts'
 import { orderPoints, stepMoveOrder } from './move.ts'
 import { assessDivision, threatenedHeading } from './threat.ts'
 import { separateShips } from './collide.ts'
+import { decideTransformer, forgetTransformer, recordDecision, tacticsFrom } from './brain/dt.ts'
+import { featurize } from './brain/features.ts'
 import { DECISION_INTERVAL, decidePolicy, defaultBrain, preferredFormation } from './brain/policy.ts'
 import { observe } from './brain/observe.ts'
 import { stepPlan, updatePlan } from './posture.ts'
@@ -1021,14 +1023,18 @@ function markCommander(state: SimState, side: SideId, half: number): void {
 }
 
 /** Rule fleets, and AI fleets that have no valid orders yet, keep the existing commander. */
+function usesModel(fleet: Fleet): boolean {
+  return fleet.brain === 'ai' || fleet.brain === 'dt'
+}
+
 function rulesDrive(fleet: Fleet): boolean {
-  return fleet.brain !== 'ai' || fleet.ai.status === 'fallback' || fleet.orders === null
+  return !usesModel(fleet) || fleet.ai.status === 'fallback' || fleet.orders === null
 }
 
 function chooseAiFormation(state: SimState): void {
   const picks: { fleet: Fleet; formationId: FormationId }[] = []
   for (const fleet of state.fleets) {
-    if (!fleet || fleet.brain !== 'ai' || fleet.ships <= 0) continue
+    if (!fleet || !usesModel(fleet) || fleet.ships <= 0) continue
     const enemy = state.fleets[fleet.enemyFleet]
     if (!enemy) continue
     const formationId = preferredFormation(fleet.commanderId, enemy.formationId)
@@ -1042,6 +1048,7 @@ function chooseAiFormation(state: SimState): void {
 
 function adoptCommanderBrain(fleet: Fleet | undefined): void {
   if (!fleet) return
+  forgetTransformer(fleet)
   fleet.brain = defaultBrain(fleet.commanderId)
   fleet.orders = null
   const fallbacks = fleet.ai.fallbacks
@@ -1065,6 +1072,7 @@ function setFleetBrain(state: SimState, index: number, brain: Fleet['brain']): S
   const fleet = state.fleets[index]
   if (!fleet) return state
   fleet.brain = brain
+  forgetTransformer(fleet)
   if (brain === 'rule') {
     fleet.orders = null
     const fallbacks = fleet.ai.fallbacks
@@ -1077,14 +1085,14 @@ function setFleetBrain(state: SimState, index: number, brain: Fleet['brain']): S
 
 function markBrain(state: SimState, index: number, status: Fleet['ai']['status']): SimState {
   const fleet = state.fleets[index]
-  if (!fleet || fleet.brain !== 'ai') return state
+  if (!fleet || !usesModel(fleet)) return state
   if (fleet.ai.status !== 'fallback') fleet.ai.status = status
   return state
 }
 
 function acceptBrain(state: SimState, index: number, orders: BrainOrder[], note: string, latencyMs: number): SimState {
   const fleet = state.fleets[index]
-  if (!fleet || fleet.brain !== 'ai') return state
+  if (!fleet || !usesModel(fleet)) return state
   fleet.orders = orders
   fleet.ai.status = 'ready'
   fleet.ai.note = note
@@ -1096,7 +1104,7 @@ function acceptBrain(state: SimState, index: number, orders: BrainOrder[], note:
 
 function fallbackBrain(state: SimState, index: number, latencyMs: number): SimState {
   const fleet = state.fleets[index]
-  if (!fleet || fleet.brain !== 'ai') return state
+  if (!fleet || !usesModel(fleet)) return state
   fleet.orders = null
   fleet.ai.status = 'fallback'
   fleet.ai.latencyMs = latencyMs
@@ -1126,10 +1134,11 @@ function holdBrainOrders(state: SimState, fleet: Fleet): void {
 
 function driveAi(state: SimState): void {
   for (const fleet of state.fleets) {
-    if (!fleet || fleet.brain !== 'ai' || fleet.ships <= 0) continue
+    if (!fleet || !usesModel(fleet) || fleet.ships <= 0) continue
     if (fleet.orders && state.time < fleet.ai.decidedAt + DECISION_INTERVAL) continue
     const started = performance.now()
-    const decision = decidePolicy(observe(state, fleet.index))
+    const observation = observe(state, fleet.index)
+    const decision = fleet.brain === 'dt' ? decideTransformer(fleet, observation) : decidePolicy(observation)
     fleet.ai.latencyMs = Math.round((performance.now() - started) * 100) / 100
     fleet.ai.decidedAt = state.time
     if (!decision) {
@@ -1143,6 +1152,7 @@ function driveAi(state: SimState): void {
     fleet.orders = decision.orders
     fleet.ai.status = 'ready'
     fleet.ai.note = decision.note
+    recordDecision(fleet.index, featurize(observation), tacticsFrom(observation, decision.orders))
   }
 }
 
