@@ -1,0 +1,78 @@
+{
+  "personality": "fierce",
+  "seconds": 225,
+  "curve": [
+    {
+      "gen": 0,
+      "mean": 1.306,
+      "best": 1.504,
+      "center": 1.44
+    },
+    {
+      "gen": 1,
+      "mean": 1.202,
+      "best": 1.538,
+      "center": 1.573
+    },
+    {
+      "gen": 2,
+      "mean": 1.203,
+      "best": 1.379,
+      "center": 1.448
+    },
+    {
+      "gen": 3,
+      "mean": 1.259,
+      "best": 1.551,
+      "center": 1.584
+    },
+    {
+      "gen": 4,
+      "mean": 1.257,
+      "best": 1.541,
+      "center": 1.456
+    },
+    {
+      "gen": 5,
+      "mean": 1.281,
+      "best": 1.523,
+      "center": 1.581
+    },
+    {
+      "gen": 6,
+      "mean": 1.258,
+      "best": 1.539,
+      "center": 1.573
+    },
+    {
+      "gen": 7,
+      "mean": 1.267,
+      "best": 1.522,
+      "center": 1.46
+    },
+    {
+      "gen": 8,
+      "mean": 1.288,
+      "best": 1.564,
+      "center": 1.585
+    },
+    {
+      "gen": 9,
+      "mean": 1.25,
+      "best": 1.67,
+      "center": 1.453
+    },
+    {
+      "gen": 10,
+      "mean": 1.176,
+      "best": 1.514,
+      "center": 1.59
+    },
+    {
+      "gen": 11,
+      "mean": 1.252,
+      "best": 1.564,
+      "center": 1.599
+    }
+  ]
+}

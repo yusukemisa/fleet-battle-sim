@@ -331,6 +331,10 @@ function deployGrouped(state: SimState): void {
   state.hits.side[1] = 0
   state.hits.rear[0] = 0
   state.hits.rear[1] = 0
+  state.dealt[0] = 0
+  state.dealt[1] = 0
+  state.destroyerDealt[0] = 0
+  state.destroyerDealt[1] = 0
   state.tally.shots = 0
   state.tally.hits = 0
   state.tally.damage = 0
@@ -735,6 +739,8 @@ function allocate(
     rng: 0xa341316c,
     stats,
     damage,
+    dealt: [0, 0],
+    destroyerDealt: [0, 0],
     commandAt: 0,
     log: [],
     hits: { front: [0, 0], side: [0, 0], rear: [0, 0] },
@@ -842,6 +848,10 @@ function deploy(state: SimState): void {
   state.hits.side[1] = 0
   state.hits.rear[0] = 0
   state.hits.rear[1] = 0
+  state.dealt[0] = 0
+  state.dealt[1] = 0
+  state.destroyerDealt[0] = 0
+  state.destroyerDealt[1] = 0
   const tally = state.tally
   tally.shots = 0
   tally.hits = 0
@@ -1081,7 +1091,8 @@ function driveAi(state: SimState): void {
       if (fleet.ai.status !== 'fallback') fleet.ai.fallbacks += 1
       fleet.orders = null
       fleet.ai.status = 'fallback'
-      fleet.ai.note = '方策を読めないのでルールで代行'
+      const name = COMMANDERS[fleet.commanderId].name
+      fleet.ai.note = `${name}の方策がないのでルールで代行`
       continue
     }
     fleet.orders = decision.orders
@@ -1552,7 +1563,9 @@ function shootBattery(state: SimState, index: number, target: number, batteryInd
   state.tally.hits += 1
   const dealt = Math.min(before, blow)
   state.tally.damage += dealt
+  state.dealt[side] = (state.dealt[side] ?? 0) + dealt
   const shooterClass = ships.shipClass[index] ?? 0
+  if (shooterClass === 2) state.destroyerDealt[side] = (state.destroyerDealt[side] ?? 0) + dealt
   state.classDamage[shooterClass] = (state.classDamage[shooterClass] ?? 0) + dealt
   const victimClass = ships.shipClass[target] ?? 0
   state.classOnClass[shooterClass * 3 + victimClass] = (state.classOnClass[shooterClass * 3 + victimClass] ?? 0) + dealt

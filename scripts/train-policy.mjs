@@ -1,15 +1,47 @@
+/**
+ * Train one personality, or all four in a round robin.
+ *
+ *   npm run train:policy -- --personality fierce --gens 12
+ *   npm run train:policy -- --personality all
+ *   npm run train:policy -- --personality balanced --fresh
+ *
+ * A run continues from src/brain/weights/<id>.json. --fresh starts from the
+ * 常勝 file (or small noise) and applies INITIAL_BIAS once. Seeds stay inside
+ * 1..8. Held-out seeds begin at 101 and are not used here.
+ */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { createSim, dispatch } from '../src/sim.ts'
-import { INPUT_SIZE } from '../src/brain/features.ts'
-import { HIDDEN, OUTPUT_SIZE, paramCount, unpack, usePolicy } from '../src/brain/policy.ts'
+import { FORMATION_IDS } from '../src/types.ts'
+import { PERSONALITIES, scoreBattle, scoreSuite } from '../src/brain/fitness.ts'
+import { playMatch } from '../src/brain/match.ts'
+import { applyInitialBias, pack, paramCount, policyFor, unpack } from '../src/brain/policy.ts'
 
-const GENS = Number(process.argv.find((arg, i, list) => list[i - 1] === '--gens') ?? 14)
+const args = process.argv.slice(2)
+function flag(name, fallback) {
+  const index = args.indexOf(name)
+  return index >= 0 ? args[index + 1] : fallback
+}
+const requested = flag('--personality', 'all')
+const gensFlag = args.includes('--gens') ? Number(flag('--gens', '12')) : null
+const fresh = args.includes('--fresh')
+const personalities = requested === 'all' ? [...PERSONALITIES] : [requested]
+if (!personalities.every((id) => PERSONALITIES.includes(id))) {
+  console.error(`personality must be one of ${PERSONALITIES.join(', ')} or all`)
+  process.exit(1)
+}
+
 const PAIRS = 8
-const SIGMA = 0.2
-const LEARNING = 0.12
+const SIGMA = 0.18
+const LEARNING = 0.1
 const DIM = paramCount()
-const FOES = ['fierce', 'cunning', 'guard', 'balanced']
-const FORMS = ['oujin', 'kakuyoku', 'engetsu', 'gyorin']
+const FORMS = [...FORMATION_IDS]
+const FOES = [...PERSONALITIES]
+const TUNING = [1, 2, 3, 4, 5, 6, 7, 8]
+const GENS = {
+  fierce: gensFlag ?? 12,
+  cunning: gensFlag ?? 12,
+  guard: gensFlag ?? 12,
+  balanced: gensFlag ?? 20,
+}
 
 function mulberry32(seed) {
   let state = seed >>> 0
@@ -28,36 +60,95 @@ function gaussian(rng) {
   return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v)
 }
 
-function play(aiSide, foe, ownForm, foeForm, seed) {
-  const commanders = aiSide === 0 ? ['balanced', foe] : [foe, 'balanced']
-  const formations = aiSide === 0 ? [ownForm, foeForm] : [foeForm, ownForm]
-  let state = createSim({ shipCount: 100, commanders, formations })
-  state.rng = seed | 0
-  state = dispatch(state, { type: 'set-fleet-brain', fleet: aiSide, brain: 'ai' })
-  state = dispatch(state, { type: 'set-speed', speed: 4 })
-  state = dispatch(state, { type: 'start' })
-  let steps = 0
-  while (state.phase.kind === 'running' && state.time < 80 && steps < 2200) {
-    state = dispatch(state, { type: 'tick', dt: 0.05 })
-    steps += 1
-  }
-  const won = state.phase.kind === 'finished' ? state.phase.winner === aiSide : state.alive[aiSide] > state.alive[1 - aiSide]
-  const margin = state.alive[aiSide] / Math.max(1, state.alive[0] + state.alive[1])
-  return (won ? 1 : 0) + 0.15 * margin
+function tuningSeed(salt) {
+  const base = TUNING[Math.abs(salt) % TUNING.length]
+  return (Math.imul(base, 0x9e3779b1) ^ Math.imul(salt, 13)) | 0
 }
 
-function fitness(flat, salt) {
-  let total = 0
-  const games = 8
-  for (let i = 0; i < games; i++) {
-    const foe = FOES[i % FOES.length]
-    const ownForm = FORMS[i % FORMS.length]
-    const foeForm = FORMS[(i + 1) % FORMS.length]
-    const seed = (Math.imul(1 + (salt + i) % 8, 0x9e3779b1) + i) | 0
-    usePolicy(unpack(flat))
-    total += play(i % 2, foe, ownForm, foeForm, seed)
+function readJson(path) {
+  return JSON.parse(readFileSync(path, 'utf8'))
+}
+
+function loadTheta(personality) {
+  const path = `src/brain/weights/${personality}.json`
+  const logPath = `src/brain/logs/${personality}.json`
+  const curve = existsSync(logPath) ? readJson(logPath).curve ?? [] : []
+  if (!fresh && existsSync(path)) {
+    const saved = readJson(path)
+    const flat = pack(saved)
+    if (flat.length === DIM) return { theta: flat, curve, biased: curve.length > 0 }
   }
-  return total / games
+  const seed = policyFor('balanced')
+  const theta = seed ? pack(seed) : new Float64Array(DIM)
+  if (!seed) {
+    const rng = mulberry32(1000 + personality.length)
+    for (let i = 0; i < DIM; i++) theta[i] = gaussian(rng) * 0.05
+  }
+  return { theta, curve: fresh ? [] : curve, biased: false }
+}
+
+function gamesFor(personality, salt, rulesOnly) {
+  const count = personality === 'balanced' ? 12 : 8
+  const games = []
+  for (let i = 0; i < count; i++) {
+    const form = FORMS[(salt + i) % FORMS.length]
+    const foeForm = FORMS[(salt + i * 2 + 1) % FORMS.length]
+    const foe = FOES[(salt + i) % FOES.length]
+    const league = !rulesOnly && i % 5 === 4
+    const self = !rulesOnly && i % 5 === 3
+    games.push({
+      form,
+      foeForm,
+      foe: self ? personality : foe,
+      kind: league ? 'league' : self ? 'self' : 'rule',
+      side: i % 2,
+      seed: tuningSeed(salt * 20 + i + 1),
+    })
+  }
+  return games
+}
+
+function checkpointOf(bank, owner, salt) {
+  const list = bank[owner]
+  if (!list || list.length === 0) return null
+  return list[Math.abs(salt) % list.length]
+}
+
+function evaluate(personality, flat, salt, bank, rulesOnly = false) {
+  const weights = unpack(flat)
+  const scores = []
+  for (const game of gamesFor(personality, salt, rulesOnly)) {
+    let foe = game.foe
+    let foeWeights
+    let foeBrain = 'rule'
+    if (game.kind === 'league') {
+      const others = PERSONALITIES.filter((id) => id !== personality)
+      foe = others[Math.abs(salt + game.seed) % others.length]
+      foeWeights = checkpointOf(bank, foe, salt)
+      foeBrain = foeWeights ? 'ai' : 'rule'
+    } else if (game.kind === 'self') {
+      foeWeights = checkpointOf(bank, personality, salt + 1)
+      foeBrain = foeWeights ? 'ai' : 'rule'
+    }
+    const commanders = game.side === 0 ? [personality, foe] : [foe, personality]
+    const formations = game.side === 0 ? [game.form, game.foeForm] : [game.foeForm, game.form]
+    const installed = [undefined, undefined]
+    installed[game.side] = weights
+    if (foeBrain === 'ai' && foeWeights) installed[1 - game.side] = unpack(foeWeights)
+    const brains = ['rule', 'rule']
+    brains[game.side] = 'ai'
+    if (foeBrain === 'ai') brains[1 - game.side] = 'ai'
+    const report = playMatch({
+      commanders,
+      formations,
+      seed: game.seed,
+      brains,
+      weights: installed,
+      focus: game.side,
+    })
+    scores.push(scoreBattle(personality, report))
+  }
+  return scoreSuite(personality, scores)
 }
 
 function add(theta, noise, scale) {
@@ -66,65 +157,91 @@ function add(theta, noise, scale) {
   return next
 }
 
-const rng = mulberry32(20261110 + GENS)
-const savedPath = 'src/brain/weights.json'
-let theta = new Float64Array(DIM)
-let curve = []
-if (!process.argv.includes('--fresh') && existsSync(savedPath)) {
-  const saved = JSON.parse(readFileSync(savedPath, 'utf8'))
-  const packed = [...saved.w1, ...saved.b1, ...saved.w2, ...saved.b2]
-  if (packed.length === DIM) theta = Float64Array.from(packed)
-  if (Array.isArray(saved.curve)) curve = saved.curve
-  console.log(`resume from ${savedPath}, curve ${curve.length}`)
-} else {
-  for (let i = 0; i < DIM; i++) theta[i] = gaussian(rng) * 0.05
-}
-let bestTheta = Float64Array.from(theta)
-let bestCenter = fitness(theta, 500)
-console.log(`params ${DIM} input ${INPUT_SIZE} hidden ${HIDDEN} output ${OUTPUT_SIZE} gens ${GENS} probe ${bestCenter.toFixed(3)}`)
-const started = Date.now()
-const startGen = curve.length
-for (let gen = startGen; gen < startGen + GENS; gen++) {
-  const noises = []
-  const scores = []
-  for (let pair = 0; pair < PAIRS; pair++) {
-    const noise = new Float64Array(DIM)
-    for (let i = 0; i < DIM; i++) noise[i] = gaussian(rng)
-    noises.push(noise)
-    scores.push(fitness(add(theta, noise, SIGMA), gen * 20 + pair))
-    scores.push(fitness(add(theta, noise, -SIGMA), gen * 20 + pair + 9))
-  }
-  const order = scores.map((score, index) => ({ score, index })).sort((a, b) => a.score - b.score)
-  const shaped = new Float64Array(scores.length)
-  order.forEach((item, rank) => {
-    shaped[item.index] = (rank / (scores.length - 1)) * 2 - 1
-  })
-  const grad = new Float64Array(DIM)
-  for (let pair = 0; pair < PAIRS; pair++) {
-    const scale = (shaped[pair * 2] - shaped[pair * 2 + 1]) / 2
-    const noise = noises[pair]
-    for (let i = 0; i < DIM; i++) grad[i] += noise[i] * scale
-  }
-  for (let i = 0; i < DIM; i++) theta[i] += (LEARNING / PAIRS) * grad[i]
-  const mean = scores.reduce((sum, score) => sum + score, 0) / scores.length
-  const best = Math.max(...scores)
-  const center = fitness(theta, 500)
-  if (center >= bestCenter) {
-    bestCenter = center
-    bestTheta = Float64Array.from(theta)
-  }
-  curve.push({ gen, mean: round(mean), best: round(best), center: round(center) })
-  console.log(`gen ${gen} mean ${mean.toFixed(3)} best ${best.toFixed(3)} center ${center.toFixed(3)}`)
-}
-theta = bestTheta
-
-function round(value) {
-  return Math.round(value * 1000) / 1000
+function save(personality, theta, curve, seconds) {
+  mkdirSync('src/brain/weights', { recursive: true })
+  mkdirSync('src/brain/logs', { recursive: true })
+  const weights = { version: 1, personality, ...unpack(theta) }
+  writeFileSync(`src/brain/weights/${personality}.json`, JSON.stringify(weights))
+  writeFileSync(
+    `src/brain/logs/${personality}.json`,
+    JSON.stringify({ personality, seconds, curve }, null, 2),
+  )
 }
 
-const weights = { version: 1, ...unpack(theta), curve }
-mkdirSync('src/brain', { recursive: true })
-writeFileSync('src/brain/weights.json', JSON.stringify(weights))
-writeFileSync('src/brain/train-log.json', JSON.stringify({ seconds: Math.round((Date.now() - started) / 1000), curve }, null, 2))
-console.log(`wrote weights in ${Math.round((Date.now() - started) / 1000)}s`)
-usePolicy(null)
+const rng = mulberry32(20261111)
+const theta = {}
+const curve = {}
+const bestTheta = {}
+const bestProbe = {}
+const bank = {}
+const startedAt = {}
+for (const personality of personalities) {
+  const loaded = loadTheta(personality)
+  theta[personality] = loaded.theta
+  curve[personality] = loaded.curve
+  if (!loaded.biased) applyInitialBias(theta[personality], personality)
+  bestTheta[personality] = Float64Array.from(theta[personality])
+  bank[personality] = [Float64Array.from(theta[personality])]
+  startedAt[personality] = Date.now()
+  bestProbe[personality] = evaluate(personality, theta[personality], 800 + personality.length * 17, bank, true)
+  console.log(`${personality} start ${bestProbe[personality].toFixed(3)} gens ${GENS[personality]}`)
+}
+for (const id of PERSONALITIES) {
+  if (bank[id]) continue
+  const saved = policyFor(id)
+  bank[id] = saved ? [pack(saved)] : []
+}
+
+const limit = Math.max(...personalities.map((id) => GENS[id]))
+for (let step = 0; step < limit; step++) {
+  for (const personality of personalities) {
+    if (step >= GENS[personality]) continue
+    const gen = curve[personality].length
+    const noises = []
+    const scores = []
+    for (let pair = 0; pair < PAIRS; pair++) {
+      const noise = new Float64Array(DIM)
+      for (let i = 0; i < DIM; i++) noise[i] = gaussian(rng)
+      noises.push(noise)
+      const salt = gen * 30 + pair + personality.length * 100
+      scores.push(evaluate(personality, add(theta[personality], noise, SIGMA), salt, bank))
+      scores.push(evaluate(personality, add(theta[personality], noise, -SIGMA), salt + 9, bank))
+    }
+    const order = scores.map((score, index) => ({ score, index })).sort((a, b) => a.score - b.score)
+    const shaped = new Float64Array(scores.length)
+    order.forEach((item, rank) => {
+      shaped[item.index] = (rank / (scores.length - 1)) * 2 - 1
+    })
+    const grad = new Float64Array(DIM)
+    for (let pair = 0; pair < PAIRS; pair++) {
+      const scale = (shaped[pair * 2] - shaped[pair * 2 + 1]) / 2
+      const noise = noises[pair]
+      for (let i = 0; i < DIM; i++) grad[i] += noise[i] * scale
+    }
+    const next = theta[personality]
+    for (let i = 0; i < DIM; i++) next[i] += (LEARNING / PAIRS) * grad[i]
+    const probe = evaluate(personality, next, 800 + personality.length * 17, bank, true)
+    if (probe >= bestProbe[personality]) {
+      bestProbe[personality] = probe
+      bestTheta[personality] = Float64Array.from(next)
+    }
+    bank[personality].push(Float64Array.from(bestTheta[personality]))
+    if (bank[personality].length > 6) bank[personality].shift()
+    const mean = scores.reduce((sum, score) => sum + score, 0) / scores.length
+    const row = {
+      gen,
+      mean: Math.round(mean * 1000) / 1000,
+      best: Math.round(Math.max(...scores) * 1000) / 1000,
+      center: Math.round(probe * 1000) / 1000,
+    }
+    curve[personality].push(row)
+    const seconds = Math.round((Date.now() - startedAt[personality]) / 1000)
+    save(personality, bestTheta[personality], curve[personality], seconds)
+    console.log(`${personality} gen ${gen} mean ${mean.toFixed(3)} best ${row.best.toFixed(3)} probe ${probe.toFixed(3)}`)
+  }
+}
+
+for (const personality of personalities) {
+  save(personality, bestTheta[personality], curve[personality], Math.round((Date.now() - startedAt[personality]) / 1000))
+  console.log(`${personality} kept probe ${bestProbe[personality].toFixed(3)}`)
+}
