@@ -1,0 +1,374 @@
+[
+  {
+    "personality": "fierce",
+    "byFoe": {
+      "fierce": {
+        "win": 0.681,
+        "games": 144,
+        "ai": {
+          "contact": 2.642,
+          "exchange": 1.338,
+          "exposure": 0.462,
+          "flank": 0.327,
+          "assault": 0.918,
+          "alive": 0.198,
+          "cohesion": 0.624
+        },
+        "rule": {
+          "contact": 2.122,
+          "exchange": 1.028,
+          "exposure": 0.508,
+          "flank": 0.503,
+          "assault": 0.518,
+          "alive": 0.088,
+          "cohesion": 0.533
+        }
+      },
+      "cunning": {
+        "win": 0.965,
+        "games": 144,
+        "ai": {
+          "contact": 3.025,
+          "exchange": 2.38,
+          "exposure": 0.416,
+          "flank": 0.534,
+          "assault": 0.846,
+          "alive": 0.497,
+          "cohesion": 0.551
+        },
+        "rule": {
+          "contact": 2.367,
+          "exchange": 1.119,
+          "exposure": 0.479,
+          "flank": 0.576,
+          "assault": 0.496,
+          "alive": 0.132,
+          "cohesion": 0.448
+        }
+      },
+      "guard": {
+        "win": 0.91,
+        "games": 144,
+        "ai": {
+          "contact": 2.935,
+          "exchange": 1.795,
+          "exposure": 0.477,
+          "flank": 0.403,
+          "assault": 0.886,
+          "alive": 0.359,
+          "cohesion": 0.542
+        },
+        "rule": {
+          "contact": 2.369,
+          "exchange": 1.188,
+          "exposure": 0.462,
+          "flank": 0.642,
+          "assault": 0.47,
+          "alive": 0.153,
+          "cohesion": 0.345
+        }
+      },
+      "balanced": {
+        "win": 0.417,
+        "games": 144,
+        "ai": {
+          "contact": 4.816,
+          "exchange": 1.025,
+          "exposure": 0.316,
+          "flank": 0.256,
+          "assault": 0.868,
+          "alive": 0.111,
+          "cohesion": 0.437
+        },
+        "rule": {
+          "contact": 3.191,
+          "exchange": 0.756,
+          "exposure": 0.332,
+          "flank": 0.49,
+          "assault": 0.473,
+          "alive": 0.015,
+          "cohesion": 0.475
+        }
+      }
+    }
+  },
+  {
+    "personality": "cunning",
+    "byFoe": {
+      "fierce": {
+        "win": 0.514,
+        "games": 144,
+        "ai": {
+          "contact": 2.751,
+          "exchange": 1.097,
+          "exposure": 0.462,
+          "flank": 0.422,
+          "assault": 0.401,
+          "alive": 0.133,
+          "cohesion": 0.682
+        },
+        "rule": {
+          "contact": 2.369,
+          "exchange": 0.99,
+          "exposure": 0.571,
+          "flank": 0.476,
+          "assault": 0.115,
+          "alive": 0.089,
+          "cohesion": 0.63
+        }
+      },
+      "cunning": {
+        "win": 0.944,
+        "games": 144,
+        "ai": {
+          "contact": 3.183,
+          "exchange": 1.795,
+          "exposure": 0.441,
+          "flank": 0.578,
+          "assault": 0.385,
+          "alive": 0.397,
+          "cohesion": 0.604
+        },
+        "rule": {
+          "contact": 2.653,
+          "exchange": 1.143,
+          "exposure": 0.513,
+          "flank": 0.514,
+          "assault": 0.269,
+          "alive": 0.178,
+          "cohesion": 0.579
+        }
+      },
+      "guard": {
+        "win": 0.833,
+        "games": 144,
+        "ai": {
+          "contact": 3.126,
+          "exchange": 1.524,
+          "exposure": 0.465,
+          "flank": 0.486,
+          "assault": 0.408,
+          "alive": 0.305,
+          "cohesion": 0.624
+        },
+        "rule": {
+          "contact": 2.678,
+          "exchange": 1.398,
+          "exposure": 0.565,
+          "flank": 0.62,
+          "assault": 0.155,
+          "alive": 0.222,
+          "cohesion": 0.484
+        }
+      },
+      "balanced": {
+        "win": 0.181,
+        "games": 144,
+        "ai": {
+          "contact": 6.612,
+          "exchange": 0.813,
+          "exposure": 0.288,
+          "flank": 0.289,
+          "assault": 0.368,
+          "alive": 0.055,
+          "cohesion": 0.605
+        },
+        "rule": {
+          "contact": 3.543,
+          "exchange": 0.477,
+          "exposure": 0.656,
+          "flank": 0.3,
+          "assault": 0.18,
+          "alive": 0.004,
+          "cohesion": 0.595
+        }
+      }
+    }
+  },
+  {
+    "personality": "guard",
+    "byFoe": {
+      "fierce": {
+        "win": 0.667,
+        "games": 144,
+        "ai": {
+          "contact": 3.192,
+          "exchange": 1.315,
+          "exposure": 0.48,
+          "flank": 0.274,
+          "assault": 0.049,
+          "alive": 0.234,
+          "cohesion": 0.86
+        },
+        "rule": {
+          "contact": 2.371,
+          "exchange": 0.93,
+          "exposure": 0.645,
+          "flank": 0.458,
+          "assault": 0.096,
+          "alive": 0.068,
+          "cohesion": 0.683
+        }
+      },
+      "cunning": {
+        "win": 1,
+        "games": 144,
+        "ai": {
+          "contact": 3.837,
+          "exchange": 2.225,
+          "exposure": 0.24,
+          "flank": 0.47,
+          "assault": 0.027,
+          "alive": 0.51,
+          "cohesion": 0.829
+        },
+        "rule": {
+          "contact": 2.678,
+          "exchange": 0.807,
+          "exposure": 0.633,
+          "flank": 0.57,
+          "assault": 0.071,
+          "alive": 0.052,
+          "cohesion": 0.726
+        }
+      },
+      "guard": {
+        "win": 0.882,
+        "games": 144,
+        "ai": {
+          "contact": 4.006,
+          "exchange": 1.714,
+          "exposure": 0.413,
+          "flank": 0.37,
+          "assault": 0.046,
+          "alive": 0.409,
+          "cohesion": 0.783
+        },
+        "rule": {
+          "contact": 2.65,
+          "exchange": 1.058,
+          "exposure": 0.629,
+          "flank": 0.634,
+          "assault": 0.155,
+          "alive": 0.115,
+          "cohesion": 0.552
+        }
+      },
+      "balanced": {
+        "win": 0.542,
+        "games": 144,
+        "ai": {
+          "contact": 5.187,
+          "exchange": 1.097,
+          "exposure": 0.202,
+          "flank": 0.165,
+          "assault": 0.072,
+          "alive": 0.169,
+          "cohesion": 0.85
+        },
+        "rule": {
+          "contact": 3.086,
+          "exchange": 0.557,
+          "exposure": 0.458,
+          "flank": 0.428,
+          "assault": 0.01,
+          "alive": 0.004,
+          "cohesion": 0.742
+        }
+      }
+    }
+  },
+  {
+    "personality": "balanced",
+    "byFoe": {
+      "fierce": {
+        "win": 0.66,
+        "games": 144,
+        "ai": {
+          "contact": 2.708,
+          "exchange": 1.217,
+          "exposure": 0.463,
+          "flank": 0.357,
+          "assault": 0.468,
+          "alive": 0.178,
+          "cohesion": 0.726
+        },
+        "rule": {
+          "contact": 3.192,
+          "exchange": 1.38,
+          "exposure": 0.49,
+          "flank": 0.335,
+          "assault": 0.02,
+          "alive": 0.225,
+          "cohesion": 0.704
+        }
+      },
+      "cunning": {
+        "win": 0.979,
+        "games": 144,
+        "ai": {
+          "contact": 3.116,
+          "exchange": 2.07,
+          "exposure": 0.434,
+          "flank": 0.558,
+          "assault": 0.515,
+          "alive": 0.479,
+          "cohesion": 0.651
+        },
+        "rule": {
+          "contact": 3.544,
+          "exchange": 2.245,
+          "exposure": 0.292,
+          "flank": 0.654,
+          "assault": 0.037,
+          "alive": 0.501,
+          "cohesion": 0.713
+        }
+      },
+      "guard": {
+        "win": 0.889,
+        "games": 144,
+        "ai": {
+          "contact": 3.017,
+          "exchange": 1.674,
+          "exposure": 0.47,
+          "flank": 0.428,
+          "assault": 0.505,
+          "alive": 0.36,
+          "cohesion": 0.637
+        },
+        "rule": {
+          "contact": 3.087,
+          "exchange": 1.911,
+          "exposure": 0.429,
+          "flank": 0.463,
+          "assault": 0.027,
+          "alive": 0.401,
+          "cohesion": 0.574
+        }
+      },
+      "balanced": {
+        "win": 0.16,
+        "games": 144,
+        "ai": {
+          "contact": 5.326,
+          "exchange": 0.789,
+          "exposure": 0.287,
+          "flank": 0.225,
+          "assault": 0.401,
+          "alive": 0.046,
+          "cohesion": 0.607
+        },
+        "rule": {
+          "contact": 8.024,
+          "exchange": 1.058,
+          "exposure": 0.276,
+          "flank": 0.276,
+          "assault": 0.018,
+          "alive": 0.14,
+          "cohesion": 0.639
+        }
+      }
+    }
+  }
+]

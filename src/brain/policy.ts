@@ -1,9 +1,13 @@
 import { DIVISION_NAMES, type BrainOrder, type TacticId } from '../types.ts'
 import { tacticById } from '../tactics.ts'
 import { featurize, INPUT_SIZE } from './features.ts'
+import { INITIAL_BIAS, type Personality } from './fitness.ts'
 import type { DivisionView, Observation } from './observe.ts'
 import type { BrainDecision } from './orders.ts'
-import bundled from './weights.json'
+import fierceFile from './weights/fierce.json'
+import cunningFile from './weights/cunning.json'
+import guardFile from './weights/guard.json'
+import balancedFile from './weights/balanced.json'
 
 /** Tactics the policy may assign. Each is already in the rule commanders' vocabulary. */
 export const POLICY_TACTICS = ['hold', 'charge', 'flank', 'rear', 'focus', 'breakthrough', 'pin', 'broadside'] as const satisfies readonly TacticId[]
@@ -12,6 +16,13 @@ export const HIDDEN = 32
 export const OUTPUT_SIZE = 5 * POLICY_TACTICS.length
 /** Sim seconds between decisions. The last orders keep running in between. */
 export const DECISION_INTERVAL = 2
+
+const FILES: Record<string, unknown> = {
+  fierce: fierceFile,
+  cunning: cunningFile,
+  guard: guardFile,
+  balanced: balancedFile,
+}
 
 export interface PolicyWeights {
   input: number
@@ -23,8 +34,8 @@ export interface PolicyWeights {
   b2: number[]
 }
 
-let override: PolicyWeights | null = null
-let cached: PolicyWeights | null | undefined
+const fleetOverride: Array<PolicyWeights | undefined> = []
+let globalOverride: PolicyWeights | undefined
 
 export function loadPolicy(raw: unknown): PolicyWeights | null {
   if (!raw || typeof raw !== 'object') return null
@@ -47,23 +58,38 @@ export function loadPolicy(raw: unknown): PolicyWeights | null {
   return weights
 }
 
-export function bundledPolicy(): PolicyWeights | null {
-  return loadPolicy(bundled)
+/** The committed file for this commander. Manual, and any untrained id, have none. */
+export function policyFor(commanderId: string): PolicyWeights | null {
+  return loadPolicy(FILES[commanderId])
 }
 
-/** Training swaps the live weights. Pass null to use the committed file again. */
+/** Tests force one weight set onto every fleet. Null clears that and uses the files. */
 export function usePolicy(weights: PolicyWeights | null): void {
-  override = weights
+  globalOverride = weights === null ? undefined : weights
 }
 
-export function currentPolicy(): PolicyWeights | null {
-  if (override) return override
-  if (cached === undefined) cached = bundledPolicy()
-  return cached
+/** Training installs a candidate on one fleet without touching the other. */
+export function useFleetPolicy(fleet: number, weights: PolicyWeights | undefined): void {
+  fleetOverride[fleet] = weights
+}
+
+export function clearFleetPolicies(): void {
+  fleetOverride.length = 0
+}
+
+export function currentPolicy(commanderId: string, fleet: number): PolicyWeights | null {
+  const slotted = fleetOverride[fleet]
+  if (slotted !== undefined) return slotted
+  if (globalOverride !== undefined) return globalOverride
+  return policyFor(commanderId)
 }
 
 export function paramCount(): number {
   return INPUT_SIZE * HIDDEN + HIDDEN + HIDDEN * OUTPUT_SIZE + OUTPUT_SIZE
+}
+
+export function pack(weights: PolicyWeights): Float64Array {
+  return Float64Array.from([...weights.w1, ...weights.b1, ...weights.w2, ...weights.b2])
 }
 
 export function unpack(flat: ArrayLike<number>): PolicyWeights {
@@ -78,6 +104,20 @@ export function unpack(flat: ArrayLike<number>): PolicyWeights {
     b1: Array.from(flat).slice(w1, b1),
     w2: Array.from(flat).slice(b1, w2),
     b2: Array.from(flat).slice(w2, w2 + OUTPUT_SIZE),
+  }
+}
+
+/** Nudge a fresh weight vector toward the tactics that personality is scored on. */
+export function applyInitialBias(flat: Float64Array, personality: Personality): void {
+  const bias = INITIAL_BIAS[personality] as Partial<Record<TacticId, number>>
+  const start = INPUT_SIZE * HIDDEN + HIDDEN + HIDDEN * OUTPUT_SIZE
+  for (let tactic = 0; tactic < POLICY_TACTICS.length; tactic++) {
+    const amount = bias[POLICY_TACTICS[tactic] ?? 'hold'] ?? 0
+    if (amount === 0) continue
+    for (let slot = 0; slot < 5; slot++) {
+      const at = start + slot * POLICY_TACTICS.length + tactic
+      flat[at] = (flat[at] ?? 0) + amount
+    }
   }
 }
 
@@ -113,9 +153,9 @@ function nearestEnemy(observation: Observation, division: DivisionView): number 
   return best >= 0 ? best : undefined
 }
 
-/** One discrete tactic per division. The forward pass does not look at individual ships. */
+/** One discrete tactic per division, from the weights of this fleet's commander. */
 export function decidePolicy(observation: Observation): BrainDecision | null {
-  const weights = currentPolicy()
+  const weights = currentPolicy(observation.own.commanderId, observation.fleet)
   if (!weights || weights.input !== INPUT_SIZE || weights.w1.length !== INPUT_SIZE * weights.hidden) return null
   const logits = forward(weights, featurize(observation))
   const orders: BrainOrder[] = []

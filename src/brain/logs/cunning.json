@@ -1,0 +1,78 @@
+{
+  "personality": "cunning",
+  "seconds": 225,
+  "curve": [
+    {
+      "gen": 0,
+      "mean": 0.831,
+      "best": 1.038,
+      "center": 0.899
+    },
+    {
+      "gen": 1,
+      "mean": 0.816,
+      "best": 1.153,
+      "center": 0.777
+    },
+    {
+      "gen": 2,
+      "mean": 0.834,
+      "best": 1.144,
+      "center": 0.916
+    },
+    {
+      "gen": 3,
+      "mean": 0.819,
+      "best": 1.028,
+      "center": 1.014
+    },
+    {
+      "gen": 4,
+      "mean": 0.86,
+      "best": 1.16,
+      "center": 0.921
+    },
+    {
+      "gen": 5,
+      "mean": 0.856,
+      "best": 1.145,
+      "center": 1.034
+    },
+    {
+      "gen": 6,
+      "mean": 0.91,
+      "best": 1.131,
+      "center": 0.914
+    },
+    {
+      "gen": 7,
+      "mean": 0.868,
+      "best": 1.054,
+      "center": 0.785
+    },
+    {
+      "gen": 8,
+      "mean": 0.83,
+      "best": 1.057,
+      "center": 1.014
+    },
+    {
+      "gen": 9,
+      "mean": 0.864,
+      "best": 1.165,
+      "center": 0.891
+    },
+    {
+      "gen": 10,
+      "mean": 0.871,
+      "best": 1.147,
+      "center": 0.563
+    },
+    {
+      "gen": 11,
+      "mean": 0.875,
+      "best": 1.269,
+      "center": 0.773
+    }
+  ]
+}

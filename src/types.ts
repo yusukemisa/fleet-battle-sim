@@ -377,6 +377,10 @@ export interface SimState {
   rng: number
   stats: ShipStats
   damage: [number, number]
+  /** Hit-point damage landed by each side. */
+  dealt: [number, number]
+  /** Of that damage, the share landed by destroyers. */
+  destroyerDealt: [number, number]
   commandAt: number
   log: string[]
   hits: ArmorHits

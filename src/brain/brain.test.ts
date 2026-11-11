@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { observe } from './observe.ts'
 import { parseBrainDecision } from './orders.ts'
-import { decidePolicy, loadPolicy, usePolicy } from './policy.ts'
+import { scoreBattle, scoreSuite, type BattleReport } from './fitness.ts'
+import { decidePolicy, loadPolicy, pack, paramCount, unpack, useFleetPolicy, clearFleetPolicies, usePolicy, applyInitialBias } from './policy.ts'
 import { ruleDecide } from './rule.ts'
 import { createSim, dispatch } from '../sim.ts'
 import type { SimState } from '../types.ts'
@@ -63,7 +64,10 @@ describe('commander brain', () => {
 
   it('loads the committed weights and repeats the same orders', async () => {
     expect(loadPolicy({ input: 1 })).toBeNull()
-    const policy = loadPolicy((await import('./weights.json')).default)
+    const policy = loadPolicy((await import('./weights/balanced.json')).default)
+    expect(loadPolicy((await import('./weights/fierce.json')).default)).not.toBeNull()
+    expect(loadPolicy((await import('./weights/cunning.json')).default)).not.toBeNull()
+    expect(loadPolicy((await import('./weights/guard.json')).default)).not.toBeNull()
     expect(policy).not.toBeNull()
     let state = createSim({ shipCount: 100, commanders: ['balanced', 'cunning'], formations: ['kakuyoku', 'oujin'] })
     state = dispatch(state, { type: 'start' })
@@ -75,6 +79,58 @@ describe('commander brain', () => {
     usePolicy(null)
     expect(first).toEqual(second)
     expect(first?.orders.length).toBeGreaterThan(0)
+  })
+
+  it('gives each fleet the weights installed on it', () => {
+    const hold = unpack(new Float64Array(paramCount()))
+    const charge = unpack(new Float64Array(paramCount()))
+    for (let slot = 0; slot < 5; slot++) charge.b2[slot * 8 + 1] = 5
+    useFleetPolicy(0, hold)
+    useFleetPolicy(1, charge)
+    let state = createSim({ shipCount: 100, commanders: ['fierce', 'guard'] })
+    state = dispatch(state, { type: 'set-fleet-brain', fleet: 0, brain: 'ai' })
+    state = dispatch(state, { type: 'set-fleet-brain', fleet: 1, brain: 'ai' })
+    state = dispatch(state, { type: 'start' })
+    state = dispatch(state, { type: 'tick', dt: 0.05 })
+    clearFleetPolicies()
+    expect(state.fleets[0]?.orders?.every((order) => order.tacticId === 'hold')).toBe(true)
+    expect(state.fleets[1]?.orders?.every((order) => order.tacticId === 'charge')).toBe(true)
+  })
+
+  it('falls back when that commander has no weights', () => {
+    let state = createSim({ shipCount: 100, commanders: ['manual', 'fierce'] })
+    state = dispatch(state, { type: 'set-fleet-brain', fleet: 0, brain: 'ai' })
+    state = dispatch(state, { type: 'start' })
+    state = dispatch(state, { type: 'tick', dt: 0.05 })
+    expect(state.fleets[0]?.ai.status).toBe('fallback')
+    expect(state.fleets[0]?.ai.note).toContain('手動')
+  })
+
+  it('scores a loss-tolerant assault above a quiet loss, and pulls 常勝 toward its worst games', () => {
+    const empty: BattleReport = {
+      won: false,
+      alive: 0.2,
+      contactTime: 40,
+      contact: 0,
+      dealt: 0,
+      taken: 0,
+      exchange: 1,
+      flank: 0,
+      exposure: 1,
+      hitsDealt: 0,
+      hitsTaken: 0,
+      destroyerDealt: 0,
+      assault: 0,
+      cohesion: 1,
+      time: 40,
+    }
+    const assault: BattleReport = { ...empty, contact: 1, contactTime: 4, dealt: 80, taken: 20, assault: 1 }
+    expect(scoreBattle('fierce', assault)).toBeGreaterThan(scoreBattle('fierce', empty))
+    const flat = pack(unpack(new Float64Array(paramCount())))
+    applyInitialBias(flat, 'fierce')
+    expect(flat[flat.length - 39]).toBeGreaterThan(0)
+    expect(scoreSuite('balanced', [1, 1, 1, 0])).toBeLessThan(0.75)
+    expect(scoreSuite('guard', [1, 1, 1, 0])).toBeCloseTo(0.75)
   })
 
   it('falls back to the rule commander when the weights are unusable', () => {
