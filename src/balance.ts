@@ -230,6 +230,12 @@ export const SENSOR = 6400
 /** Collision and shot-blocking radius. Battleship, cruiser, destroyer. */
 export const HULL_RADIUS = [7.1, 4.2, 2.3] as const
 
+/**
+ * Minimum center-to-center slot spacing. Two battleships touch at 14.2.
+ * 22 leaves about 8 units of clear water, and a half-pitch stagger is still clear.
+ */
+export const SLOT_PITCH = 22
+
 export function hullRadius(classIndex: number): number {
   return HULL_RADIUS[classIndex] ?? HULL_RADIUS[1]
 }
