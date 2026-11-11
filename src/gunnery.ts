@@ -1,4 +1,4 @@
-import { CLASS_STATS, GUNNERY, hullHp, type BatterySpec } from './balance.ts'
+import { CLASS_STATS, GUNNERY, hullHp, hullRadius, type BatterySpec } from './balance.ts'
 import { armorFactor, inArc, inBattery } from './combat.ts'
 import { withdrawalFor } from './ranks.ts'
 import { collectNear } from './spatial.ts'
@@ -153,12 +153,13 @@ export function pickBatteryTarget(
       best = other
     }
   }
-  if (battery.id === 'bow' && best >= 0 && preferScore > 0 && prefer >= 0 && preferScore * GUNNERY.stick >= bestScore) {
+  if (battery.id === 'bow' && best >= 0 && preferScore > 0 && prefer >= 0 && preferScore * GUNNERY.stick >= bestScore && !shotBlocked(state, index, prefer)) {
     return prefer
   }
-  if (best >= 0) return best
+  if (best >= 0 && !shotBlocked(state, index, best)) return best
+  if (fallback >= 0 && !shotBlocked(state, index, fallback)) return fallback
   if (policy) return -1
-  return fallback
+  return -1
 }
 
 /** Best in-arc target by expected damage, or -1 when a withdrawing ship should hold fire. */
@@ -243,10 +244,67 @@ export function pickTarget(state: SimState, index: number): number {
       best = other
     }
   }
-  if (best >= 0 && preferScore > 0 && prefer >= 0 && preferScore * GUNNERY.stick >= bestScore) return prefer
-  if (best >= 0) return best
+  if (best >= 0 && preferScore > 0 && prefer >= 0 && preferScore * GUNNERY.stick >= bestScore && !shotBlocked(state, index, prefer)) return prefer
+  if (best >= 0 && !shotBlocked(state, index, best)) return best
+  if (fallback >= 0 && !shotBlocked(state, index, fallback)) return fallback
   if (policy) return -1
-  return fallback
+  return -1
+}
+
+/**
+ * True when another hull sits on the segment, short of the target.
+ * There was no such test before: a gun fired whenever the target was in arc and range.
+ */
+export function shotBlocked(state: SimState, shooter: number, target: number): boolean {
+  const ships = state.ships
+  const hash = state.scratch.hash
+  const x0 = ships.x[shooter] ?? 0
+  const y0 = ships.y[shooter] ?? 0
+  const x1 = ships.x[target] ?? 0
+  const y1 = ships.y[target] ?? 0
+  const dx = x1 - x0
+  const dy = y1 - y0
+  const dist = Math.hypot(dx, dy)
+  if (dist < 8) return false
+  const cell = hash.cell
+  const steps = Math.max(1, Math.ceil(dist / cell))
+  const gen = hash.generation
+  const mask = hash.mask
+  const distSq = dist * dist
+  for (let step = 1; step < steps; step++) {
+    const px = x0 + (dx * step) / steps
+    const py = y0 + (dy * step) / steps
+    const key = Math.floor(px / cell) * 73856093 ^ Math.floor(py / cell) * 19349663
+    let slot = key & mask
+    let guard = 0
+    for (;;) {
+      if (hash.stamp[slot] !== gen) break
+      if (hash.keys[slot] === key) {
+        let ship = hash.head[slot] ?? -1
+        while (ship >= 0) {
+          if (ship !== shooter && ship !== target && ships.alive[ship] !== 0) {
+            const sx = ships.x[ship] ?? 0
+            const sy = ships.y[ship] ?? 0
+            const along = ((sx - x0) * dx + (sy - y0) * dy) / distSq
+            if (along > 0.08 && along < 0.9) {
+              const qx = x0 + dx * along
+              const qy = y0 + dy * along
+              const radius = hullRadius(ships.shipClass[ship] ?? 0)
+              const ex = sx - qx
+              const ey = sy - qy
+              if (ex * ex + ey * ey < radius * radius) return true
+            }
+          }
+          ship = hash.next[ship] ?? -1
+        }
+        break
+      }
+      slot = (slot + 1) & mask
+      guard += 1
+      if (guard > mask) break
+    }
+  }
+  return false
 }
 
 /** Living enemy inside weapon range and the bow arc, ignoring armor and reservations. */

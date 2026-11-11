@@ -76,7 +76,8 @@ function placeOujin(layout: FormationLayout): void {
       const row = Math.floor(k / spec.cols)
       const col = k % spec.cols
       const rowCount = Math.min(spec.cols, spec.size - row * spec.cols)
-      layout.x[ship] = origin + (col - (rowCount - 1) / 2) * pitch
+      const stagger = row % 2 === 0 ? 0 : pitch * 0.5
+      layout.x[ship] = origin + (col - (rowCount - 1) / 2) * pitch + stagger
       layout.y[ship] = depth / 2 - row * pitch
       layout.division[ship] = 0
       ship += 1

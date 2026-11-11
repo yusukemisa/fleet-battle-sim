@@ -155,8 +155,8 @@ export const CLASS_MODS = {
     sidePower: 1,
     sideRange: 1,
     sideArc: 1,
-    girth: 1.45,
-    length: 1.15,
+    girth: 1.7,
+    length: 1.55,
   },
   cruiser: {
     id: 'cruiser',
@@ -177,8 +177,8 @@ export const CLASS_MODS = {
     sidePower: 0.85,
     sideRange: 0.9,
     sideArc: 1,
-    girth: 0.62,
-    length: 1.7,
+    girth: 1,
+    length: 1.05,
   },
   destroyer: {
     id: 'destroyer',
@@ -199,8 +199,8 @@ export const CLASS_MODS = {
     sidePower: 1.1,
     sideRange: 0.82,
     sideArc: 1.16,
-    girth: 0.32,
-    length: 2.35,
+    girth: 0.55,
+    length: 0.7,
   },
 } as const satisfies Record<ShipClassId, ClassMods>
 
@@ -224,6 +224,16 @@ function scaleBattery(base: BatterySpec, mods: ClassMods, bow: boolean): Battery
   }
 }
 
+/** How far a ship can notice an enemy. Wide enough to cover a whole battle, not just gun range. */
+export const SENSOR = 6400
+
+/** Collision and shot-blocking radius. Battleship, cruiser, destroyer. */
+export const HULL_RADIUS = [7.1, 4.2, 2.3] as const
+
+export function hullRadius(classIndex: number): number {
+  return HULL_RADIUS[classIndex] ?? HULL_RADIUS[1]
+}
+
 function deriveClass(id: ShipClassId): ShipStats {
   const mods = CLASS_MODS[id]
   const bow = BATTERIES[0]
@@ -234,7 +244,7 @@ function deriveClass(id: ShipClassId): ShipStats {
     hp: Math.max(1, Math.round(SHIP_STATS.hp * mods.hp)),
     damage: SHIP_STATS.damage,
     range: Math.round(bow.maxRange * mods.bowRange),
-    acquire: Math.round(SHIP_STATS.acquire * mods.bowRange),
+    acquire: SENSOR,
     cooldown: SHIP_STATS.cooldown,
     hitChance: SHIP_STATS.hitChance,
     maxSpeed: SHIP_STATS.maxSpeed * mods.speed,
