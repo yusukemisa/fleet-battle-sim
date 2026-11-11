@@ -42,6 +42,39 @@ function bandBox(layout: FormationLayout, slot: number): { minX: number; maxX: n
   return { minX, maxX, minY, maxY, meanX: sumX / n }
 }
 
+function bounds(layout: FormationLayout): { width: number; depth: number } {
+  let minX = Infinity
+  let maxX = -Infinity
+  let minY = Infinity
+  let maxY = -Infinity
+  for (let i = 0; i < layout.count; i++) {
+    const x = layout.x[i] ?? 0
+    const y = layout.y[i] ?? 0
+    if (x < minX) minX = x
+    if (x > maxX) maxX = x
+    if (y < minY) minY = y
+    if (y > maxY) maxY = y
+  }
+  return { width: maxX - minX, depth: maxY - minY }
+}
+
+function minSpacing(layout: FormationLayout): number {
+  const stride = Math.max(1, Math.floor(layout.count / 240))
+  let best = Infinity
+  for (let i = 0; i < layout.count; i += stride) {
+    const x = layout.x[i] ?? 0
+    const y = layout.y[i] ?? 0
+    let near = Infinity
+    for (let j = 0; j < layout.count; j++) {
+      if (i === j) continue
+      const d = Math.hypot(x - (layout.x[j] ?? 0), y - (layout.y[j] ?? 0))
+      if (d > 0 && d < near) near = d
+    }
+    if (near < best) best = near
+  }
+  return best
+}
+
 function xRange(layout: FormationLayout, pick: (index: number) => boolean): number {
   let min = Infinity
   let max = -Infinity
@@ -156,6 +189,18 @@ describe('formations', () => {
     const width = (layout: FormationLayout) => xRange(layout, () => true)
     expect(width(hoshi)).toBeLessThan(width(gyorin))
     expect(width(hoshi)).toBeGreaterThan(280)
+  })
+
+  it('grows large fleets instead of packing them into a hairline', () => {
+    for (const id of ['oujin', 'kakuyoku', 'engetsu', 'gyorin', 'hoshi', 'houen'] as const) {
+      const small = layoutFormation(id, 500)
+      const large = layoutFormation(id, 5000)
+      const smallBox = bounds(small)
+      const largeBox = bounds(large)
+      expect(largeBox.width, id).toBeGreaterThan(smallBox.width * 1.45)
+      expect(largeBox.depth, id).toBeGreaterThan(smallBox.depth * 1.45)
+      expect(minSpacing(large), id).toBeGreaterThan(7)
+    }
   })
 
   it('方円 keeps a commander group inside a ring', () => {

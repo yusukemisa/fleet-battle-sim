@@ -1,8 +1,8 @@
-import { acquireSq, CLASS_STATS, DEFAULT_LINE, FIELD, fleetLine, GUNNERY, hullHp, MAX_SHIPS, RANKS, SHIP_CLASS_IDS, SHIP_STATS, SIM_TIME_SCALE, SWEEP, stepYaw, thrust, volleyGap, volleyPhase, type ShipClassId, type ShipStats } from './balance.ts'
-import { assignTargets, clampGroups, fleetAnchor, fleetIndex, FLEET_NAMES as FLEET_TITLES, separateFleets } from './fleets.ts'
+import { acquireSq, CLASS_STATS, DEFAULT_LINE, FIELD, FLEET_STANDOFF, fleetLine, GUNNERY, hullHp, RANKS, SHIP_CLASS_IDS, SHIP_STATS, SIM_TIME_SCALE, SWEEP, stepYaw, thrust, volleyGap, volleyPhase, type ShipClassId, type ShipStats } from './balance.ts'
+import { anchorFleets, assignTargets, fitGroups, fleetIndex, FLEET_NAMES as FLEET_TITLES, separateFleets } from './fleets.ts'
 import { armorZone, inArc, inBattery, inFiringArc, wrapAngle } from './combat.ts'
 import { chooseTactic, COMMANDERS, employClass, type BattleFacts, type Bearing } from './commanders.ts'
-import { layoutFormation } from './formations.ts'
+import { formationExtent, layoutFormation } from './formations.ts'
 import { batteryCooldown, cacheBows, cacheSpread, emptyTally, hasClearShot, pickBatteryTarget, pickTarget, setBatteryCooldown } from './gunnery.ts'
 import { refreshCover, rotateRanks } from './ranks.ts'
 import { collectNear, createScratch, fillSpatialHash } from './spatial.ts'
@@ -197,19 +197,19 @@ function resizeGroups(state: SimState, command: Command): FleetSetup[] {
         commanderId: seed?.commanderId ?? DEFAULT_COMMANDER,
       })
     }
-    return clampGroups([...kept, ...next])
+    return [...kept, ...next]
   }
   if (command.type === 'set-fleet-ships') {
     const fleet = state.fleets[command.fleet]
     if (!fleet) return current
     let seen = 0
-    return clampGroups(current.map((group) => {
+    return current.map((group) => {
       if (group.side !== fleet.side) return group
       const ordinal = seen
       seen += 1
       if (ordinal !== fleet.ordinal) return group
       return { ...group, ships: command.ships }
-    }))
+    })
   }
   if (command.type === 'set-fleet-formation' || command.type === 'set-fleet-commander') {
     const fleet = state.fleets[command.fleet]
@@ -228,16 +228,18 @@ function resizeGroups(state: SimState, command: Command): FleetSetup[] {
 }
 
 function createGrouped(config: SimConfig): SimState {
-  const groups = clampGroups(config.groups ?? [])
-  const total = Math.min(MAX_SHIPS, groups.reduce((sum, group) => sum + group.ships, 0))
+  const fit = fitGroups(config.groups ?? [])
+  const groups = fit.groups
+  const total = groups.reduce((sum, group) => sum + group.ships, 0)
   const state = allocate(total, shipStats(config), config.damage ? [config.damage[0], config.damage[1]] : [shipStats(config).damage, shipStats(config).damage], config.gunnery ?? 'aimed', config.maneuver ?? 'shaped', config.withdraw ?? [true, true])
-  state.groups = groups
+  state.groups = fit.requested
   state.shipCount = total
+  state.fitNotice = fit.notice
   const counts: [number, number] = [0, 0]
-  const plans = groups.map((group) => {
+  const plans = groups.map((group, index) => {
     const ordinal = counts[group.side]
     counts[group.side] += 1
-    return { ...group, ordinal, index: fleetIndex(group.side, ordinal) }
+    return { ...group, requested: fit.requested[index]?.ships ?? group.ships, ordinal, index: fleetIndex(group.side, ordinal) }
   })
   const max = plans.reduce((hi, plan) => Math.max(hi, plan.index), 1)
   const fleets: Fleet[] = []
@@ -245,7 +247,7 @@ function createGrouped(config: SimConfig): SimState {
     const plan = plans.find((item) => item.index === index)
     const side: SideId = index % 2 === 0 ? 0 : 1
     const ordinal = Math.floor(index / 2)
-    const anchor = fleetAnchor(side, plan ? plan.ordinal : ordinal)
+    const anchor = { x: side === 0 ? -FIELD.fleetCenter : FIELD.fleetCenter, y: 0 }
     const name = FLEET_TITLES[side][ordinal] ?? FLEET_TITLES[side][0] ?? '軍'
     fleets[index] = {
       index,
@@ -253,6 +255,7 @@ function createGrouped(config: SimConfig): SimState {
       side,
       name,
       ships: plan?.ships ?? 0,
+      requested: plan?.requested ?? 0,
       formationId: plan?.formationId ?? DEFAULT_FORMATION,
       commanderId: plan?.commanderId ?? DEFAULT_COMMANDER,
       centerX: anchor.x,
@@ -270,6 +273,7 @@ function createGrouped(config: SimConfig): SimState {
       maneuverUntil: 0,
       prey: -1,
       bias: 1,
+      reach: 0,
     }
   }
   state.fleets = fleets
@@ -297,6 +301,7 @@ function createGrouped(config: SimConfig): SimState {
 }
 
 function deployGrouped(state: SimState): void {
+  reflowAnchors(state)
   state.beams.life.fill(0)
   state.booms.life.fill(0)
   state.time = 0
@@ -348,6 +353,27 @@ function deployGrouped(state: SimState): void {
   state.alive[0] = alive[0]
   state.alive[1] = alive[1]
   refreshCentroids(state)
+}
+
+function reflowAnchors(state: SimState): void {
+  for (const side of [0, 1] as const) {
+    const ours = state.fleets.filter((fleet) => fleet.side === side && fleet.ships > 0)
+    const anchors = anchorFleets(
+      side,
+      ours.map((fleet) => {
+        const extent = formationExtent(fleet.formationId, fleet.ships)
+        return { ordinal: fleet.ordinal, halfY: extent.halfY, forward: extent.forward }
+      }),
+    )
+    ours.forEach((fleet, index) => {
+      const anchor = anchors[index]
+      if (!anchor) return
+      fleet.centerX = anchor.x
+      fleet.centerY = anchor.y
+      fleet.meanX = anchor.x
+      fleet.meanY = anchor.y
+    })
+  }
 }
 
 function placeFleet(state: SimState, fleet: Fleet, offset: number): void {
@@ -439,6 +465,12 @@ function placeFleet(state: SimState, fleet: Fleet, offset: number): void {
     ships.falling[at] = 0
     ships.heading[at] = Math.atan2(division.fy, division.fx)
   }
+  let reach = 0
+  for (let i = 0; i < count; i++) {
+    const dy = Math.abs((ships.y[offset + i] ?? 0) - centerY)
+    if (dy > reach) reach = dy
+  }
+  fleet.reach = reach
   const center = state.divisions[fleet.index * DIVISIONS_PER_SIDE + 2]
   if (!center) return
   let best = -1
@@ -675,8 +707,8 @@ function allocate(
       target: new Int32Array(count),
     },
     fleets: [
-      { index: 0, ordinal: 0, side: 0, name: FLEET_NAMES[0], ships: count / 2, formationId: DEFAULT_FORMATION, commanderId: DEFAULT_COMMANDER, centerX: -FIELD.fleetCenter, centerY: 0, meanX: -FIELD.fleetCenter, meanY: 0,       enemyFleet: 1, cover: false, plan: 'none', planUntil: 0, facingX: 1, facingY: 0, sweepLeg: 0, maneuver: 'press', maneuverUntil: 0, prey: -1, bias: 1 },
-      { index: 1, ordinal: 0, side: 1, name: FLEET_NAMES[1], ships: count / 2, formationId: DEFAULT_FORMATION, commanderId: DEFAULT_COMMANDER, centerX: FIELD.fleetCenter, centerY: 0, meanX: FIELD.fleetCenter, meanY: 0, enemyFleet: 0, cover: false, plan: 'none', planUntil: 0, facingX: -1, facingY: 0, sweepLeg: 0, maneuver: 'press', maneuverUntil: 0, prey: -1, bias: 1 },
+      { index: 0, ordinal: 0, side: 0, name: FLEET_NAMES[0], ships: count / 2, requested: count / 2, formationId: DEFAULT_FORMATION, commanderId: DEFAULT_COMMANDER, centerX: -FIELD.fleetCenter, centerY: 0, meanX: -FIELD.fleetCenter, meanY: 0, enemyFleet: 1, cover: false, plan: 'none', planUntil: 0, facingX: 1, facingY: 0, sweepLeg: 0, maneuver: 'press', maneuverUntil: 0, prey: -1, bias: 1, reach: 0 },
+      { index: 1, ordinal: 0, side: 1, name: FLEET_NAMES[1], ships: count / 2, requested: count / 2, formationId: DEFAULT_FORMATION, commanderId: DEFAULT_COMMANDER, centerX: FIELD.fleetCenter, centerY: 0, meanX: FIELD.fleetCenter, meanY: 0, enemyFleet: 0, cover: false, plan: 'none', planUntil: 0, facingX: -1, facingY: 0, sweepLeg: 0, maneuver: 'press', maneuverUntil: 0, prey: -1, bias: 1, reach: 0 },
     ],
     divisions,
     alive: [count / 2, count / 2],
@@ -717,6 +749,7 @@ function allocate(
     classOnClass: [0, 0, 0, 0, 0, 0, 0, 0, 0],
     rankAt: 0,
     fallingN: 0,
+    fitNotice: null,
   }
 }
 
@@ -835,7 +868,20 @@ function placeSide(state: SimState, side: SideId, half: number): void {
   const layout = layoutFormation(state.fleets[side].formationId, half)
   const ships = state.ships
   const offset = side * half
-  const centerX = side === 0 ? -FIELD.fleetCenter : FIELD.fleetCenter
+  let forward = 0
+  let halfY = 0
+  for (let i = 0; i < half; i++) {
+    forward = Math.max(forward, layout.y[i] ?? 0)
+    halfY = Math.max(halfY, Math.abs(layout.x[i] ?? 0))
+  }
+  const magnitude = Math.max(FIELD.fleetCenter, forward + FLEET_STANDOFF)
+  const centerX = side === 0 ? -magnitude : magnitude
+  const fleet = state.fleets[side]
+  if (fleet) {
+    fleet.centerX = centerX
+    fleet.meanX = centerX
+    fleet.reach = halfY
+  }
   const sums = state.divisions.map(() => ({ x: 0, y: 0, n: 0 }))
   for (let i = 0; i < half; i++) {
     const at = offset + i

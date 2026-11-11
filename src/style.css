@@ -75,16 +75,18 @@ button:disabled { opacity: 0.45; cursor: default; }
 
 .speeds { display: flex; gap: 4px; }
 
-#clock, #fps {
+#clock, #fps, #battle-size {
   font-variant-numeric: tabular-nums;
   font-size: 12px;
   color: #9aa6b8;
 }
 
+#battle-size.over { color: #e6c07b; }
+
 #orders {
   top: 52px;
   right: 12px;
-  width: min(420px, calc(100% - 24px));
+  width: min(460px, calc(100% - 24px));
   max-height: calc(100% - 70px);
   overflow: auto;
   background: rgba(8, 12, 20, 0.78);
@@ -115,13 +117,57 @@ button:disabled { opacity: 0.45; cursor: default; }
   margin-top: 8px;
 }
 
+.side-total {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: #e6d48a;
+}
+
 .fleet-head {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+  padding-top: 4px;
+}
+
+.fleet-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.ship-control {
   display: grid;
-  grid-template-columns: 72px 88px 72px 72px 1fr auto;
+  grid-template-columns: 1fr 76px;
   gap: 6px;
   align-items: center;
-  margin-top: 10px;
 }
+
+.ship-control input[type='number'] {
+  width: 100%;
+  font-variant-numeric: tabular-nums;
+}
+
+.ship-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.ship-presets button {
+  padding: 2px 6px;
+  font-size: 11px;
+}
+
+.fleet-meta {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.fleet-meta button { grid-column: 1 / -1; }
 
 .shade-0 { box-shadow: inset 3px 0 0 #3c90d6; }
 .side.red .shade-0, section[data-side="1"] .shade-0 { box-shadow: inset 3px 0 0 #e16858; }
@@ -147,16 +193,16 @@ section[data-side="1"] .shade-2 { box-shadow: inset 3px 0 0 #8c342c; }
 .remain { text-align: right; color: #9aa6b8; }
 
 #banner {
-  left: 50%;
-  top: 58px;
-  transform: translateX(-50%);
+  left: 14px;
+  top: 96px;
   margin: 0;
   padding: 6px 12px;
+  max-width: min(560px, calc(100% - 500px));
   background: rgba(8, 12, 20, 0.8);
   border: 1px solid rgba(226, 206, 122, 0.45);
 }
 
 @media (max-width: 800px) {
   #orders { top: auto; bottom: 12px; max-height: 36%; }
-  #banner { top: auto; bottom: 48%; }
+  #banner { top: auto; bottom: 48%; max-width: calc(100% - 28px); }
 }
