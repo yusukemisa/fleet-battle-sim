@@ -66,7 +66,9 @@ function aim(div: Division, ctx: TacticContext): void {
 }
 
 function charge(div: Division, ctx: TacticContext, dt: number, speed: number): void {
-  steer(div, ctx.enemyX - div.ax, ctx.enemyY - div.ay, speed, dt)
+  const clear = lineClearance(div, ctx, ctx.enemyX, ctx.enemyY)
+  const side = div.flankSign === 0 ? 1 : div.flankSign
+  steer(div, ctx.enemyX - div.ax + clear * side * 70, ctx.enemyY - div.ay, speed, dt)
   face(div, ctx.enemyX, ctx.enemyY, dt)
 }
 
@@ -545,7 +547,59 @@ function backFromDestroyer(div: Division, ctx: TacticContext, dt: number): boole
   return true
 }
 
+function nearestEnemy(div: Division, ctx: TacticContext): { division: Division; dist: number } | null {
+  let best: Division | null = null
+  let bestDist = Infinity
+  let valuable: Division | null = null
+  let valuableScore = -Infinity
+  for (const other of ctx.divisions) {
+    if (other.side === div.side || other.alive === 0) continue
+    const dist = hypot(other.ax - div.ax, other.ay - div.ay)
+    if (dist < bestDist) {
+      bestDist = dist
+      best = other
+    }
+    const weight = other.classId === 'battleship' ? 3 : other.classId === 'cruiser' ? 1.4 : 1
+    const score = weight - dist * 0.0015
+    if (score > valuableScore) {
+      valuableScore = score
+      valuable = other
+    }
+  }
+  if (!best) return null
+  return { division: valuable ?? best, dist: bestDist }
+}
+
+/** A division beyond gun range closes. Holding station out of sight is how wings sat out the fight. */
+function engageIfIdle(div: Division, ctx: TacticContext, dt: number): boolean {
+  if (div.ordered) return false
+  const nearest = nearestEnemy(div, ctx)
+  if (!nearest || nearest.dist < 1500) return false
+  const prey = nearest.division
+  const side = div.flankSign === 0 ? (div.slot < 2 ? -1 : 1) : div.flankSign
+  const clear = lineClearance(div, ctx, prey.ax, prey.ay)
+  steer(div, prey.ax - div.ax + clear * side, prey.ay - div.ay, 40, dt)
+  face(div, prey.ax, prey.ay, dt)
+  return true
+}
+
+/** Lateral shift when a friendly division is sitting on the line to the target. */
+function lineClearance(div: Division, ctx: TacticContext, tx: number, ty: number): number {
+  const ex = tx - div.ax
+  const ey = ty - div.ay
+  const el = hypot(ex, ey) || 1
+  for (const other of ctx.divisions) {
+    if (other.side !== div.side || other === div || other.alive === 0) continue
+    const along = ((other.ax - div.ax) * ex + (other.ay - div.ay) * ey) / el
+    if (along < 50 || along > el - 40) continue
+    const cross = ((other.ax - div.ax) * ey - (other.ay - div.ay) * ex) / el
+    if (Math.abs(cross) < 80) return cross >= 0 ? -1 : 1
+  }
+  return 0
+}
+
 export function stepDivision(div: Division, ctx: TacticContext, dt: number, wheel = true): void {
+  if (engageIfIdle(div, ctx, dt)) return
   if ((div.phase === 5 || div.phase === 7 || div.phase === 8) && div.classId === 'battleship') {
     div.shaped = false
     div.sweeping = false

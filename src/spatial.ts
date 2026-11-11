@@ -18,6 +18,8 @@ export interface ReadyQueues {
 
 export interface CombatScratch {
   hash: SpatialHash
+  /** Tight grid for hull separation. Independent of the gunnery hash. */
+  collide: SpatialHash
   bowX: Float32Array
   bowY: Float32Array
   incoming: Float32Array
@@ -57,6 +59,7 @@ export function createSpatialHash(count: number, cell: number): SpatialHash {
 export function createScratch(count: number, cell: number): CombatScratch {
   return {
     hash: createSpatialHash(count, cell),
+    collide: createSpatialHash(count, 22),
     bowX: new Float32Array(count),
     bowY: new Float32Array(count),
     incoming: new Float32Array(count),

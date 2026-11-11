@@ -3,11 +3,12 @@ import { anchorFleets, assignTargets, fitGroups, fleetIndex, FLEET_NAMES as FLEE
 import { armorZone, inArc, inBattery, inFiringArc, wrapAngle } from './combat.ts'
 import { chooseTactic, COMMANDERS, employClass, type BattleFacts, type Bearing } from './commanders.ts'
 import { formationExtent, layoutFormation } from './formations.ts'
-import { batteryCooldown, cacheBows, cacheSpread, emptyTally, hasClearShot, pickBatteryTarget, pickTarget, setBatteryCooldown } from './gunnery.ts'
+import { batteryCooldown, cacheBows, cacheSpread, emptyTally, hasClearShot, pickBatteryTarget, pickTarget, setBatteryCooldown, shotBlocked } from './gunnery.ts'
 import { refreshCover, rotateRanks } from './ranks.ts'
 import { collectNear, createScratch, fillSpatialHash } from './spatial.ts'
 import { orderPoints, stepMoveOrder } from './move.ts'
 import { assessDivision, threatenedHeading } from './threat.ts'
+import { separateShips } from './collide.ts'
 import { DECISION_INTERVAL, decidePolicy, defaultBrain, preferredFormation } from './brain/policy.ts'
 import { observe } from './brain/observe.ts'
 import { stepPlan, updatePlan } from './posture.ts'
@@ -1360,6 +1361,7 @@ function moveShips(state: SimState, dt: number): void {
     ships.y[i] = y + hy * speed * dt
     if ((ships.flash[i] ?? 0) > 0) ships.flash[i] = Math.max(0, (ships.flash[i] ?? 0) - dt * 4)
   }
+  separateShips(state)
 }
 
 function fight(state: SimState, dt: number): void {
@@ -1581,6 +1583,7 @@ function shootBattery(state: SimState, index: number, target: number, batteryInd
   const hx = state.scratch.bowX[index] ?? 1
   const hy = state.scratch.bowY[index] ?? 0
   if (!inBattery(hx, hy, sx, sy, tx, ty, battery)) return false
+  if (shotBlocked(state, index, target)) return false
   const overdue = batteryCooldown(state, index, batteryIndex)
   const carry = overdue < -dt - COOLDOWN_SLACK ? 0 : overdue
   setBatteryCooldown(state, index, batteryIndex, volleyGap(state.rng, index, batteryIndex, battery.cooldown) + carry)
