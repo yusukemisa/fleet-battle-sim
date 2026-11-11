@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { observe } from './observe.ts'
 import { parseBrainDecision } from './orders.ts'
 import { scoreBattle, scoreSuite, type BattleReport } from './fitness.ts'
-import { decidePolicy, loadPolicy, pack, paramCount, unpack, useFleetPolicy, clearFleetPolicies, usePolicy, applyInitialBias } from './policy.ts'
+import { decidePolicy, loadPolicy, pack, paramCount, preferredFormation, unpack, useFleetPolicy, clearFleetPolicies, usePolicy, applyInitialBias } from './policy.ts'
 import { ruleDecide } from './rule.ts'
 import { createSim, dispatch } from '../sim.ts'
 import type { SimState } from '../types.ts'
@@ -24,12 +24,12 @@ function fight(brain: 'rule' | 'ai'): SimState {
 }
 
 describe('commander brain', () => {
-  it('keeps 智将 and 常勝 on the rule path', () => {
-    let plain = createSim({ shipCount: 100, commanders: ['balanced', 'cunning'], formations: ['oujin', 'oujin'] })
+  it('keeps 智将 on the rule path', () => {
+    let plain = createSim({ shipCount: 100, commanders: ['cunning', 'cunning'], formations: ['oujin', 'oujin'] })
     plain.rng = 0x9e3779b1
     plain = dispatch(plain, { type: 'set-speed', speed: 4 })
     plain = dispatch(plain, { type: 'start' })
-    let marked = createSim({ shipCount: 100, commanders: ['balanced', 'cunning'], formations: ['oujin', 'oujin'], brains: ['rule', 'rule'] })
+    let marked = createSim({ shipCount: 100, commanders: ['cunning', 'cunning'], formations: ['oujin', 'oujin'], brains: ['rule', 'rule'] })
     marked.rng = 0x9e3779b1
     marked = dispatch(marked, { type: 'set-speed', speed: 4 })
     marked = dispatch(marked, { type: 'start' })
@@ -42,7 +42,18 @@ describe('commander brain', () => {
     expect(plain.fleets[1]?.brain).toBe('rule')
   })
 
-  it('starts 猛将 and 守将 on AI, and returns to that default when the commander changes', () => {
+  it('lets AI 常勝 replace its formation from the enemy formation at the start', () => {
+    expect(preferredFormation('balanced', 'gyorin')).toBe('oujin')
+    expect(preferredFormation('fierce', 'gyorin')).toBeNull()
+    let state = createSim({ shipCount: 100, commanders: ['balanced', 'balanced'], formations: ['houen', 'gyorin'] })
+    state = dispatch(state, { type: 'set-fleet-brain', fleet: 0, brain: 'ai' })
+    state = dispatch(state, { type: 'set-fleet-brain', fleet: 1, brain: 'rule' })
+    state = dispatch(state, { type: 'start' })
+    expect(state.fleets[0]?.formationId).toBe('oujin')
+    expect(state.fleets[1]?.formationId).toBe('gyorin')
+  })
+
+  it('starts 猛将, 守将 and 常勝 on AI, and returns to that default when the commander changes', () => {
     let state = createSim({ shipCount: 100, commanders: ['fierce', 'guard'] })
     expect(state.fleets[0]?.brain).toBe('ai')
     expect(state.fleets[1]?.brain).toBe('ai')
@@ -54,7 +65,7 @@ describe('commander brain', () => {
     expect(state.fleets[0]?.brain).toBe('rule')
     state = dispatch(state, { type: 'set-fleet-brain', fleet: 0, brain: 'ai' })
     state = dispatch(state, { type: 'set-commander', side: 0, commanderId: 'balanced' })
-    expect(state.fleets[0]?.brain).toBe('rule')
+    expect(state.fleets[0]?.brain).toBe('ai')
     state = dispatch(state, { type: 'set-fleet-commander', fleet: 1, commanderId: 'fierce' })
     expect(state.fleets[1]?.brain).toBe('ai')
     state = dispatch(state, { type: 'set-fleet-brain', fleet: 1, brain: 'rule' })

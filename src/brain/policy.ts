@@ -1,4 +1,4 @@
-import { DIVISION_NAMES, type BrainOrder, type TacticId } from '../types.ts'
+import { DIVISION_NAMES, FORMATION_IDS, type BrainOrder, type FormationId, type TacticId } from '../types.ts'
 import { tacticById } from '../tactics.ts'
 import { featurize, INPUT_SIZE } from './features.ts'
 import { INITIAL_BIAS, type Personality } from './fitness.ts'
@@ -8,12 +8,21 @@ import fierceFile from './weights/fierce.json'
 import cunningFile from './weights/cunning.json'
 import guardFile from './weights/guard.json'
 import balancedFile from './weights/balanced.json'
+import formationTable from './formation.json'
 
-/** Commanders that start on the trained policy. The others start on the rule code. */
-const AI_BY_DEFAULT = new Set(['fierce', 'guard'])
+/** Commanders that start on the trained policy. 智将 stays on the rule code. */
+const AI_BY_DEFAULT = new Set(['fierce', 'guard', 'balanced'])
 
 export function defaultBrain(commanderId: string): 'rule' | 'ai' {
   return AI_BY_DEFAULT.has(commanderId) ? 'ai' : 'rule'
+}
+
+/** Formation an AI commander chooses from the enemy's formation. Null keeps the player's choice. */
+export function preferredFormation(commanderId: string, enemyFormation: string): FormationId | null {
+  const table = (formationTable as Record<string, Record<string, string>>)[commanderId]
+  const pick = table?.[enemyFormation]
+  if (!pick || !(FORMATION_IDS as readonly string[]).includes(pick)) return null
+  return pick as FormationId
 }
 
 /** Tactics the policy may assign. Each is already in the rule commanders' vocabulary. */

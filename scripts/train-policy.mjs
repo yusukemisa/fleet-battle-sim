@@ -87,8 +87,46 @@ function loadTheta(personality) {
   return { theta, curve: fresh ? [] : curve, biased: false }
 }
 
+function balancedGames(salt, rulesOnly) {
+  const games = []
+  const mirror = rulesOnly ? 6 : 8
+  for (let i = 0; i < mirror; i++) {
+    games.push({
+      form: FORMS[i % FORMS.length],
+      foeForm: FORMS[(i * 2 + (rulesOnly ? 1 : salt)) % FORMS.length],
+      foe: 'balanced',
+      kind: 'rule',
+      side: i % 2,
+      seed: tuningSeed((rulesOnly ? 500 : salt) * 20 + i + 1),
+    })
+  }
+  const others = ['fierce', 'cunning', 'guard']
+  for (let i = 0; i < others.length; i++) {
+    games.push({
+      form: FORMS[(rulesOnly ? i : salt + i) % FORMS.length],
+      foeForm: FORMS[(rulesOnly ? i + 3 : salt + i + 2) % FORMS.length],
+      foe: others[i],
+      kind: 'rule',
+      side: i % 2,
+      seed: tuningSeed((rulesOnly ? 700 : salt) * 20 + 40 + i),
+    })
+  }
+  if (!rulesOnly) {
+    games.push({
+      form: FORMS[salt % FORMS.length],
+      foeForm: FORMS[(salt + 4) % FORMS.length],
+      foe: 'balanced',
+      kind: 'self',
+      side: salt % 2,
+      seed: tuningSeed(salt * 20 + 80),
+    })
+  }
+  return games
+}
+
 function gamesFor(personality, salt, rulesOnly) {
-  const count = personality === 'balanced' ? 12 : 8
+  if (personality === 'balanced') return balancedGames(salt, rulesOnly)
+  const count = 8
   const games = []
   for (let i = 0; i < count; i++) {
     const form = FORMS[(salt + i) % FORMS.length]
@@ -117,6 +155,8 @@ function checkpointOf(bank, owner, salt) {
 function evaluate(personality, flat, salt, bank, rulesOnly = false) {
   const weights = unpack(flat)
   const scores = []
+  let mirrorWins = 0
+  let mirrorGames = 0
   for (const game of gamesFor(personality, salt, rulesOnly)) {
     let foe = game.foe
     let foeWeights
@@ -147,8 +187,12 @@ function evaluate(personality, flat, salt, bank, rulesOnly = false) {
       focus: game.side,
     })
     scores.push(scoreBattle(personality, report))
+    if (foe === 'balanced' && foeBrain === 'rule') {
+      mirrorGames += 1
+      if (report.won) mirrorWins += 1
+    }
   }
-  return scoreSuite(personality, scores)
+  return { score: scoreSuite(personality, scores), mirrorWins, mirrorGames }
 }
 
 function add(theta, noise, scale) {
@@ -183,8 +227,9 @@ for (const personality of personalities) {
   bestTheta[personality] = Float64Array.from(theta[personality])
   bank[personality] = [Float64Array.from(theta[personality])]
   startedAt[personality] = Date.now()
-  bestProbe[personality] = evaluate(personality, theta[personality], 800 + personality.length * 17, bank, true)
-  console.log(`${personality} start ${bestProbe[personality].toFixed(3)} gens ${GENS[personality]}`)
+  const opening = evaluate(personality, theta[personality], 800 + personality.length * 17, bank, true)
+  bestProbe[personality] = opening.score
+  console.log(`${personality} start ${opening.score.toFixed(3)} mirror ${opening.mirrorWins}/${opening.mirrorGames} gens ${GENS[personality]}`)
 }
 for (const id of PERSONALITIES) {
   if (bank[id]) continue
@@ -199,13 +244,15 @@ for (let step = 0; step < limit; step++) {
     const gen = curve[personality].length
     const noises = []
     const scores = []
+    const sigma = personality === 'balanced' ? 0.1 : SIGMA
+    const learning = personality === 'balanced' ? 0.06 : LEARNING
     for (let pair = 0; pair < PAIRS; pair++) {
       const noise = new Float64Array(DIM)
       for (let i = 0; i < DIM; i++) noise[i] = gaussian(rng)
       noises.push(noise)
       const salt = gen * 30 + pair + personality.length * 100
-      scores.push(evaluate(personality, add(theta[personality], noise, SIGMA), salt, bank))
-      scores.push(evaluate(personality, add(theta[personality], noise, -SIGMA), salt + 9, bank))
+      scores.push(evaluate(personality, add(theta[personality], noise, sigma), salt, bank).score)
+      scores.push(evaluate(personality, add(theta[personality], noise, -sigma), salt + 9, bank).score)
     }
     const order = scores.map((score, index) => ({ score, index })).sort((a, b) => a.score - b.score)
     const shaped = new Float64Array(scores.length)
@@ -219,10 +266,10 @@ for (let step = 0; step < limit; step++) {
       for (let i = 0; i < DIM; i++) grad[i] += noise[i] * scale
     }
     const next = theta[personality]
-    for (let i = 0; i < DIM; i++) next[i] += (LEARNING / PAIRS) * grad[i]
+    for (let i = 0; i < DIM; i++) next[i] += (learning / PAIRS) * grad[i]
     const probe = evaluate(personality, next, 800 + personality.length * 17, bank, true)
-    if (probe >= bestProbe[personality]) {
-      bestProbe[personality] = probe
+    if (probe.score >= bestProbe[personality]) {
+      bestProbe[personality] = probe.score
       bestTheta[personality] = Float64Array.from(next)
     }
     bank[personality].push(Float64Array.from(bestTheta[personality]))
@@ -232,12 +279,14 @@ for (let step = 0; step < limit; step++) {
       gen,
       mean: Math.round(mean * 1000) / 1000,
       best: Math.round(Math.max(...scores) * 1000) / 1000,
-      center: Math.round(probe * 1000) / 1000,
+      center: Math.round(probe.score * 1000) / 1000,
+      mirror: probe.mirrorGames > 0 ? Math.round((probe.mirrorWins / probe.mirrorGames) * 1000) / 1000 : null,
     }
     curve[personality].push(row)
     const seconds = Math.round((Date.now() - startedAt[personality]) / 1000)
     save(personality, bestTheta[personality], curve[personality], seconds)
-    console.log(`${personality} gen ${gen} mean ${mean.toFixed(3)} best ${row.best.toFixed(3)} probe ${probe.toFixed(3)}`)
+    const mirror = probe.mirrorGames > 0 ? ` mirror ${probe.mirrorWins}/${probe.mirrorGames}` : ''
+    console.log(`${personality} gen ${gen} mean ${mean.toFixed(3)} best ${row.best.toFixed(3)} probe ${probe.score.toFixed(3)}${mirror}`)
   }
 }
 

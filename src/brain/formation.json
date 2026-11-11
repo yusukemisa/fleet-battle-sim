@@ -1,0 +1,10 @@
+{
+  "balanced": {
+    "oujin": "oujin",
+    "kakuyoku": "engetsu",
+    "engetsu": "engetsu",
+    "gyorin": "oujin",
+    "hoshi": "oujin",
+    "houen": "kakuyoku"
+  }
+}
