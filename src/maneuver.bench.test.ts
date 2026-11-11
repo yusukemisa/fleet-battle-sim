@@ -24,7 +24,8 @@ describe('maneuver waste', () => {
     console.log(wasteTable(legacy, shaped))
     // Destroyers swing wide and then turn in under the bow, so the path is longer and changes heading.
     expect(shaped.travelPerDamage).toBeLessThan(legacy.travelPerDamage * 1.55)
-    expect(shaped.reversals).toBeLessThan(legacy.reversals * 2.6)
+    // Leaving a battleship bow arc adds one heading change on the way back in.
+    expect(shaped.reversals).toBeLessThan(legacy.reversals * 2.7)
     expect(shaped.outArc).toBeLessThan(legacy.outArc * 1.4)
     expect(shaped.circle).toBeLessThan(6)
     expect(shaped.churn).toBeLessThan(legacy.churn * 0.65)

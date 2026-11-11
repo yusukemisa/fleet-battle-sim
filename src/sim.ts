@@ -260,6 +260,9 @@ function createGrouped(config: SimConfig): SimState {
       meanX: anchor.x,
       meanY: anchor.y,
       enemyFleet: side === 0 ? 1 : 0,
+      cover: false,
+      plan: 'none',
+      planUntil: 0,
       facingX: side === 0 ? 1 : -1,
       facingY: 0,
       sweepLeg: 0,
@@ -672,8 +675,8 @@ function allocate(
       target: new Int32Array(count),
     },
     fleets: [
-      { index: 0, ordinal: 0, side: 0, name: FLEET_NAMES[0], ships: count / 2, formationId: DEFAULT_FORMATION, commanderId: DEFAULT_COMMANDER, centerX: -FIELD.fleetCenter, centerY: 0, meanX: -FIELD.fleetCenter, meanY: 0, enemyFleet: 1, facingX: 1, facingY: 0, sweepLeg: 0, maneuver: 'press', maneuverUntil: 0, prey: -1, bias: 1 },
-      { index: 1, ordinal: 0, side: 1, name: FLEET_NAMES[1], ships: count / 2, formationId: DEFAULT_FORMATION, commanderId: DEFAULT_COMMANDER, centerX: FIELD.fleetCenter, centerY: 0, meanX: FIELD.fleetCenter, meanY: 0, enemyFleet: 0, facingX: -1, facingY: 0, sweepLeg: 0, maneuver: 'press', maneuverUntil: 0, prey: -1, bias: 1 },
+      { index: 0, ordinal: 0, side: 0, name: FLEET_NAMES[0], ships: count / 2, formationId: DEFAULT_FORMATION, commanderId: DEFAULT_COMMANDER, centerX: -FIELD.fleetCenter, centerY: 0, meanX: -FIELD.fleetCenter, meanY: 0,       enemyFleet: 1, cover: false, plan: 'none', planUntil: 0, facingX: 1, facingY: 0, sweepLeg: 0, maneuver: 'press', maneuverUntil: 0, prey: -1, bias: 1 },
+      { index: 1, ordinal: 0, side: 1, name: FLEET_NAMES[1], ships: count / 2, formationId: DEFAULT_FORMATION, commanderId: DEFAULT_COMMANDER, centerX: FIELD.fleetCenter, centerY: 0, meanX: FIELD.fleetCenter, meanY: 0, enemyFleet: 0, cover: false, plan: 'none', planUntil: 0, facingX: -1, facingY: 0, sweepLeg: 0, maneuver: 'press', maneuverUntil: 0, prey: -1, bias: 1 },
     ],
     divisions,
     alive: [count / 2, count / 2],
@@ -1016,7 +1019,7 @@ function step(state: SimState, dt: number): void {
       enemyY: state.fleets.length > 2 ? (enemyFleet?.meanY ?? state.centroidY[enemy]) : state.centroidY[enemy],
       sweepLeg: fleet.sweepLeg,
     }
-    if (shaped && (fleet.maneuver === 'breakout' || apart < bowMin + 10)) {
+    if (shaped && !fleet.cover && (fleet.maneuver === 'breakout' || apart < bowMin + 10)) {
       stepPlan(state, division, dt)
       continue
     }

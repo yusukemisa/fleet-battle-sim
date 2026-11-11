@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createSim, dispatch } from './sim.ts'
-import type { CommanderId } from './types.ts'
+import type { CommanderId, FormationId } from './types.ts'
 
 const FOES = ['fierce', 'cunning', 'guard'] as const
 const SEEDS = [1, 2, 3, 4, 5, 6, 7, 8] as const
@@ -23,10 +23,24 @@ describe('常勝', () => {
       expect(wins).toBeGreaterThanOrEqual(Math.ceil(games * 0.7))
     }
   })
+
+  it('方円 stays ahead of 智将 偃月 on a fixed seed set', () => {
+    let wins = 0
+    for (const seed of [1, 2, 3, 4]) {
+      for (const swap of [false, true]) {
+        const blue: CommanderId = swap ? 'cunning' : 'balanced'
+        const red: CommanderId = swap ? 'balanced' : 'cunning'
+        const formations: [FormationId, FormationId] = swap ? ['engetsu', 'houen'] : ['houen', 'engetsu']
+        const winner = fight(blue, red, (seed * 0x9e3779b1 + (swap ? 17 : 0)) | 0, formations)
+        if (swap ? winner === 1 : winner === 0) wins += 1
+      }
+    }
+    expect(wins).toBeGreaterThanOrEqual(6)
+  })
 })
 
-function fight(blue: CommanderId, red: CommanderId, seed: number): 0 | 1 | 'draw' {
-  let state = createSim({ shipCount: 100, commanders: [blue, red], formations: ['oujin', 'oujin'] })
+function fight(blue: CommanderId, red: CommanderId, seed: number, formations: [FormationId, FormationId] = ['oujin', 'oujin']): 0 | 1 | 'draw' {
+  let state = createSim({ shipCount: 100, commanders: [blue, red], formations })
   state.rng = seed
   state = dispatch(state, { type: 'set-speed', speed: 4 })
   state = dispatch(state, { type: 'start' })

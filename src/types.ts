@@ -123,6 +123,19 @@ export interface Fleet {
   meanY: number
   /** Enemy fleet this fleet is steering toward. */
   enemyFleet: number
+  /** Latched when the fleet starts as a ring around its battleships. */
+  cover: boolean
+  /**
+   * Formation-scoped answer to an enemy rush. Other formations stay `none`.
+   * `ring` flattens 方円 onto the threat axis. `crane` pulls 鶴翼 wings back.
+   * `spear` meets 魚鱗 inside bow range. `offset` slides off the 鋒矢 axis.
+   * `tip` holds 魚鱗 destroyers behind the battleship against a 横陣 rush.
+   * `crescent` does the same for 偃月 against 鶴翼.
+   * `steady` is 方円 against a 守将 line, which does not rush.
+   */
+  plan: 'none' | 'ring' | 'crane' | 'spear' | 'offset' | 'tip' | 'steady' | 'crescent'
+  /** Do not switch plans before this time. */
+  planUntil: number
   facingX: number
   facingY: number
   /** 0 while closing in, 1 while sliding past. Shared by the sweeping divisions. */
