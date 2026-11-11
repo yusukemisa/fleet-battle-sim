@@ -322,6 +322,8 @@ export interface SimConfig {
   formations?: readonly [FormationId, FormationId]
   tactics?: readonly TacticId[]
   commanders?: readonly [CommanderId, CommanderId]
+  /** Omit to use the commander default: 猛将 and 守将 start on AI, the others on rules. */
+  brains?: readonly [BrainMode, BrainMode]
   /** Five entries apply to both fleets. Ten entries assign every division. */
   classes?: readonly ShipClassId[]
   hp?: number

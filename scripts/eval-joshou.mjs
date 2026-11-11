@@ -33,6 +33,8 @@ function battlePolicy(ownForm, foe, foeForm, seed, swap, ships) {
   const formations = swap ? [foeForm, ownForm] : [ownForm, foeForm]
   let state = createSim({ shipCount: ships, commanders: [blue, red], formations })
   state.rng = seed | 0
+  state = dispatch(state, { type: 'set-fleet-brain', fleet: 0, brain: 'rule' })
+  state = dispatch(state, { type: 'set-fleet-brain', fleet: 1, brain: 'rule' })
   state = dispatch(state, { type: 'set-fleet-brain', fleet: swap ? 1 : 0, brain: 'ai' })
   state = dispatch(state, { type: 'set-speed', speed: 4 })
   state = dispatch(state, { type: 'start' })
@@ -59,6 +61,8 @@ function battle(ownForm, foe, foeForm, seed, swap, ships) {
   const formations = swap ? [foeForm, ownForm] : [ownForm, foeForm]
   let state = createSim({ shipCount: ships, commanders: [blue, red], formations })
   state.rng = seed | 0
+  state = dispatch(state, { type: 'set-fleet-brain', fleet: 0, brain: 'rule' })
+  state = dispatch(state, { type: 'set-fleet-brain', fleet: 1, brain: 'rule' })
   state = dispatch(state, { type: 'set-speed', speed: 4 })
   state = dispatch(state, { type: 'start' })
   let steps = 0

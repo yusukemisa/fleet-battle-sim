@@ -90,7 +90,7 @@ describe('commanders', () => {
   })
 
   it('drives 猛将 destroyers inside bow range while 守将 screens', () => {
-    let state = createSim({ shipCount: 100, commanders: ['fierce', 'guard'] })
+    let state = createSim({ shipCount: 100, commanders: ['fierce', 'guard'], brains: ['rule', 'rule'] })
     state.rng = 4
     state = dispatch(state, { type: 'set-speed', speed: 4 })
     state = dispatch(state, { type: 'start' })
@@ -143,7 +143,7 @@ describe('orders during battle', () => {
   })
 
   it('switches the center when 猛将 takes command and records the change', () => {
-    let state = createSim({ shipCount: 100, commanders: ['fierce', 'manual'] })
+    let state = createSim({ shipCount: 100, commanders: ['fierce', 'manual'], brains: ['rule', 'rule'] })
     expect(state.fleets[0].commanderId).toBe('fierce')
     expect(state.fleets[1].commanderId).toBe('manual')
     state = dispatch(state, { type: 'start' })

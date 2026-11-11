@@ -77,6 +77,7 @@ describe('withdrawal', () => {
     let state = createSim({
       shipCount: 100,
       commanders: ['guard', 'manual'],
+      brains: ['rule', 'rule'],
       withdraw: [true, false],
     })
     const ships = state.ships

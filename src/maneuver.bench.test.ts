@@ -76,6 +76,7 @@ function watch(row: (typeof CASES)[number], maneuver: ManeuverMode): Waste {
     shipCount: 100,
     formations: ['oujin', 'oujin'],
     commanders: row.commanders,
+    brains: ['rule', 'rule'],
     maneuver,
   })
   state.rng = (row.seed * 0x9e3779b1) | 0

@@ -58,8 +58,8 @@ export function playMatch(setup: MatchSetup): BattleReport {
   if (weights[1]) useFleetPolicy(1, weights[1])
   let state = createSim({ shipCount: 100, commanders: setup.commanders, formations: setup.formations })
   state.rng = setup.seed | 0
-  if (setup.brains[0] === 'ai') state = dispatch(state, { type: 'set-fleet-brain', fleet: 0, brain: 'ai' })
-  if (setup.brains[1] === 'ai') state = dispatch(state, { type: 'set-fleet-brain', fleet: 1, brain: 'ai' })
+  state = dispatch(state, { type: 'set-fleet-brain', fleet: 0, brain: setup.brains[0] })
+  state = dispatch(state, { type: 'set-fleet-brain', fleet: 1, brain: setup.brains[1] })
   state = dispatch(state, { type: 'set-speed', speed: 4 })
   state = dispatch(state, { type: 'start' })
   const timeout = setup.timeout ?? 80

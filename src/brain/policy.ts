@@ -9,6 +9,13 @@ import cunningFile from './weights/cunning.json'
 import guardFile from './weights/guard.json'
 import balancedFile from './weights/balanced.json'
 
+/** Commanders that start on the trained policy. The others start on the rule code. */
+const AI_BY_DEFAULT = new Set(['fierce', 'guard'])
+
+export function defaultBrain(commanderId: string): 'rule' | 'ai' {
+  return AI_BY_DEFAULT.has(commanderId) ? 'ai' : 'rule'
+}
+
 /** Tactics the policy may assign. Each is already in the rule commanders' vocabulary. */
 export const POLICY_TACTICS = ['hold', 'charge', 'flank', 'rear', 'focus', 'breakthrough', 'pin', 'broadside'] as const satisfies readonly TacticId[]
 

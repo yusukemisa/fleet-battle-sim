@@ -8,7 +8,7 @@ import { refreshCover, rotateRanks } from './ranks.ts'
 import { collectNear, createScratch, fillSpatialHash } from './spatial.ts'
 import { orderPoints, stepMoveOrder } from './move.ts'
 import { assessDivision, threatenedHeading } from './threat.ts'
-import { DECISION_INTERVAL, decidePolicy } from './brain/policy.ts'
+import { DECISION_INTERVAL, decidePolicy, defaultBrain } from './brain/policy.ts'
 import { observe } from './brain/observe.ts'
 import { stepPlan, updatePlan } from './posture.ts'
 import { TACTICS, stepDivision, tacticById } from './tactics.ts'
@@ -58,6 +58,8 @@ export function createSim(config: SimConfig): SimState {
   state.fleets[1].formationId = formations[1]
   state.fleets[0].commanderId = commanders[0]
   state.fleets[1].commanderId = commanders[1]
+  state.fleets[0].brain = config.brains?.[0] ?? defaultBrain(commanders[0])
+  state.fleets[1].brain = config.brains?.[1] ?? defaultBrain(commanders[1])
   const line = fleetLine(config.classes)
   for (let i = 0; i < state.divisions.length; i++) {
     const division = state.divisions[i]
@@ -114,7 +116,8 @@ export function dispatch(state: SimState, command: Command): SimState {
     case 'set-commander':
       if (state.phase.kind !== 'setup') return state
       state.fleets[command.side].commanderId = command.commanderId
-      if (state.groups) state.groups = patchGroup(state.groups, command.side, { commanderId: command.commanderId })
+      adoptCommanderBrain(state.fleets[command.side])
+      if (state.groups) state.groups = patchGroup(state.groups, command.side, { commanderId: command.commanderId, brain: state.fleets[command.side].brain })
       return state
     case 'set-class': {
       if (state.phase.kind !== 'setup') return state
@@ -174,6 +177,7 @@ function configFrom(state: SimState, patch: { shipCount?: SimState['shipCount'];
     tactics: state.divisions.map((division) => division.tacticId),
     classes: state.divisions.map((division) => division.classId),
     commanders: [state.fleets[0].commanderId, state.fleets[1].commanderId],
+    brains: [state.fleets[0].brain, state.fleets[1].brain],
     hp: state.stats.hp,
     damage: state.damage,
     gunnery: state.gunnery,
@@ -207,6 +211,7 @@ function resizeGroups(state: SimState, command: Command): FleetSetup[] {
         ships: 500,
         formationId: seed?.formationId ?? DEFAULT_FORMATION,
         commanderId: seed?.commanderId ?? DEFAULT_COMMANDER,
+        brain: defaultBrain(seed?.commanderId ?? DEFAULT_COMMANDER),
       })
     }
     return [...kept, ...next]
@@ -233,7 +238,7 @@ function resizeGroups(state: SimState, command: Command): FleetSetup[] {
       seen += 1
       if (ordinal !== fleet.ordinal) return group
       if (command.type === 'set-fleet-formation') return { ...group, formationId: command.formationId }
-      return { ...group, commanderId: command.commanderId }
+      return { ...group, commanderId: command.commanderId, brain: defaultBrain(command.commanderId) }
     })
   }
   return current
@@ -270,7 +275,7 @@ function createGrouped(config: SimConfig): SimState {
       requested: plan?.requested ?? 0,
       formationId: plan?.formationId ?? DEFAULT_FORMATION,
       commanderId: plan?.commanderId ?? DEFAULT_COMMANDER,
-      brain: plan?.brain === 'ai' ? 'ai' : 'rule',
+      brain: plan?.brain ?? defaultBrain(plan?.commanderId ?? DEFAULT_COMMANDER),
       ai: idleAi(),
       orders: null,
       centerX: anchor.x,
@@ -1017,6 +1022,27 @@ function rulesDrive(fleet: Fleet): boolean {
   return fleet.brain !== 'ai' || fleet.ai.status === 'fallback' || fleet.orders === null
 }
 
+function adoptCommanderBrain(fleet: Fleet | undefined): void {
+  if (!fleet) return
+  fleet.brain = defaultBrain(fleet.commanderId)
+  fleet.orders = null
+  const fallbacks = fleet.ai.fallbacks
+  fleet.ai = idleAi()
+  fleet.ai.fallbacks = fallbacks
+}
+
+function rememberBrain(state: SimState, fleet: Fleet): void {
+  if (!state.groups) return
+  let seen = 0
+  state.groups = state.groups.map((group) => {
+    if (group.side !== fleet.side) return group
+    const ordinal = seen
+    seen += 1
+    if (ordinal !== fleet.ordinal) return group
+    return { ...group, brain: fleet.brain }
+  })
+}
+
 function setFleetBrain(state: SimState, index: number, brain: Fleet['brain']): SimState {
   const fleet = state.fleets[index]
   if (!fleet) return state
@@ -1027,6 +1053,7 @@ function setFleetBrain(state: SimState, index: number, brain: Fleet['brain']): S
     fleet.ai = idleAi()
     fleet.ai.fallbacks = fallbacks
   }
+  rememberBrain(state, fleet)
   return state
 }
 
