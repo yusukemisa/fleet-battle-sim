@@ -9,6 +9,7 @@
     "lint": "eslint . && tsc --noEmit",
     "test": "vitest run",
     "eval:joshou": "vite-node scripts/eval-joshou.mjs",
+    "train:policy": "vite-node scripts/train-policy.mjs",
     "preview": "vite preview --host 0.0.0.0 --port 43173 --strictPort"
   },
   "devDependencies": {

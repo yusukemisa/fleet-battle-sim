@@ -61,6 +61,7 @@ export function mountHud(
     <ol id="log"></ol>
     <details id="orders">
       <summary title="手動の隊名をクリックして選び、地図を押してドラッグすると移動を命じます">分艦隊の艦種と戦術</summary>
+      <p class="ai-settings">AIは同梱の方策ネットです。約2秒ごとに各分艦隊へ令を出します。通信も鍵も使いません。</p>
       <div class="order-grid">
         <section data-side="0"></section>
         <section data-side="1"></section>
@@ -198,6 +199,11 @@ export function mountHud(
       const row = target.closest('.div-row')
       if (row instanceof HTMLElement) onSelectDivision(Number(row.dataset.index), event.shiftKey)
     }
+    if (target instanceof HTMLButtonElement && target.dataset.kind === 'brain') {
+      const fleet = Number(target.dataset.fleet)
+      const brain = target.dataset.brain === 'ai' ? 'ai' : 'rule'
+      if (Number.isInteger(fleet)) onCommand({ type: 'set-fleet-brain', fleet, brain })
+    }
     if (target instanceof HTMLButtonElement && target.dataset.kind === 'order-fleet') {
       const select = target.previousElementSibling
       const fleet = Number(target.dataset.fleet)
@@ -321,11 +327,12 @@ export function syncHud(parent: HTMLElement, hud: Hud, state: SimState, picked: 
   hud.fleetCount[1].disabled = !setup
   if (hud.fleetCount[0].value !== String(blueFleets)) hud.fleetCount[0].value = String(Math.max(1, blueFleets))
   if (hud.fleetCount[1].value !== String(redFleets)) hud.fleetCount[1].value = String(Math.max(1, redFleets))
-  const orderKey = state.fleets.map((fleet) => `${fleet.index}:${fleet.ships}:${fleet.requested}:${fleet.formationId}:${fleet.commanderId}`).join()
+  const orderKey = state.fleets.map((fleet) => `${fleet.index}:${fleet.ships}:${fleet.requested}:${fleet.formationId}:${fleet.commanderId}:${fleet.brain}`).join()
   if (orderKey !== hud.orderKey) {
     hud.orderKey = orderKey
     paintOrders(parent, hud, state)
   }
+  paintAiStatus(parent, state)
   parent.querySelectorAll<HTMLSelectElement>('#orders select').forEach((select) => {
     if (select.dataset.kind === 'tactic') select.disabled = state.phase.kind === 'finished'
     else select.disabled = !setup
@@ -401,6 +408,29 @@ export function syncHud(parent: HTMLElement, hud: Hud, state: SimState, picked: 
   } else {
     hud.banner.hidden = true
   }
+}
+
+function aiStatusText(fleet: SimState['fleets'][number]): string {
+  if (fleet.brain !== 'ai') return ''
+  const latency = fleet.ai.latencyMs > 0 ? ` ${fleet.ai.latencyMs}ms` : ''
+  const fallbacks = fleet.ai.fallbacks > 0 ? ` 代替 ${fleet.ai.fallbacks}` : ''
+  if (fleet.ai.status === 'thinking') return `思考中${fallbacks}`
+  if (fleet.ai.status === 'fallback') return `ルールで代行${latency}${fallbacks}`
+  if (fleet.ai.status === 'ready') return `決定${latency}${fallbacks}`
+  return `待機${fallbacks}`
+}
+
+function paintAiStatus(parent: HTMLElement, state: SimState): void {
+  parent.querySelectorAll<HTMLElement>('.ai-status').forEach((element) => {
+    const fleet = state.fleets[Number(element.dataset.fleet)]
+    if (!fleet) return
+    element.textContent = aiStatusText(fleet)
+    element.classList.toggle('fallback', fleet.brain === 'ai' && fleet.ai.status === 'fallback')
+  })
+  parent.querySelectorAll<HTMLElement>('.ai-note').forEach((element) => {
+    const fleet = state.fleets[Number(element.dataset.fleet)]
+    element.textContent = fleet?.brain === 'ai' ? fleet.ai.note : ''
+  })
 }
 
 function paintOrders(parent: HTMLElement, hud: Hud, state: SimState): void {
@@ -483,6 +513,26 @@ function paintOrders(parent: HTMLElement, hud: Hud, state: SimState): void {
         commander.append(option)
       }
       commander.value = fleet.commanderId
+      const brain = document.createElement('div')
+      brain.className = 'brain-toggle'
+      brain.dataset.fleet = String(fleet.index)
+      for (const mode of ['rule', 'ai'] as const) {
+        const button = document.createElement('button')
+        button.type = 'button'
+        button.dataset.kind = 'brain'
+        button.dataset.brain = mode
+        button.dataset.fleet = String(fleet.index)
+        button.textContent = mode === 'rule' ? 'ルール' : 'AI'
+        button.classList.toggle('on', fleet.brain === mode)
+        button.title = mode === 'rule' ? 'コードの指揮官' : 'モデルに令を尋ねる'
+        brain.append(button)
+      }
+      const status = document.createElement('p')
+      status.className = 'ai-status'
+      status.dataset.fleet = String(fleet.index)
+      const note = document.createElement('p')
+      note.className = 'ai-note'
+      note.dataset.fleet = String(fleet.index)
       const tactic = document.createElement('select')
       fillTactics(tactic)
       const apply = document.createElement('button')
@@ -492,8 +542,8 @@ function paintOrders(parent: HTMLElement, hud: Hud, state: SimState): void {
       apply.textContent = 'この艦隊に下令'
       const meta = document.createElement('div')
       meta.className = 'fleet-meta'
-      meta.append(formation, commander, tactic, apply)
-      head.append(titleRow, control, presets, meta)
+      meta.append(formation, commander, brain, tactic, apply)
+      head.append(titleRow, control, presets, meta, status, note)
       section.append(head)
       for (let slot = 0; slot < 5; slot++) {
         const index = fleet.index * 5 + slot

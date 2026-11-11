@@ -9,7 +9,7 @@ const HELDOUT = [101, 102, 103, 104, 105, 106, 107, 108, 109, 110]
 const TIMEOUT = 220
 
 function argsOf(argv) {
-  const out = { heldout: false, mirror: false, ships: 100, parallel: 4, shard: null, own: null, foe: null, form: null, limit: 0 }
+  const out = { heldout: false, mirror: false, ships: 100, parallel: 4, shard: null, own: null, foe: null, form: null, limit: 0, brain: null, seeds: 0 }
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]
     if (arg === '--heldout') out.heldout = true
@@ -21,8 +21,36 @@ function argsOf(argv) {
     else if (arg === '--foe') out.foe = argv[++i]
     else if (arg === '--form') out.form = argv[++i]
     else if (arg === '--limit') out.limit = Number(argv[++i])
+    else if (arg === '--brain') out.brain = argv[++i]
+    else if (arg === '--seeds') out.seeds = Number(argv[++i])
   }
   return out
+}
+
+function battlePolicy(ownForm, foe, foeForm, seed, swap, ships) {
+  const blue = swap ? foe : 'balanced'
+  const red = swap ? 'balanced' : foe
+  const formations = swap ? [foeForm, ownForm] : [ownForm, foeForm]
+  let state = createSim({ shipCount: ships, commanders: [blue, red], formations })
+  state.rng = seed | 0
+  state = dispatch(state, { type: 'set-fleet-brain', fleet: swap ? 1 : 0, brain: 'ai' })
+  state = dispatch(state, { type: 'set-speed', speed: 4 })
+  state = dispatch(state, { type: 'start' })
+  let steps = 0
+  while (state.phase.kind === 'running' && state.time < TIMEOUT && steps < 8000) {
+    state = dispatch(state, { type: 'tick', dt: 0.05 })
+    steps += 1
+  }
+  return judged(state, swap)
+}
+
+function judged(state, swap) {
+  let winner = 'draw'
+  if (state.phase.kind === 'finished') winner = state.phase.winner
+  else if (state.alive[0] >= state.alive[1] * 1.2 && state.alive[0] - state.alive[1] >= 5) winner = 0
+  else if (state.alive[1] >= state.alive[0] * 1.2 && state.alive[1] - state.alive[0] >= 5) winner = 1
+  const joshouWon = swap ? winner === 1 : winner === 0
+  return { win: joshouWon, draw: winner === 'draw', time: state.time }
 }
 
 function battle(ownForm, foe, foeForm, seed, swap, ships) {
@@ -38,12 +66,7 @@ function battle(ownForm, foe, foeForm, seed, swap, ships) {
     state = dispatch(state, { type: 'tick', dt: 0.05 })
     steps += 1
   }
-  let winner = 'draw'
-  if (state.phase.kind === 'finished') winner = state.phase.winner
-  else if (state.alive[0] >= state.alive[1] * 1.2 && state.alive[0] - state.alive[1] >= 5) winner = 0
-  else if (state.alive[1] >= state.alive[0] * 1.2 && state.alive[1] - state.alive[0] >= 5) winner = 1
-  const joshouWon = swap ? winner === 1 : winner === 0
-  return { win: joshouWon, draw: winner === 'draw', time: state.time }
+  return judged(state, swap)
 }
 
 function cellsOf(options) {
@@ -62,8 +85,9 @@ function cellsOf(options) {
   return options.limit > 0 ? list.slice(0, options.limit) : list
 }
 
-function runShard(options) {
-  const seeds = options.heldout ? HELDOUT : TUNING
+async function runShard(options) {
+  const pool = options.heldout ? HELDOUT : TUNING
+  const seeds = options.seeds > 0 ? pool.slice(0, options.seeds) : pool
   const all = cellsOf(options)
   let cells = all
   if (options.shard) {
@@ -80,7 +104,9 @@ function runShard(options) {
     for (const seed of seeds) {
       for (const swap of [false, true]) {
         const packed = (Math.imul(seed, 0x9e3779b1) + (swap ? 17 : 0)) | 0
-        const row = battle(cell.own, cell.foe, cell.form, packed, swap, options.ships)
+        const row = options.brain === 'policy'
+          ? battlePolicy(cell.own, cell.foe, cell.form, packed, swap, options.ships)
+          : battle(cell.own, cell.foe, cell.form, packed, swap, options.ships)
         games += 1
         time += row.time
         if (row.draw) draws += 1
@@ -143,7 +169,7 @@ function printHuman(summary) {
 
 const options = argsOf(process.argv.slice(2))
 if (options.shard || options.parallel <= 1) {
-  runShard(options)
+  await runShard(options)
 } else {
   const kids = []
   const forwarded = process.argv.slice(2).filter((arg, index, list) => arg !== '--parallel' && list[index - 1] !== '--parallel')
