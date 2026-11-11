@@ -40,7 +40,7 @@ describe('常勝', () => {
 })
 
 function fight(blue: CommanderId, red: CommanderId, seed: number, formations: [FormationId, FormationId] = ['oujin', 'oujin']): 0 | 1 | 'draw' {
-  let state = createSim({ shipCount: 100, commanders: [blue, red], formations })
+  let state = createSim({ shipCount: 100, commanders: [blue, red], formations, brains: ['rule', 'rule'] })
   state.rng = seed
   state = dispatch(state, { type: 'set-speed', speed: 4 })
   state = dispatch(state, { type: 'start' })

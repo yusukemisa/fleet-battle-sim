@@ -44,6 +44,7 @@ function battle(blue: CommanderId, red: CommanderId, seed: number) {
     shipCount: 100,
     formations: ['oujin', 'oujin'],
     commanders: [blue, red],
+    brains: ['rule', 'rule'],
   })
   state.rng = seed | 0
   state = dispatch(state, { type: 'set-speed', speed: 4 })

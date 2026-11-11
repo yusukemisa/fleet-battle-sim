@@ -61,7 +61,7 @@ export function mountHud(
     <ol id="log"></ol>
     <details id="orders">
       <summary title="手動の隊名をクリックして選び、地図を押してドラッグすると移動を命じます">分艦隊の艦種と戦術</summary>
-      <p class="ai-settings">AIはその艦隊の指揮官ごとの方策ネットです。約2秒ごとに各分艦隊へ令を出します。未学習の指揮官はルールで代行します。</p>
+      <p class="ai-settings">猛将と守将は最初から AI、智将と常勝はルールです。切り替えはその艦隊だけを変え、指揮官を変えると初期値に戻ります。重みがないときはルールで代行します。</p>
       <div class="order-grid">
         <section data-side="0"></section>
         <section data-side="1"></section>

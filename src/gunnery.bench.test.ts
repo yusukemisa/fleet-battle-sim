@@ -134,6 +134,7 @@ function play(row: Row, gunnery: GunneryMode): SimState {
     shipCount: row.ships,
     formations: ['oujin', 'oujin'],
     commanders: row.commanders,
+    brains: ['rule', 'rule'],
     gunnery,
     withdraw: [false, false],
   })
@@ -154,6 +155,7 @@ function playWithdraw(commander: CommanderId, foe: CommanderId, seed: number, wi
     shipCount: 100,
     formations: ['oujin', 'oujin'],
     commanders: [commander, foe],
+    brains: ['rule', 'rule'],
     gunnery: 'aimed',
     withdraw: [withdraw, false],
   })

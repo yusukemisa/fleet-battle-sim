@@ -24,17 +24,45 @@ function fight(brain: 'rule' | 'ai'): SimState {
 }
 
 describe('commander brain', () => {
-  it('keeps the rule brain on the existing battle path', () => {
-    const plain = fight('rule')
-    let marked = createSim({ shipCount: 100, commanders: ['balanced', 'fierce'], formations: ['oujin', 'oujin'] })
+  it('keeps 智将 and 常勝 on the rule path', () => {
+    let plain = createSim({ shipCount: 100, commanders: ['balanced', 'cunning'], formations: ['oujin', 'oujin'] })
+    plain.rng = 0x9e3779b1
+    plain = dispatch(plain, { type: 'set-speed', speed: 4 })
+    plain = dispatch(plain, { type: 'start' })
+    let marked = createSim({ shipCount: 100, commanders: ['balanced', 'cunning'], formations: ['oujin', 'oujin'], brains: ['rule', 'rule'] })
     marked.rng = 0x9e3779b1
-    marked = dispatch(marked, { type: 'set-fleet-brain', fleet: 0, brain: 'rule' })
-    marked = dispatch(marked, { type: 'set-fleet-brain', fleet: 1, brain: 'rule' })
     marked = dispatch(marked, { type: 'set-speed', speed: 4 })
     marked = dispatch(marked, { type: 'start' })
-    for (let step = 0; step < 40; step++) marked = dispatch(marked, { type: 'tick', dt: 0.05 })
+    for (let step = 0; step < 40; step++) {
+      plain = dispatch(plain, { type: 'tick', dt: 0.05 })
+      marked = dispatch(marked, { type: 'tick', dt: 0.05 })
+    }
     expect(fingerprint(marked)).toBe(fingerprint(plain))
     expect(plain.fleets[0]?.brain).toBe('rule')
+    expect(plain.fleets[1]?.brain).toBe('rule')
+  })
+
+  it('starts 猛将 and 守将 on AI, and returns to that default when the commander changes', () => {
+    let state = createSim({ shipCount: 100, commanders: ['fierce', 'guard'] })
+    expect(state.fleets[0]?.brain).toBe('ai')
+    expect(state.fleets[1]?.brain).toBe('ai')
+    state = dispatch(state, { type: 'set-fleet-brain', fleet: 0, brain: 'rule' })
+    state = dispatch(state, { type: 'set-ship-count', count: 1000 })
+    expect(state.fleets[0]?.commanderId).toBe('fierce')
+    expect(state.fleets[0]?.brain).toBe('rule')
+    state = dispatch(state, { type: 'set-commander', side: 0, commanderId: 'cunning' })
+    expect(state.fleets[0]?.brain).toBe('rule')
+    state = dispatch(state, { type: 'set-fleet-brain', fleet: 0, brain: 'ai' })
+    state = dispatch(state, { type: 'set-commander', side: 0, commanderId: 'balanced' })
+    expect(state.fleets[0]?.brain).toBe('rule')
+    state = dispatch(state, { type: 'set-fleet-commander', fleet: 1, commanderId: 'fierce' })
+    expect(state.fleets[1]?.brain).toBe('ai')
+    state = dispatch(state, { type: 'set-fleet-brain', fleet: 1, brain: 'rule' })
+    state = dispatch(state, { type: 'set-fleet-count', side: 1, count: 2 })
+    const added = state.fleets.find((fleet) => fleet.side === 1 && fleet.ordinal === 1)
+    expect(added?.commanderId).toBe('fierce')
+    expect(added?.brain).toBe('ai')
+    expect(state.fleets[1]?.brain).toBe('rule')
   })
 
   it('turns the rule commanders into orders for every living division', () => {
