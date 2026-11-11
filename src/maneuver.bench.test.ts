@@ -226,6 +226,7 @@ function enveloped(
   let state = createSim({
     shipCount: 100,
     commanders: ['balanced', 'manual'],
+    brains: ['rule', 'rule'],
     maneuver,
     classes,
   })

@@ -8,7 +8,7 @@ import { refreshCover, rotateRanks } from './ranks.ts'
 import { collectNear, createScratch, fillSpatialHash } from './spatial.ts'
 import { orderPoints, stepMoveOrder } from './move.ts'
 import { assessDivision, threatenedHeading } from './threat.ts'
-import { DECISION_INTERVAL, decidePolicy, defaultBrain } from './brain/policy.ts'
+import { DECISION_INTERVAL, decidePolicy, defaultBrain, preferredFormation } from './brain/policy.ts'
 import { observe } from './brain/observe.ts'
 import { stepPlan, updatePlan } from './posture.ts'
 import { TACTICS, stepDivision, tacticById } from './tactics.ts'
@@ -25,6 +25,7 @@ import {
   type DivisionSlot,
   type Fleet,
   type FleetSetup,
+  type FormationId,
   type GunneryMode,
   type ManeuverMode,
   type SideId,
@@ -141,6 +142,7 @@ export function dispatch(state: SimState, command: Command): SimState {
     }
     case 'start':
       if (state.phase.kind !== 'setup') return state
+      chooseAiFormation(state)
       state.phase = { kind: 'running', speed: state.phase.speed }
       return state
     case 'pause':
@@ -1020,6 +1022,21 @@ function markCommander(state: SimState, side: SideId, half: number): void {
 /** Rule fleets, and AI fleets that have no valid orders yet, keep the existing commander. */
 function rulesDrive(fleet: Fleet): boolean {
   return fleet.brain !== 'ai' || fleet.ai.status === 'fallback' || fleet.orders === null
+}
+
+function chooseAiFormation(state: SimState): void {
+  const picks: { fleet: Fleet; formationId: FormationId }[] = []
+  for (const fleet of state.fleets) {
+    if (!fleet || fleet.brain !== 'ai' || fleet.ships <= 0) continue
+    const enemy = state.fleets[fleet.enemyFleet]
+    if (!enemy) continue
+    const formationId = preferredFormation(fleet.commanderId, enemy.formationId)
+    if (!formationId || formationId === fleet.formationId) continue
+    picks.push({ fleet, formationId })
+  }
+  if (picks.length === 0) return
+  for (const pick of picks) pick.fleet.formationId = pick.formationId
+  deploy(state)
 }
 
 function adoptCommanderBrain(fleet: Fleet | undefined): void {
