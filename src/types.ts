@@ -25,6 +25,37 @@ export const COMMANDER_IDS = ['manual', 'fierce', 'cunning', 'guard', 'balanced'
 export type CommanderId = (typeof COMMANDER_IDS)[number]
 export const DEFAULT_COMMANDER: CommanderId = 'balanced'
 
+/** `rule` is the code commander. `ai` asks a model and keeps the last valid orders. */
+export type BrainMode = 'rule' | 'ai'
+
+export interface BrainMove {
+  x: number
+  y: number
+  heading: number
+}
+
+/** High-level order. Tactics and move points are the same vocabulary as the rule commanders and manual orders. */
+export interface BrainOrder {
+  division: number
+  tacticId: TacticId
+  /** Enemy division index to prefer. */
+  target?: number
+  move?: BrainMove
+}
+
+export interface AiFleetState {
+  status: 'idle' | 'thinking' | 'ready' | 'fallback'
+  latencyMs: number
+  fallbacks: number
+  note: string
+  /** Sim time when the current orders were accepted. */
+  decidedAt: number
+}
+
+export function idleAi(): AiFleetState {
+  return { status: 'idle', latencyMs: 0, fallbacks: 0, note: '', decidedAt: -999 }
+}
+
 export const DIVISION_NAMES = ['左翼', '左衛', '中軍', '右衛', '右翼'] as const
 export const DIVISIONS_PER_SIDE = DIVISION_NAMES.length
 
@@ -103,6 +134,7 @@ export interface FleetSetup {
   ships: number
   formationId?: FormationId
   commanderId?: CommanderId
+  brain?: BrainMode
   classes?: readonly ShipClassId[]
 }
 
@@ -118,6 +150,11 @@ export interface Fleet {
   requested: number
   formationId: FormationId
   commanderId: CommanderId
+  /** `rule` runs the existing commander. `ai` holds model orders between decisions. */
+  brain: BrainMode
+  ai: AiFleetState
+  /** Last accepted model orders. Null while the rule commander is driving. */
+  orders: BrainOrder[] | null
   centerX: number
   centerY: number
   /** Living centroid, refreshed every step. */
@@ -259,6 +296,10 @@ export type Command =
   | { type: 'set-fleet-ships'; fleet: number; ships: number }
   | { type: 'set-fleet-formation'; fleet: number; formationId: FormationId }
   | { type: 'set-fleet-commander'; fleet: number; commanderId: CommanderId }
+  | { type: 'set-fleet-brain'; fleet: number; brain: BrainMode }
+  | { type: 'brain-thinking'; fleet: number }
+  | { type: 'brain-decision'; fleet: number; orders: BrainOrder[]; note: string; latencyMs: number }
+  | { type: 'brain-fallback'; fleet: number; latencyMs: number }
   | { type: 'set-formation'; side: SideId; formationId: FormationId }
   | { type: 'set-tactic'; division: number; tacticId: TacticId }
   | { type: 'set-side-tactic'; side: SideId; tacticId: TacticId }

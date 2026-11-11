@@ -8,6 +8,8 @@ import { refreshCover, rotateRanks } from './ranks.ts'
 import { collectNear, createScratch, fillSpatialHash } from './spatial.ts'
 import { orderPoints, stepMoveOrder } from './move.ts'
 import { assessDivision, threatenedHeading } from './threat.ts'
+import { DECISION_INTERVAL, decidePolicy } from './brain/policy.ts'
+import { observe } from './brain/observe.ts'
 import { stepPlan, updatePlan } from './posture.ts'
 import { TACTICS, stepDivision, tacticById } from './tactics.ts'
 import {
@@ -15,7 +17,9 @@ import {
   DEFAULT_FORMATION,
   DIVISIONS_PER_SIDE,
   DIVISION_NAMES,
+  idleAi,
   type BattlePhase,
+  type BrainOrder,
   type Command,
   type Division,
   type DivisionSlot,
@@ -83,6 +87,14 @@ export function dispatch(state: SimState, command: Command): SimState {
     case 'set-fleet-commander':
       if (state.phase.kind !== 'setup') return state
       return createSim(configFrom(state, { groups: resizeGroups(state, command) }))
+    case 'set-fleet-brain':
+      return setFleetBrain(state, command.fleet, command.brain)
+    case 'brain-thinking':
+      return markBrain(state, command.fleet, 'thinking')
+    case 'brain-decision':
+      return acceptBrain(state, command.fleet, command.orders, command.note, command.latencyMs)
+    case 'brain-fallback':
+      return fallbackBrain(state, command.fleet, command.latencyMs)
     case 'set-fleet-tactic': {
       if (state.phase.kind === 'finished') return state
       const fleet = state.fleets[command.fleet]
@@ -181,8 +193,8 @@ function patchGroup(groups: FleetSetup[], side: SideId, patch: Partial<FleetSetu
 
 function resizeGroups(state: SimState, command: Command): FleetSetup[] {
   const current = state.groups ?? [
-    { side: 0, ships: state.fleets[0].ships, formationId: state.fleets[0].formationId, commanderId: state.fleets[0].commanderId },
-    { side: 1, ships: state.fleets[1].ships, formationId: state.fleets[1].formationId, commanderId: state.fleets[1].commanderId },
+    { side: 0, ships: state.fleets[0].ships, formationId: state.fleets[0].formationId, commanderId: state.fleets[0].commanderId, brain: state.fleets[0].brain },
+    { side: 1, ships: state.fleets[1].ships, formationId: state.fleets[1].formationId, commanderId: state.fleets[1].commanderId, brain: state.fleets[1].brain },
   ]
   if (command.type === 'set-fleet-count') {
     const kept = current.filter((group) => group.side !== command.side)
@@ -258,6 +270,9 @@ function createGrouped(config: SimConfig): SimState {
       requested: plan?.requested ?? 0,
       formationId: plan?.formationId ?? DEFAULT_FORMATION,
       commanderId: plan?.commanderId ?? DEFAULT_COMMANDER,
+      brain: plan?.brain === 'ai' ? 'ai' : 'rule',
+      ai: idleAi(),
+      orders: null,
       centerX: anchor.x,
       centerY: anchor.y,
       meanX: anchor.x,
@@ -547,7 +562,7 @@ function issueOrders(state: SimState): void {
       const fleet = state.fleets[division.fleet]
       if (!fleet) continue
       const commander = COMMANDERS[fleet.commanderId]
-      if (!commander.auto) continue
+      if (!commander.auto || !rulesDrive(fleet)) continue
       const facts = factsFor(state, division.side, division.slot, index)
       const chosen = chooseTactic(commander, facts)
       const tacticId = chosen ? employClass(commander, division.classId, chosen, facts) : null
@@ -561,7 +576,7 @@ function issueOrders(state: SimState): void {
   for (const side of sides) {
     const fleet = state.fleets[side]
     const commander = COMMANDERS[fleet.commanderId]
-    if (!commander.auto) continue
+    if (!commander.auto || !rulesDrive(fleet)) continue
     for (const slot of slots) {
       const index = side * DIVISIONS_PER_SIDE + slot
       const division = state.divisions[index]
@@ -707,8 +722,8 @@ function allocate(
       target: new Int32Array(count),
     },
     fleets: [
-      { index: 0, ordinal: 0, side: 0, name: FLEET_NAMES[0], ships: count / 2, requested: count / 2, formationId: DEFAULT_FORMATION, commanderId: DEFAULT_COMMANDER, centerX: -FIELD.fleetCenter, centerY: 0, meanX: -FIELD.fleetCenter, meanY: 0, enemyFleet: 1, cover: false, plan: 'none', planUntil: 0, facingX: 1, facingY: 0, sweepLeg: 0, maneuver: 'press', maneuverUntil: 0, prey: -1, bias: 1, reach: 0 },
-      { index: 1, ordinal: 0, side: 1, name: FLEET_NAMES[1], ships: count / 2, requested: count / 2, formationId: DEFAULT_FORMATION, commanderId: DEFAULT_COMMANDER, centerX: FIELD.fleetCenter, centerY: 0, meanX: FIELD.fleetCenter, meanY: 0, enemyFleet: 0, cover: false, plan: 'none', planUntil: 0, facingX: -1, facingY: 0, sweepLeg: 0, maneuver: 'press', maneuverUntil: 0, prey: -1, bias: 1, reach: 0 },
+      { index: 0, ordinal: 0, side: 0, name: FLEET_NAMES[0], ships: count / 2, requested: count / 2, formationId: DEFAULT_FORMATION, commanderId: DEFAULT_COMMANDER, brain: 'rule', ai: idleAi(), orders: null, centerX: -FIELD.fleetCenter, centerY: 0, meanX: -FIELD.fleetCenter, meanY: 0, enemyFleet: 1, cover: false, plan: 'none', planUntil: 0, facingX: 1, facingY: 0, sweepLeg: 0, maneuver: 'press', maneuverUntil: 0, prey: -1, bias: 1, reach: 0 },
+      { index: 1, ordinal: 0, side: 1, name: FLEET_NAMES[1], ships: count / 2, requested: count / 2, formationId: DEFAULT_FORMATION, commanderId: DEFAULT_COMMANDER, brain: 'rule', ai: idleAi(), orders: null, centerX: FIELD.fleetCenter, centerY: 0, meanX: FIELD.fleetCenter, meanY: 0, enemyFleet: 0, cover: false, plan: 'none', planUntil: 0, facingX: -1, facingY: 0, sweepLeg: 0, maneuver: 'press', maneuverUntil: 0, prey: -1, bias: 1, reach: 0 },
     ],
     divisions,
     alive: [count / 2, count / 2],
@@ -987,8 +1002,97 @@ function markCommander(state: SimState, side: SideId, half: number): void {
   if (best >= 0) ships.command[best] = 1
 }
 
+/** Rule fleets, and AI fleets that have no valid orders yet, keep the existing commander. */
+function rulesDrive(fleet: Fleet): boolean {
+  return fleet.brain !== 'ai' || fleet.ai.status === 'fallback' || fleet.orders === null
+}
+
+function setFleetBrain(state: SimState, index: number, brain: Fleet['brain']): SimState {
+  const fleet = state.fleets[index]
+  if (!fleet) return state
+  fleet.brain = brain
+  if (brain === 'rule') {
+    fleet.orders = null
+    const fallbacks = fleet.ai.fallbacks
+    fleet.ai = idleAi()
+    fleet.ai.fallbacks = fallbacks
+  }
+  return state
+}
+
+function markBrain(state: SimState, index: number, status: Fleet['ai']['status']): SimState {
+  const fleet = state.fleets[index]
+  if (!fleet || fleet.brain !== 'ai') return state
+  if (fleet.ai.status !== 'fallback') fleet.ai.status = status
+  return state
+}
+
+function acceptBrain(state: SimState, index: number, orders: BrainOrder[], note: string, latencyMs: number): SimState {
+  const fleet = state.fleets[index]
+  if (!fleet || fleet.brain !== 'ai') return state
+  fleet.orders = orders
+  fleet.ai.status = 'ready'
+  fleet.ai.note = note
+  fleet.ai.latencyMs = latencyMs
+  fleet.ai.decidedAt = state.time
+  holdBrainOrders(state, fleet)
+  return state
+}
+
+function fallbackBrain(state: SimState, index: number, latencyMs: number): SimState {
+  const fleet = state.fleets[index]
+  if (!fleet || fleet.brain !== 'ai') return state
+  fleet.orders = null
+  fleet.ai.status = 'fallback'
+  fleet.ai.latencyMs = latencyMs
+  fleet.ai.fallbacks += 1
+  fleet.ai.note = 'ルールに戻しました'
+  fleet.ai.decidedAt = state.time
+  return state
+}
+
+function holdBrainOrders(state: SimState, fleet: Fleet): void {
+  if (!fleet.orders) return
+  for (const order of fleet.orders) {
+    const division = state.divisions[order.division]
+    if (!division || division.fleet !== fleet.index || division.alive === 0) continue
+    if (division.tacticId !== order.tacticId) applyTactic(state, order.division, order.tacticId)
+    if (order.target !== undefined) division.hunt = order.target
+    if (order.move) {
+      division.ordered = true
+      division.orderX = order.move.x
+      division.orderY = order.move.y
+      division.orderH = order.move.heading
+    } else {
+      division.ordered = false
+    }
+  }
+}
+
+function driveAi(state: SimState): void {
+  for (const fleet of state.fleets) {
+    if (!fleet || fleet.brain !== 'ai' || fleet.ships <= 0) continue
+    if (fleet.orders && state.time < fleet.ai.decidedAt + DECISION_INTERVAL) continue
+    const started = performance.now()
+    const decision = decidePolicy(observe(state, fleet.index))
+    fleet.ai.latencyMs = Math.round((performance.now() - started) * 100) / 100
+    fleet.ai.decidedAt = state.time
+    if (!decision) {
+      if (fleet.ai.status !== 'fallback') fleet.ai.fallbacks += 1
+      fleet.orders = null
+      fleet.ai.status = 'fallback'
+      fleet.ai.note = '方策を読めないのでルールで代行'
+      continue
+    }
+    fleet.orders = decision.orders
+    fleet.ai.status = 'ready'
+    fleet.ai.note = decision.note
+  }
+}
+
 function step(state: SimState, dt: number): void {
   refreshCentroids(state)
+  driveAi(state)
   if (state.time >= state.commandAt) {
     issueOrders(state)
     state.commandAt += FIELD.commandInterval
@@ -1018,11 +1122,11 @@ function step(state: SimState, dt: number): void {
   if (state.maneuver === 'shaped') {
     if (state.fleets.length > 2) {
       for (const fleet of state.fleets) {
-        if (fleet.ships > 0) updatePlan(state, fleet.side, fleet.index)
+        if (fleet.ships > 0 && rulesDrive(fleet)) updatePlan(state, fleet.side, fleet.index)
       }
     } else {
-      updatePlan(state, 0)
-      updatePlan(state, 1)
+      if (state.fleets[0] && rulesDrive(state.fleets[0])) updatePlan(state, 0)
+      if (state.fleets[1] && rulesDrive(state.fleets[1])) updatePlan(state, 1)
     }
   }
   for (const division of state.divisions) {
@@ -1045,8 +1149,10 @@ function step(state: SimState, dt: number): void {
     division.yielding = fleet.maneuver === 'breakout' || fleet.maneuver === 'reform'
     division.sprint = fleet.maneuver === 'envelop' || fleet.maneuver === 'seize'
     const manual = fleet.commanderId === 'manual'
-    if (division.ordered && !manual) division.ordered = false
-    if (division.ordered && manual) {
+    const brainMove = !rulesDrive(fleet)
+    if (brainMove) holdBrainOrders(state, fleet)
+    if (division.ordered && !manual && !brainMove) division.ordered = false
+    if (division.ordered && (manual || brainMove)) {
       stepMoveOrder(division, dt)
       continue
     }
