@@ -36,8 +36,7 @@ describe('常勝', () => {
         if (swap ? winner === 1 : winner === 0) wins += 1
       }
     }
-    // Lethal contact costs one of these seeds. 常勝 still wins the majority.
-    expect(wins).toBeGreaterThanOrEqual(5)
+    expect(wins).toBeGreaterThanOrEqual(6)
   })
 })
 

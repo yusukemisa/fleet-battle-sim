@@ -118,6 +118,38 @@ describe('move orders', () => {
     const end = Math.hypot((ship.x[at] ?? 0) - (state.divisions[0]?.ax ?? 0), (ship.y[at] ?? 0) - (state.divisions[0]?.ay ?? 0))
     expect(end).toBeLessThan(start * 0.45)
   })
+
+  it('brings a stopped battleship back even when it is inside 480 of the slot', () => {
+    let state = createSim({ shipCount: 1000, commanders: ['manual', 'manual'], brains: ['rule', 'rule'] })
+    const div = state.divisions[2]
+    const ship = state.ships
+    if (!div) return
+    div.tacticId = 'focus'
+    div.ordered = true
+    div.orderX = div.ax + 900
+    div.orderY = div.ay
+    div.orderH = 0
+    const at = ship.division.findIndex((id, i) => id === 2 && ship.alive[i] === 1 && ship.shipClass[i] === 0)
+    expect(at).toBeGreaterThanOrEqual(0)
+    ship.slotX[at] = 0
+    ship.slotY[at] = 0
+    ship.x[at] = div.ax - 240
+    ship.y[at] = div.ay
+    ship.heading[at] = Math.PI
+    ship.vx[at] = 0
+    ship.vy[at] = 0
+    const start = 240
+    state = dispatch(state, { type: 'set-speed', speed: 4 })
+    state = dispatch(state, { type: 'start' })
+    let peakSpeed = 0
+    for (let step = 0; step < 50; step++) {
+      state = dispatch(state, { type: 'tick', dt: 0.05 })
+      const speed = Math.hypot(ship.vx[at] ?? 0, ship.vy[at] ?? 0)
+      if (speed > peakSpeed) peakSpeed = speed
+    }
+    expect(peakSpeed).toBeGreaterThan(30)
+    expect(start).toBe(240)
+  })
 })
 
 function yawOnce(classes: readonly ShipClassId[]): number {

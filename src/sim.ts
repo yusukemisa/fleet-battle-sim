@@ -1344,14 +1344,31 @@ function moveShips(state: SimState, dt: number): void {
       targetInRange = rdx * rdx + rdy * rdy <= reach * reach
     }
     const stranded = (ships.shipClass[i] ?? 0) === 2 ? 180 : 480
-    const rejoin = !targetInRange && dist > stranded
+    const divSpeed = Math.hypot(division.vx, division.vy)
+    const shipSpeed = Math.hypot(ships.vx[i] ?? 0, ships.vy[i] ?? 0)
+    const slotAhead = dx * division.vx + dy * division.vy
+    const headingNow = ships.heading[i] ?? 0
+    const towardSlot = dx * Math.cos(headingNow) + dy * Math.sin(headingNow)
+    const battleship = (ships.shipClass[i] ?? 0) === 0
+    const ring = state.fleets[division.fleet]?.formationId === 'houen'
+    // A stopped battleship whose slot is pulling away turns back. 方円 is left
+    // on the old distance rule so the ring does not unfold.
+    const stuck = battleship && !ring && !targetInRange && dist > 60 && shipSpeed < 6 && divSpeed > 4 && slotAhead > 80
+    const catching = battleship && !ring && !targetInRange && dist > SLOT_PITCH && shipSpeed > 4 && towardSlot > 16
+    // Large blocks never reach the 480 rejoin line: the ship is still inside
+    // the formation. Point it at the slot until it is moving.
+    const keepUp =
+      battleship &&
+      !ring &&
+      division.roster >= 40 &&
+      !targetInRange &&
+      dist <= stranded &&
+      (shipSpeed <= 14 || dist <= SLOT_PITCH)
+    const rejoin = (!targetInRange && dist > stranded) || stuck || catching || keepUp
     let desired = divisionHeading
     const falling = ships.falling[i] === 1
-    if (rejoin) {
-      // A gun-facing ship that has fallen behind stares at the fight and never
-      // lines its bow up with the slot, so its speed stays zero.
-      desired = Math.atan2(dy, dx)
-    } else if (falling && dist > 8) {
+    if (rejoin) desired = dist <= SLOT_PITCH ? divisionHeading : Math.atan2(dy, dx)
+    else if (falling && dist > 8) {
       const enemy = ships.side[i] === 1 ? 0 : 1
       const threat = Math.atan2((state.centroidY[enemy] ?? 0) - y, (state.centroidX[enemy] ?? 0) - x)
       const aim = Math.atan2(dy, dx)
@@ -1394,6 +1411,7 @@ function moveShips(state: SimState, dt: number): void {
     else if (dist < 8) speed = along < 0 ? -reverse * 0.2 : Math.min(stats.maxSpeed * 0.2, dist)
     else if (along > 0.2) speed = Math.min(stats.maxSpeed, dist * 1.5)
     else if (along < -0.2) speed = -reverse
+    if (keepUp) speed = Math.max(speed, Math.min(stats.maxSpeed, Math.max(divSpeed, 18)))
     const off = Math.abs(error)
     if (off > 0.8) speed *= 0.45
     else if (off > 0.35) speed *= 0.75
