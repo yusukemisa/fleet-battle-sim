@@ -36,6 +36,69 @@ export const REWARD = {
   },
 } as const
 
+/**
+ * Exchange rate plus a heavier future-value term.
+ * Rates are per second, each clamped to 0..1 before weighting.
+ * Positional terms are already 0..1 and are scored before the guns pay off.
+ * `emphasis` scales the positional block by commander.
+ * A rates-only score drops the positional block. That is the ablation.
+ */
+export const OBJECTIVE = {
+  rates: {
+    dealtPerSecond: 0.35,
+    killsPerSecond: 0.45,
+    takenPerSecond: 0.3,
+    lossesPerSecond: 0.4,
+  },
+  positional: {
+    bearing: 0.9,
+    encirclement: 1.2,
+    breakthrough: 1.0,
+    flank: 0.8,
+    flagship: 0.7,
+  },
+  emphasis: {
+    fierce: { bearing: 0.6, encirclement: 0.45, breakthrough: 1.5, flank: 0.7, flagship: 1.1 },
+    cunning: { bearing: 1.15, encirclement: 1.35, breakthrough: 1.05, flank: 1.3, flagship: 1.0 },
+    guard: { bearing: 1.1, encirclement: 0.8, breakthrough: 0.35, flank: 0.6, flagship: 0.9 },
+    balanced: { bearing: 1.1, encirclement: 1.25, breakthrough: 1.05, flank: 1.15, flagship: 1.0 },
+  },
+} as const
+
+export type ObjectiveMode = 'rates' | 'full'
+
+function clamp01(value: number): number {
+  if (value <= 0) return 0
+  if (value >= 1) return 1
+  return value
+}
+
+/** Rate terms, or rate terms plus the positional future value. */
+export function scoreObjective(personality: Personality, report: BattleReport, mode: ObjectiveMode): number {
+  const time = Math.max(1, report.time)
+  const rates = OBJECTIVE.rates
+  const dealt = clamp01(report.dealt / time / 25)
+  const kills = clamp01((report.kills ?? 0) / time / 0.35)
+  const taken = clamp01(report.taken / time / 25)
+  const losses = clamp01((report.losses ?? 0) / time / 0.35)
+  const rate =
+    rates.dealtPerSecond * dealt +
+    rates.killsPerSecond * kills -
+    rates.takenPerSecond * taken -
+    rates.lossesPerSecond * losses
+  if (mode === 'rates') return rate
+  const emphasis = OBJECTIVE.emphasis[personality]
+  const place = OBJECTIVE.positional
+  return (
+    rate +
+    place.bearing * emphasis.bearing * (report.bearing ?? 0) +
+    place.encirclement * emphasis.encirclement * (report.encircle ?? 0) +
+    place.breakthrough * emphasis.breakthrough * (report.breakthrough ?? 0) +
+    place.flank * emphasis.flank * report.flank +
+    place.flagship * emphasis.flagship * (report.flagThreat ?? 0)
+  )
+}
+
 /** Added to a fresh policy's output bias, once, before the first generation. */
 export const INITIAL_BIAS = {
   fierce: { charge: 0.45, breakthrough: 0.35 },
@@ -73,6 +136,18 @@ export interface BattleReport {
   /** 1 when ships keep their distance. Near misses and collision losses pull it down. */
   spacing: number
   time: number
+  /** Enemy ships destroyed. Omitted reports count as zero. */
+  kills?: number
+  /** Own ships lost. */
+  losses?: number
+  /** Share of our divisions whose bow is on an enemy inside gun range. */
+  bearing?: number
+  /** Share of the circle around the enemy that our divisions occupy. */
+  encircle?: number
+  /** 1 once a division has crossed the enemy centre. */
+  breakthrough?: number
+  /** 1 when an enemy flagship is inside our gun range. */
+  flagThreat?: number
 }
 
 export function scoreBattle(personality: Personality, report: BattleReport): number {
@@ -80,21 +155,21 @@ export function scoreBattle(personality: Personality, report: BattleReport): num
   if (personality === 'fierce') {
     const share = report.dealt / Math.max(1, report.dealt + report.taken)
     const weights = REWARD.fierce
-    return weights.win * win + weights.earlyContact * report.contact + weights.damageShare * share + weights.assault * report.assault + weights.spacing * report.spacing
+    return weights.win * win + weights.earlyContact * report.contact + weights.damageShare * share + weights.assault * report.assault + weights.spacing * report.spacing + scoreObjective(personality, report, 'full')
   }
   if (personality === 'cunning') {
     const ratio = report.exchange
     const exchange = ratio / (1 + ratio)
     const destroyerShare = report.destroyerDealt / Math.max(1, report.dealt)
     const weights = REWARD.cunning
-    return weights.win * win + weights.exchange * exchange + weights.flank * report.flank + weights.destroyer * destroyerShare * exchange + weights.spacing * report.spacing
+    return weights.win * win + weights.exchange * exchange + weights.flank * report.flank + weights.destroyer * destroyerShare * exchange + weights.spacing * report.spacing + scoreObjective(personality, report, 'full')
   }
   if (personality === 'guard') {
     const cover = 1 - report.exposure
     const weights = REWARD.guard
-    return weights.win * win + weights.survive * report.alive + weights.cover * cover + weights.cohesion * report.cohesion + weights.spacing * report.spacing
+    return weights.win * win + weights.survive * report.alive + weights.cover * cover + weights.cohesion * report.cohesion + weights.spacing * report.spacing + scoreObjective(personality, report, 'full')
   }
-  return REWARD.balanced.win * win + REWARD.balanced.alive * report.alive + REWARD.balanced.spacing * report.spacing
+  return REWARD.balanced.win * win + REWARD.balanced.alive * report.alive + REWARD.balanced.spacing * report.spacing + scoreObjective(personality, report, 'full')
 }
 
 /** Mean for the three personalities. 常勝 mixes that mean with its worst quartile. */
