@@ -1,4 +1,4 @@
-import { CLASS_STATS, classIndex, SHIP_STATS } from './balance.ts'
+import { CLASS_STATS, classIndex, lineRange, SHIP_STATS } from './balance.ts'
 import { inBattery, wrapAngle } from './combat.ts'
 import type { Division, SideId, SimState } from './types.ts'
 
@@ -96,12 +96,10 @@ export function wideFlankGoal(div: Division, prey: Division, mode: 'side' | 'rea
   const side = Math.abs(cross) > 40 ? Math.sign(cross) || preferred : preferred
   const range = Math.hypot(relX, relY) || 1
   const angle = Math.atan2(side * cross, along)
-  const own = statsOf(div)
-  const ownSide = own.batteries[1]?.maxRange ?? 420
-  const ownBow = own.batteries[0]?.maxRange ?? 900
-  const gunRange = Math.min(ownSide * 0.88, ownBow * 0.78)
+  const ownBow = statsOf(div).batteries[0]?.maxRange ?? 900
   const wantAngle = mode === 'rear' ? (130 * Math.PI) / 180 : div.screen ? (78 * Math.PI) / 180 : (100 * Math.PI) / 180
-  const wantRange = mode === 'rear' ? Math.min(ownBow * 0.8, gunRange + 30) : gunRange
+  const opened = lineRange(div.classId, div.alive)
+  const wantRange = mode === 'rear' ? Math.max(opened, Math.min(ownBow * 0.85, opened + 40)) : opened
   const inFront = angle < bowHalf + 0.15
   const pocket = angle > wantAngle - 0.35 && range < wantRange + 140
   let goalAngle = wantAngle

@@ -2,10 +2,20 @@ import { describe, expect, it } from 'vitest'
 import { SHIP_STATS } from './balance.ts'
 import { COMMANDERS } from './commanders.ts'
 import { armorMultiplier, armorZone } from './combat.ts'
+import { crossfireScale, pointBlankChance } from './gunnery.ts'
 import { createSim, dispatch } from './sim.ts'
 import type { SimState } from './types.ts'
 
 describe('fire control', () => {
+  it('makes a point-blank battleship shot less likely than a destroyer shot, and pays for a second bearing', () => {
+    expect(pointBlankChance(0, 0, 0.86)).toBeLessThan(pointBlankChance(2, 0, 0.86))
+    expect(pointBlankChance(0, 400, 0.86)).toBeCloseTo(0.86)
+    expect(pointBlankChance(0, 0, 0.86)).toBeGreaterThan(0.15)
+    expect(crossfireScale(99, 0)).toBe(1)
+    expect(crossfireScale(0, 1.2)).toBeGreaterThan(1)
+    expect(crossfireScale(0, 0.2)).toBe(1)
+  })
+
   it('matches the bow and stern armor zones', () => {
     expect(armorZone(0, 0, 0, 20, 0, SHIP_STATS)).toBe('front')
     expect(armorZone(0, 0, 0, -20, 0, SHIP_STATS)).toBe('rear')

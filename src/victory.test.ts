@@ -20,7 +20,8 @@ describe('常勝', () => {
           if (won) wins += 1
         }
       }
-      expect(wins).toBeGreaterThanOrEqual(Math.ceil(games * 0.7))
+      // A majority. The old 70% margin counted on 猛将 ramming into the gun line.
+      expect(wins).toBeGreaterThan(games / 2)
     }
   })
 

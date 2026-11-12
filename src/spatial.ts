@@ -24,6 +24,8 @@ export interface CombatScratch {
   bowY: Float32Array
   incoming: Float32Array
   opened: Float32Array
+  /** Approach angle of the last hit on this hull. 99 means none yet this step. */
+  bearing: Float32Array
   exposed: Uint8Array
   cosArc: number
   cosBow: number
@@ -64,6 +66,7 @@ export function createScratch(count: number, cell: number): CombatScratch {
     bowY: new Float32Array(count),
     incoming: new Float32Array(count),
     opened: new Float32Array(count),
+    bearing: new Float32Array(count).fill(99),
     exposed: new Uint8Array(count),
     cosArc: 1,
     cosBow: 1,
