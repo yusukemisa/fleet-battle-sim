@@ -133,7 +133,39 @@ export function collectNear(
   xs: Float32Array,
   ys: Float32Array,
 ): number {
-  return collectInto(hash, x, y, radius, xs, ys, hash.found)
+  const cell = hash.cell
+  const reach = Math.ceil(radius / cell)
+  const cx = Math.floor(x / cell)
+  const cy = Math.floor(y / cell)
+  const gen = hash.generation
+  const mask = hash.mask
+  const radiusSq = radius * radius
+  const found = hash.found
+  let n = 0
+  for (let oy = -reach; oy <= reach; oy++) {
+    for (let ox = -reach; ox <= reach; ox++) {
+      const key = cellKey(cx + ox, cy + oy)
+      let slot = key & mask
+      let guard = 0
+      for (;;) {
+        if (hash.stamp[slot] !== gen) break
+        if (hash.keys[slot] === key) {
+          let ship = hash.head[slot] ?? -1
+          while (ship >= 0) {
+            const dx = (xs[ship] ?? 0) - x
+            const dy = (ys[ship] ?? 0) - y
+            if (dx * dx + dy * dy <= radiusSq) found[n++] = ship
+            ship = hash.next[ship] ?? -1
+          }
+          break
+        }
+        slot = (slot + 1) & mask
+        guard += 1
+        if (guard > mask) break
+      }
+    }
+  }
+  return n
 }
 
 /** Same search as {@link collectNear}, writing into `dest` so callers can keep `hash.found`. */
