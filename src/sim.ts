@@ -1328,10 +1328,23 @@ function moveShips(state: SimState, dt: number): void {
     // Inside one slot pitch the station is close enough. Chasing it makes a blocked ship
     // yaw toward a point that collision keeps moving to the other side.
     const settled = dist <= SLOT_PITCH
-    let desired = divisionHeading
     const target = ships.target[i] ?? -1
+    let targetInRange = false
+    if (target >= 0 && ships.alive[target] === 1) {
+      const rdx = (ships.x[target] ?? 0) - x
+      const rdy = (ships.y[target] ?? 0) - y
+      const reach = stats.range
+      targetInRange = rdx * rdx + rdy * rdy <= reach * reach
+    }
+    const stranded = (ships.shipClass[i] ?? 0) === 2 ? 180 : 480
+    const rejoin = !targetInRange && dist > stranded
+    let desired = divisionHeading
     const falling = ships.falling[i] === 1
-    if (falling && dist > 8) {
+    if (rejoin) {
+      // A gun-facing ship that has fallen behind stares at the fight and never
+      // lines its bow up with the slot, so its speed stays zero.
+      desired = Math.atan2(dy, dx)
+    } else if (falling && dist > 8) {
       const enemy = ships.side[i] === 1 ? 0 : 1
       const threat = Math.atan2((state.centroidY[enemy] ?? 0) - y, (state.centroidX[enemy] ?? 0) - x)
       const aim = Math.atan2(dy, dx)
@@ -1351,7 +1364,7 @@ function moveShips(state: SimState, dt: number): void {
     } else if (target >= 0 && ships.alive[target] === 1) {
       desired = Math.atan2((ships.y[target] ?? 0) - y, (ships.x[target] ?? 0) - x)
     }
-    desired = threatenedHeading(division, desired, x, y)
+    if (!rejoin) desired = threatenedHeading(division, desired, x, y)
     const prevHeading = ships.heading[i] ?? desired
     const prevSpeed = (ships.vx[i] ?? 0) * Math.cos(prevHeading) + (ships.vy[i] ?? 0) * Math.sin(prevHeading)
     let heading = prevHeading

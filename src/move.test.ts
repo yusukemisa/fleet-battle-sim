@@ -89,6 +89,35 @@ describe('move orders', () => {
     expect(n).toBeGreaterThan(0)
     expect(sum / n).toBeLessThan(140)
   })
+
+  it('brings a gun-facing ship back to its slot when the enemy is out of range', () => {
+    let state = createSim({ shipCount: 100, commanders: ['manual', 'manual'] })
+    const div = state.divisions[0]
+    const ship = state.ships
+    if (!div) return
+    div.tacticId = 'focus'
+    div.fx = 1
+    div.fy = 0
+    div.rx = 0
+    div.ry = -1
+    div.guard = 4
+    div.guardX = div.ax + 800
+    div.guardY = div.ay
+    const at = ship.division.findIndex((id, i) => id === 0 && ship.alive[i] === 1)
+    ship.slotX[at] = 0
+    ship.slotY[at] = 0
+    ship.x[at] = div.ax - 480
+    ship.y[at] = div.ay
+    ship.heading[at] = Math.PI
+    ship.vx[at] = 0
+    ship.vy[at] = 0
+    const start = Math.hypot((ship.x[at] ?? 0) - div.ax, (ship.y[at] ?? 0) - div.ay)
+    state = dispatch(state, { type: 'set-speed', speed: 4 })
+    state = dispatch(state, { type: 'start' })
+    for (let step = 0; step < 80; step++) state = dispatch(state, { type: 'tick', dt: 0.05 })
+    const end = Math.hypot((ship.x[at] ?? 0) - (state.divisions[0]?.ax ?? 0), (ship.y[at] ?? 0) - (state.divisions[0]?.ay ?? 0))
+    expect(end).toBeLessThan(start * 0.45)
+  })
 })
 
 function yawOnce(classes: readonly ShipClassId[]): number {

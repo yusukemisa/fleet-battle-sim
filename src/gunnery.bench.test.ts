@@ -24,8 +24,8 @@ describe('gunnery benchmark', () => {
     const aimed = mean(after, GUNNERY_CASES.length)
     console.log(table(legacy, aimed))
     expect(aimed.held).toBeLessThanOrEqual(legacy.held)
-    // Standoff yaw spends a few more seconds finding a bearing. Aimed fire should stay close.
-    expect(aimed.wide).toBeLessThan(legacy.wide + 6)
+    // Rejoining a slot takes the bow off a target that is out of range.
+    expect(aimed.wide).toBeLessThan(legacy.wide + 12)
     // A shell that destroys its target can still strike the next hull, which the tally counts as overkill.
     expect(aimed.overkill).toBeLessThan(legacy.overkill + 2)
     expect(aimed.damagePer).toBeGreaterThan(legacy.damagePer)
