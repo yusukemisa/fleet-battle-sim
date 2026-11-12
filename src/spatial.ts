@@ -141,9 +141,21 @@ export function collectNear(
   const mask = hash.mask
   const radiusSq = radius * radius
   const found = hash.found
+  let ox0 = -reach
+  let ox1 = reach
+  let oy0 = -reach
+  let oy1 = reach
+  if (reach === 1) {
+    const fracX = x - cx * cell
+    const fracY = y - cy * cell
+    if (fracX > radius) ox0 = 0
+    if (cell - fracX > radius) ox1 = 0
+    if (fracY > radius) oy0 = 0
+    if (cell - fracY > radius) oy1 = 0
+  }
   let n = 0
-  for (let oy = -reach; oy <= reach; oy++) {
-    for (let ox = -reach; ox <= reach; ox++) {
+  for (let oy = oy0; oy <= oy1; oy++) {
+    for (let ox = ox0; ox <= ox1; ox++) {
       const key = cellKey(cx + ox, cy + oy)
       let slot = key & mask
       let guard = 0

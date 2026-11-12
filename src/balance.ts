@@ -327,6 +327,20 @@ export function turningRadius(maxSpeed: number, turnRate: number): number {
 }
 
 export function stepYaw(yaw: number, error: number, turnRate: number, yawAccel: number, dt: number): { yaw: number; delta: number } {
+  const out = { yaw: 0, delta: 0 }
+  stepYawInto(out, yaw, error, turnRate, yawAccel, dt)
+  return out
+}
+
+/** Same turn as {@link stepYaw}, written into `out` so a ship loop can reuse one object. */
+export function stepYawInto(
+  out: { yaw: number; delta: number },
+  yaw: number,
+  error: number,
+  turnRate: number,
+  yawAccel: number,
+  dt: number,
+): void {
   const want = Math.max(-turnRate, Math.min(turnRate, error * 5))
   let next = yaw + Math.max(-yawAccel * dt, Math.min(yawAccel * dt, want - yaw))
   next = Math.max(-turnRate, Math.min(turnRate, next))
@@ -336,7 +350,8 @@ export function stepYaw(yaw: number, error: number, turnRate: number, yawAccel: 
     next = dt > 0 ? error / dt : 0
     next = Math.max(-turnRate, Math.min(turnRate, next))
   }
-  return { yaw: next, delta }
+  out.yaw = next
+  out.delta = delta
 }
 
 /**

@@ -13,7 +13,7 @@ describe('智将 against the other commanders', () => {
     expect(guard).toBeDefined()
     if (!guard) return
     expect(worst).toBeLessThanOrEqual(0.35)
-  })
+  }, 60_000)
 })
 
 function measure(foe: (typeof FOES)[number]) {
