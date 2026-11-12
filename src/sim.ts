@@ -16,6 +16,7 @@ import { featurize } from './brain/features.ts'
 import { DECISION_INTERVAL, decidePolicy, defaultBrain, preferredFormation } from './brain/policy.ts'
 import { observe } from './brain/observe.ts'
 import { stepPlan, updatePlan } from './posture.ts'
+import { applyDensity, DENSITY } from './density.ts'
 import { TACTICS, stepDivision, tacticById } from './tactics.ts'
 import {
   DEFAULT_COMMANDER,
@@ -1210,6 +1211,7 @@ function step(state: SimState, dt: number): void {
     division.sprint = fleet.maneuver === 'envelop' || fleet.maneuver === 'seize'
     const manual = fleet.commanderId === 'manual'
     const brainMove = !rulesDrive(fleet)
+    if (fleet.ships >= DENSITY.minShips && !manual && state.maneuver === 'shaped') continue
     if (brainMove) holdBrainOrders(state, fleet)
     if (division.ordered && !manual && !brainMove) division.ordered = false
     if (division.ordered && (manual || brainMove)) {
@@ -1238,6 +1240,7 @@ function step(state: SimState, dt: number): void {
     division.shaped = false
     stepDivision(division, ctx, dt, !shaped || fleet.maneuver === 'wheel')
   }
+  applyDensity(state, dt)
   if (state.fleets.length > 2) separateFleets(state)
   holdFronts(state)
   if (state.time >= state.rankAt) {

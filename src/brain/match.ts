@@ -1,4 +1,5 @@
 import { MANEUVER } from '../balance.ts'
+import { bearingShare, breakthrough, encirclement, flagThreat } from '../density.ts'
 import { createSim, dispatch } from '../sim.ts'
 import type { CommanderId, FormationId, SimState } from '../types.ts'
 import type { BattleReport } from './fitness.ts'
@@ -88,6 +89,10 @@ export function playMatch(setup: MatchSetup): BattleReport {
   let assault = 0
   let cohesion = 0
   let spacing = 0
+  let bearing = 0
+  let encircle = 0
+  let pierced = 0
+  let flags = 0
   let samples = 0
   let steps = 0
   try {
@@ -102,6 +107,10 @@ export function playMatch(setup: MatchSetup): BattleReport {
         assault += sampleAssault(state, focus)
         cohesion += sampleCohesion(state, focus)
         spacing += sampleSpacing(state, focus)
+        bearing += bearingShare(state, focus)
+        encircle += encirclement(state, focus)
+        pierced = Math.max(pierced, breakthrough(state, focus))
+        flags = Math.max(flags, flagThreat(state, focus))
         samples += 1
       }
     }
@@ -128,6 +137,12 @@ export function playMatch(setup: MatchSetup): BattleReport {
       cohesion: samples === 0 ? 1 : cohesion / samples,
       spacing: samples === 0 ? 1 : spacing / samples,
       time: state.time,
+      kills: state.lost[enemy] ?? 0,
+      losses: state.lost[focus] ?? 0,
+      bearing: samples === 0 ? 0 : bearing / samples,
+      encircle: samples === 0 ? 0 : encircle / samples,
+      breakthrough: pierced,
+      flagThreat: flags,
     }
   } finally {
     clearFleetPolicies()
