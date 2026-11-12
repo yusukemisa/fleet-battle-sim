@@ -5,5 +5,6 @@ export default defineConfig(({ command }) => ({
   base: process.env.VITE_BASE ?? (command === 'build' ? '/fleet-battle-sim/' : '/'),
   server: { host: '0.0.0.0', port: 43173, strictPort: true },
   preview: { host: '0.0.0.0', port: 43173, strictPort: true },
-  test: { environment: 'node', include: ['src/**/*.test.ts'] },
+  // Step-time tests share the machine. One file at a time keeps that number the sim, not the neighbor.
+  test: { environment: 'node', include: ['src/**/*.test.ts'], fileParallelism: false },
 }))

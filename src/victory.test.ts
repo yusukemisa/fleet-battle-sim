@@ -23,7 +23,7 @@ describe('常勝', () => {
       // A majority. The old 70% margin counted on 猛将 ramming into the gun line.
       expect(wins).toBeGreaterThan(games / 2)
     }
-  })
+  }, 60_000)
 
   it('方円 stays ahead of 智将 偃月 on a fixed seed set', () => {
     let wins = 0

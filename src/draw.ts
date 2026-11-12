@@ -1,5 +1,5 @@
 import { CLASS_MODS, FIELD, SHIP_CLASS_IDS, classMods } from './balance.ts'
-import { FLAGSHIP } from './flagship.ts'
+import { divisionCommandRadius, fleetCommandRadius } from './flagship.ts'
 import { orderPoints } from './move.ts'
 import { pathCrossesBow } from './threat.ts'
 import { FORMATIONS } from './formations.ts'
@@ -382,8 +382,19 @@ function paintFlagships(
     if (at < 0 || ships.alive[at] !== 1) continue
     const atScreen = worldToScreen(ships.x[at] ?? 0, ships.y[at] ?? 0, camera, width, height)
     ctx.beginPath()
-    ctx.arc(atScreen.x, atScreen.y, FLAGSHIP.fleetRadius * camera.zoom, 0, Math.PI * 2)
+    ctx.arc(atScreen.x, atScreen.y, fleetCommandRadius(fleet.ships) * camera.zoom, 0, Math.PI * 2)
     ctx.strokeStyle = 'rgba(232, 196, 92, 0.28)'
+    ctx.stroke()
+  }
+  ctx.lineWidth = 1
+  ctx.setLineDash([3, 5])
+  for (const division of state.divisions) {
+    const at = division.flagship
+    if (at < 0 || ships.alive[at] !== 1 || division.roster <= 0) continue
+    const atScreen = worldToScreen(ships.x[at] ?? 0, ships.y[at] ?? 0, camera, width, height)
+    ctx.beginPath()
+    ctx.arc(atScreen.x, atScreen.y, divisionCommandRadius(division.roster) * camera.zoom, 0, Math.PI * 2)
+    ctx.strokeStyle = 'rgba(226, 220, 196, 0.22)'
     ctx.stroke()
   }
   ctx.setLineDash([])
