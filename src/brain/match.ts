@@ -10,7 +10,7 @@ export interface MatchSetup {
   commanders: readonly [CommanderId, CommanderId]
   formations: readonly [FormationId, FormationId]
   seed: number
-  brains: readonly ['rule' | 'ai', 'rule' | 'ai']
+  brains: readonly ['rule' | 'ai' | 'dt', 'rule' | 'ai' | 'dt']
   /** Candidate weights for a fleet. Omit to use the committed file for its commander. */
   weights?: readonly [PolicyWeights | undefined, PolicyWeights | undefined]
   /** The fleet whose damage, contact, and survival the report describes. */

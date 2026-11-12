@@ -61,7 +61,7 @@ export function mountHud(
     <ol id="log"></ol>
     <details id="orders">
       <summary title="手動の隊名をクリックして選び、地図を押してドラッグすると移動を命じます">分艦隊の艦種と戦術</summary>
-      <p class="ai-settings">猛将・守将・常勝は最初から AI、智将はルールです。常勝は開戦時に相手の陣形へ合わせて自陣を選びます。切り替えはその艦隊だけを変え、指揮官を変えると初期値に戻ります。重みがないときはルールで代行します。</p>
+      <p class="ai-settings">猛将・守将・常勝は最初から AI、智将はルールです。DT は手元の Decision Transformer で、初期値にはしません。常勝は開戦時に相手の陣形へ合わせて自陣を選びます。切り替えはその艦隊だけを変え、指揮官を変えると初期値に戻ります。重みがないときはルールで代行します。</p>
       <div class="order-grid">
         <section data-side="0"></section>
         <section data-side="1"></section>
@@ -201,7 +201,8 @@ export function mountHud(
     }
     if (target instanceof HTMLButtonElement && target.dataset.kind === 'brain') {
       const fleet = Number(target.dataset.fleet)
-      const brain = target.dataset.brain === 'ai' ? 'ai' : 'rule'
+      const picked = target.dataset.brain
+      const brain = picked === 'ai' || picked === 'dt' ? picked : 'rule'
       if (Number.isInteger(fleet)) onCommand({ type: 'set-fleet-brain', fleet, brain })
     }
     if (target instanceof HTMLButtonElement && target.dataset.kind === 'order-fleet') {
@@ -411,7 +412,7 @@ export function syncHud(parent: HTMLElement, hud: Hud, state: SimState, picked: 
 }
 
 function aiStatusText(fleet: SimState['fleets'][number]): string {
-  if (fleet.brain !== 'ai') return ''
+  if (fleet.brain === 'rule') return ''
   const latency = fleet.ai.latencyMs > 0 ? ` ${fleet.ai.latencyMs}ms` : ''
   const fallbacks = fleet.ai.fallbacks > 0 ? ` 代替 ${fleet.ai.fallbacks}` : ''
   if (fleet.ai.status === 'thinking') return `思考中${fallbacks}`
@@ -425,11 +426,11 @@ function paintAiStatus(parent: HTMLElement, state: SimState): void {
     const fleet = state.fleets[Number(element.dataset.fleet)]
     if (!fleet) return
     element.textContent = aiStatusText(fleet)
-    element.classList.toggle('fallback', fleet.brain === 'ai' && fleet.ai.status === 'fallback')
+    element.classList.toggle('fallback', fleet.brain !== 'rule' && fleet.ai.status === 'fallback')
   })
   parent.querySelectorAll<HTMLElement>('.ai-note').forEach((element) => {
     const fleet = state.fleets[Number(element.dataset.fleet)]
-    element.textContent = fleet?.brain === 'ai' ? fleet.ai.note : ''
+    element.textContent = fleet && fleet.brain !== 'rule' ? fleet.ai.note : ''
   })
 }
 
@@ -516,15 +517,15 @@ function paintOrders(parent: HTMLElement, hud: Hud, state: SimState): void {
       const brain = document.createElement('div')
       brain.className = 'brain-toggle'
       brain.dataset.fleet = String(fleet.index)
-      for (const mode of ['rule', 'ai'] as const) {
+      for (const mode of ['rule', 'ai', 'dt'] as const) {
         const button = document.createElement('button')
         button.type = 'button'
         button.dataset.kind = 'brain'
         button.dataset.brain = mode
         button.dataset.fleet = String(fleet.index)
-        button.textContent = mode === 'rule' ? 'ルール' : 'AI'
+        button.textContent = mode === 'rule' ? 'ルール' : mode === 'ai' ? 'AI' : 'DT'
         button.classList.toggle('on', fleet.brain === mode)
-        button.title = mode === 'rule' ? 'コードの指揮官' : 'モデルに令を尋ねる'
+        button.title = mode === 'rule' ? 'コードの指揮官' : mode === 'ai' ? '進化戦略の方策' : '決定トランスフォーマ'
         brain.append(button)
       }
       const status = document.createElement('p')

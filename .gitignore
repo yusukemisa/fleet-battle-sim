@@ -4,3 +4,5 @@ dist-ssr
 *.local
 .DS_Store
 *.log
+__pycache__/
+tools/dt/data/
