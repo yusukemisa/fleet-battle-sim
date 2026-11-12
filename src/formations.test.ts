@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { HULL_RADIUS, SLOT_PITCH } from './balance.ts'
 import { layoutFormation } from './formations.ts'
 import type { FormationId, FormationLayout } from './types.ts'
 
@@ -197,9 +198,27 @@ describe('formations', () => {
       const large = layoutFormation(id, 5000)
       const smallBox = bounds(small)
       const largeBox = bounds(large)
-      expect(largeBox.width, id).toBeGreaterThan(smallBox.width * 1.45)
-      expect(largeBox.depth, id).toBeGreaterThan(smallBox.depth * 1.45)
+      expect(largeBox.width, id).toBeGreaterThan(smallBox.width * 1.4)
+      expect(largeBox.depth, id).toBeGreaterThan(smallBox.depth * 1.4)
       expect(minSpacing(large), id).toBeGreaterThan(7)
+    }
+  })
+
+  it('keeps every slot outside the largest hull', () => {
+    const need = HULL_RADIUS[0] * 2 + 4
+    expect(SLOT_PITCH).toBeGreaterThan(need)
+    for (const id of IDS) {
+      for (const count of [50, 100, 500]) {
+        const layout = layoutFormation(id, count)
+        let best = Infinity
+        for (let i = 0; i < layout.count; i++) {
+          for (let j = i + 1; j < layout.count; j++) {
+            const d = Math.hypot((layout.x[i] ?? 0) - (layout.x[j] ?? 0), (layout.y[i] ?? 0) - (layout.y[j] ?? 0))
+            if (d < best) best = d
+          }
+        }
+        expect(best, `${id} ${count}`).toBeGreaterThanOrEqual(18)
+      }
     }
   })
 

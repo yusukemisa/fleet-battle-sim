@@ -1,4 +1,4 @@
-import { acquireSq, CLASS_STATS, DEFAULT_LINE, FIELD, FLEET_STANDOFF, fleetLine, GUNNERY, hullHp, RANKS, SHIP_CLASS_IDS, SHIP_STATS, SIM_TIME_SCALE, SWEEP, stepYaw, thrust, volleyGap, volleyPhase, type ShipClassId, type ShipStats } from './balance.ts'
+import { acquireSq, CLASS_STATS, DEFAULT_LINE, FIELD, FLEET_STANDOFF, fleetLine, GUNNERY, hullHp, RANKS, SHIP_CLASS_IDS, SHIP_STATS, SIM_TIME_SCALE, SLOT_PITCH, SWEEP, stepYaw, thrust, volleyGap, volleyPhase, type ShipClassId, type ShipStats } from './balance.ts'
 import { anchorFleets, assignTargets, fitGroups, fleetIndex, FLEET_NAMES as FLEET_TITLES, separateFleets } from './fleets.ts'
 import { armorZone, inArc, inBattery, inFiringArc, wrapAngle } from './combat.ts'
 import { chooseTactic, COMMANDERS, employClass, type BattleFacts, type Bearing } from './commanders.ts'
@@ -1311,7 +1311,11 @@ function moveShips(state: SimState, dt: number): void {
     const dy = ty - y
     const dist = Math.hypot(dx, dy)
     const guns = TACTICS[division.tacticId].guns && !division.sweeping
-    let desired = Math.atan2(division.fy, division.fx)
+    const divisionHeading = Math.atan2(division.fy, division.fx)
+    // Inside one slot pitch the station is close enough. Chasing it makes a blocked ship
+    // yaw toward a point that collision keeps moving to the other side.
+    const settled = dist <= SLOT_PITCH
+    let desired = divisionHeading
     const target = ships.target[i] ?? -1
     const falling = ships.falling[i] === 1
     if (falling && dist > 8) {
@@ -1329,7 +1333,7 @@ function moveShips(state: SimState, dt: number): void {
       else if (dist < 90) chase = false
       ships.approach[i] = chase ? 1 : 0
       desired = chase ? Math.atan2(dy, dx) : Math.atan2(division.fy, division.fx)
-    } else if (!guns && dist > 22) {
+    } else if (!guns && !settled) {
       desired = Math.atan2(dy, dx)
     } else if (target >= 0 && ships.alive[target] === 1) {
       desired = Math.atan2((ships.y[target] ?? 0) - y, (ships.x[target] ?? 0) - x)
@@ -1347,7 +1351,8 @@ function moveShips(state: SimState, dt: number): void {
     const hy = Math.sin(heading)
     const along = dist > 1e-4 ? (dx * hx + dy * hy) / dist : 1
     let speed = 0
-    if (dist < 8) speed = along < 0 ? -reverse * 0.2 : Math.min(stats.maxSpeed * 0.2, dist)
+    if (settled) speed = along > 0.5 ? Math.min(14, dist) : 0
+    else if (dist < 8) speed = along < 0 ? -reverse * 0.2 : Math.min(stats.maxSpeed * 0.2, dist)
     else if (along > 0.2) speed = Math.min(stats.maxSpeed, dist * 1.5)
     else if (along < -0.2) speed = -reverse
     const off = Math.abs(error)

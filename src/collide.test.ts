@@ -60,6 +60,49 @@ describe('hulls', () => {
     expect(shotBlocked(state, 0, 50)).toBe(false)
   })
 
+  it('does not leave a ship spinning in place after the battle starts', () => {
+    let state = createSim({
+      shipCount: 100,
+      commanders: ['balanced', 'fierce'],
+      formations: ['oujin', 'kakuyoku'],
+      brains: ['rule', 'rule'],
+    })
+    for (let a = 0; a < state.ships.count; a++) {
+      if (state.ships.alive[a] === 0) continue
+      for (let b = a + 1; b < state.ships.count; b++) {
+        if (state.ships.alive[b] === 0) continue
+        const gap = Math.hypot((state.ships.x[a] ?? 0) - (state.ships.x[b] ?? 0), (state.ships.y[a] ?? 0) - (state.ships.y[b] ?? 0))
+        const need = hullRadius(state.ships.shipClass[a] ?? 0) + hullRadius(state.ships.shipClass[b] ?? 0)
+        expect(gap).toBeGreaterThanOrEqual(need - 0.05)
+      }
+    }
+    const heading = Float32Array.from(state.ships.heading)
+    const x0 = Float32Array.from(state.ships.x)
+    const y0 = Float32Array.from(state.ships.y)
+    const turned = new Float64Array(state.ships.count)
+    state = dispatch(state, { type: 'set-speed', speed: 4 })
+    state = dispatch(state, { type: 'start' })
+    for (let step = 0; step < 80; step++) {
+      const before = Float32Array.from(state.ships.heading)
+      state = dispatch(state, { type: 'tick', dt: 0.05 })
+      for (let i = 0; i < state.ships.count; i++) {
+        if (state.ships.alive[i] === 0) continue
+        let delta = (state.ships.heading[i] ?? 0) - (before[i] ?? 0)
+        while (delta > Math.PI) delta -= Math.PI * 2
+        while (delta < -Math.PI) delta += Math.PI * 2
+        turned[i] = (turned[i] ?? 0) + Math.abs(delta)
+      }
+    }
+    let stuck = 0
+    for (let i = 0; i < state.ships.count; i++) {
+      if (state.ships.alive[i] === 0) continue
+      const moved = Math.hypot((state.ships.x[i] ?? 0) - (x0[i] ?? 0), (state.ships.y[i] ?? 0) - (y0[i] ?? 0))
+      if (moved < 12 && (turned[i] ?? 0) > Math.PI * 1.25) stuck += 1
+    }
+    expect(stuck).toBe(0)
+    expect(heading.length).toBe(state.ships.count)
+  })
+
   it('sends a division that has fallen out of the fight back toward an enemy', () => {
     let state = createSim({ shipCount: 100, commanders: ['guard', 'fierce'], brains: ['rule', 'rule'] })
     const wing = state.divisions[0]
