@@ -425,13 +425,36 @@ export const GUNNERY = {
   cell: 180,
   /** Keep the current target unless a new one scores this much higher. */
   stick: 1.35,
-  /** Inside this range, hit chance falls. Battleship, cruiser, destroyer. */
-  pointBlank: [180, 120, 48],
-  /** Hit chance remaining at range 0, as a fraction of the normal chance. */
-  pointFloor: [0.24, 0.35, 0.62],
   /** Extra damage when a hull is already being hit from another bearing. */
   crossfire: 1.22,
   crossAngle: 0.9,
+} as const
+
+/**
+ * A miss, or the residual of a shot that destroys its target, can hit another hull
+ * near the impact. The chance grows with how many ships are packed there.
+ */
+export const STRAY = {
+  radius: 42,
+  /** Chance added for each bystander inside the radius. */
+  perShip: 0.07,
+  cap: 0.5,
+  /** Fraction of the volley a clipped bystander takes. */
+  power: 0.1,
+  /** Fraction of the leftover blow that can strike past a destroyed target. */
+  overpen: 0.35,
+} as const
+
+/**
+ * A destroyed hull explodes. Radius and center damage scale with hull radius,
+ * so a battleship blast reaches farther and hits harder than a destroyer's.
+ */
+export const BLAST = {
+  reach: 5.5,
+  power: 0.4,
+  cap: 6,
+  /** Explosions resolved per step, so a cascade cannot walk the whole fleet. */
+  max: 36,
 } as const
 
 /**

@@ -1,19 +1,48 @@
 import { describe, expect, it } from 'vitest'
-import { SHIP_STATS } from './balance.ts'
+import { BLAST, SHIP_STATS, STRAY } from './balance.ts'
 import { COMMANDERS } from './commanders.ts'
 import { armorMultiplier, armorZone } from './combat.ts'
-import { crossfireScale, pointBlankChance } from './gunnery.ts'
-import { createSim, dispatch } from './sim.ts'
+import { blastDamage, crossfireScale, strayChance } from './gunnery.ts'
+import { createSim, dispatch, explode } from './sim.ts'
+import { fillSpatialHash } from './spatial.ts'
 import type { SimState } from './types.ts'
 
 describe('fire control', () => {
-  it('makes a point-blank battleship shot less likely than a destroyer shot, and pays for a second bearing', () => {
-    expect(pointBlankChance(0, 0, 0.86)).toBeLessThan(pointBlankChance(2, 0, 0.86))
-    expect(pointBlankChance(0, 400, 0.86)).toBeCloseTo(0.86)
-    expect(pointBlankChance(0, 0, 0.86)).toBeGreaterThan(0.15)
+  it('pays for a second bearing, and a crowd is more likely to catch a stray than an empty sea', () => {
     expect(crossfireScale(99, 0)).toBe(1)
     expect(crossfireScale(0, 1.2)).toBeGreaterThan(1)
     expect(crossfireScale(0, 0.2)).toBe(1)
+    expect(strayChance(0)).toBe(0)
+    expect(strayChance(2)).toBeCloseTo(STRAY.perShip * 2)
+    expect(strayChance(40)).toBe(STRAY.cap)
+    expect(blastDamage(7.1, 0)).toBeGreaterThan(blastDamage(2.3, 0))
+    expect(blastDamage(7.1, 7.1 * BLAST.reach + 1)).toBe(0)
+  })
+
+  it('lets a battleship explosion reach a nearby hull and stop short of a distant one', () => {
+    const state = createSim({ shipCount: 100, commanders: ['manual', 'manual'] })
+    const ships = state.ships
+    ships.alive.fill(0)
+    ships.alive[0] = 1
+    ships.alive[1] = 1
+    ships.alive[2] = 1
+    ships.shipClass[0] = 0
+    ships.shipClass[1] = 2
+    ships.shipClass[2] = 2
+    ships.hp[0] = 54
+    ships.hp[1] = 18
+    ships.hp[2] = 18
+    ships.x[0] = 0
+    ships.y[0] = 0
+    ships.x[1] = 24
+    ships.y[1] = 0
+    ships.x[2] = 400
+    ships.y[2] = 0
+    fillSpatialHash(state.scratch.hash, ships.x, ships.y, ships.alive, ships.count)
+    explode(state, 0)
+    expect(ships.hp[1]).toBeLessThan(18)
+    expect(ships.hp[1]).toBeGreaterThan(0)
+    expect(ships.hp[2]).toBe(18)
   })
 
   it('matches the bow and stern armor zones', () => {

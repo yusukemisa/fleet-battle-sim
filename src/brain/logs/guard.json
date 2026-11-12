@@ -1,6 +1,6 @@
 {
   "personality": "guard",
-  "seconds": 340,
+  "seconds": 335,
   "curve": [
     {
       "gen": 0,
@@ -156,6 +156,90 @@
       "mean": 1.006,
       "best": 1.22,
       "center": 0.983,
+      "mirror": 0.5
+    },
+    {
+      "gen": 24,
+      "mean": 0.984,
+      "best": 1.224,
+      "center": 0.953,
+      "mirror": 0.5
+    },
+    {
+      "gen": 25,
+      "mean": 0.962,
+      "best": 1.151,
+      "center": 1.083,
+      "mirror": 0.5
+    },
+    {
+      "gen": 26,
+      "mean": 0.98,
+      "best": 1.208,
+      "center": 1.167,
+      "mirror": 0.5
+    },
+    {
+      "gen": 27,
+      "mean": 1.001,
+      "best": 1.24,
+      "center": 1.062,
+      "mirror": 0.5
+    },
+    {
+      "gen": 28,
+      "mean": 0.985,
+      "best": 1.166,
+      "center": 1.032,
+      "mirror": 0.5
+    },
+    {
+      "gen": 29,
+      "mean": 1.029,
+      "best": 1.261,
+      "center": 1.05,
+      "mirror": 0.5
+    },
+    {
+      "gen": 30,
+      "mean": 0.994,
+      "best": 1.232,
+      "center": 0.961,
+      "mirror": 0.5
+    },
+    {
+      "gen": 31,
+      "mean": 1.012,
+      "best": 1.205,
+      "center": 0.965,
+      "mirror": 0.5
+    },
+    {
+      "gen": 32,
+      "mean": 1.044,
+      "best": 1.279,
+      "center": 1.07,
+      "mirror": 0.5
+    },
+    {
+      "gen": 33,
+      "mean": 0.969,
+      "best": 1.171,
+      "center": 1.057,
+      "mirror": 0.5
+    },
+    {
+      "gen": 34,
+      "mean": 0.961,
+      "best": 1.174,
+      "center": 1.139,
+      "mirror": 0.5
+    },
+    {
+      "gen": 35,
+      "mean": 0.978,
+      "best": 1.102,
+      "center": 0.951,
       "mirror": 0.5
     }
   ]
