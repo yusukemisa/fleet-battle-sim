@@ -1,4 +1,4 @@
-import { COLLISION, hullRadius } from './balance.ts'
+import { COLLISION, HULL_RADIUS } from './balance.ts'
 import { fillSpatialHash, collectNear } from './spatial.ts'
 import type { SimState } from './types.ts'
 
@@ -14,7 +14,7 @@ const nearD = new Float32Array(NEAR_KEEP)
 const nearJ = new Int32Array(NEAR_KEEP)
 
 function massOf(classIndex: number): number {
-  const radius = hullRadius(classIndex)
+  const radius = HULL_RADIUS[classIndex] ?? HULL_RADIUS[1]
   return radius * radius
 }
 
@@ -98,7 +98,7 @@ export function steerClear(state: SimState): void {
     const y = ships.y[i] ?? 0
     const vx = ships.vx[i] ?? 0
     const vy = ships.vy[i] ?? 0
-    const ri = hullRadius(ships.shipClass[i] ?? 0)
+    const ri = HULL_RADIUS[ships.shipClass[i] ?? 0] ?? HULL_RADIUS[1]
     const reach = Math.min(72, Math.hypot(vx, vy) * LOOK + ri + MAX_RADIUS + 14)
     const found = collectNear(hash, x, y, reach, ships.x, ships.y)
     if (divisionIndex < crowdSeen.length) crowdSeen[divisionIndex] = (crowdSeen[divisionIndex] ?? 0) + 1
@@ -133,7 +133,7 @@ export function steerClear(state: SimState): void {
       const rx = ox - x
       const ry = oy - y
       const approach = (vx - (ships.vx[j] ?? 0)) * rx + (vy - (ships.vy[j] ?? 0)) * ry
-      const rj = hullRadius(ships.shipClass[j] ?? 0)
+      const rj = HULL_RADIUS[ships.shipClass[j] ?? 0] ?? HULL_RADIUS[1]
       const now = Math.hypot(rx, ry)
       if (now < (ri + rj) * 1.45) crowded = true
       if (aheadThreat(vx, vy, rx, ry, now, ri + rj)) {
@@ -161,6 +161,10 @@ export function steerClear(state: SimState): void {
     const seen = crowdSeen[index] ?? 0
     if (division && seen > 0) division.pack = (crowdHit[index] ?? 0) / seen
   }
+}
+
+export function avoidanceVectors(): readonly [Float32Array, Float32Array, Float32Array] {
+  return [avoidX, avoidY, brake]
 }
 
 export function avoidanceX(index: number): number {
@@ -191,18 +195,28 @@ function aheadThreat(vx: number, vy: number, rx: number, ry: number, dist: numbe
 export function separateShips(state: SimState, _dt = 0.1): void {
   const ships = state.ships
   const hash = state.scratch.collide
-  fillSpatialHash(hash, ships.x, ships.y, ships.alive, ships.count)
+  const count = ships.count
+  const xs = ships.x
+  const ys = ships.y
+  const alive = ships.alive
+  const hp = ships.hp
+  const klass = ships.shipClass
+  const vxs = ships.vx
+  const vys = ships.vy
+  fillSpatialHash(hash, xs, ys, alive, count)
   let pairs = 0
-  for (let i = 0; i < ships.count; i++) {
-    if (ships.alive[i] === 0 || (ships.hp[i] ?? 0) <= 0) continue
-    const ri = hullRadius(ships.shipClass[i] ?? 0)
-    const n = collectNear(hash, ships.x[i] ?? 0, ships.y[i] ?? 0, ri + MAX_RADIUS, ships.x, ships.y)
+  for (let i = 0; i < count; i++) {
+    if (alive[i] === 0 || (hp[i] ?? 0) <= 0) continue
+    const ri = HULL_RADIUS[klass[i] ?? 0] ?? HULL_RADIUS[1]
+    let x = xs[i] ?? 0
+    let y = ys[i] ?? 0
+    const n = collectNear(hash, x, y, ri + MAX_RADIUS, xs, ys)
     for (let k = 0; k < n; k++) {
       const j = hash.found[k] ?? -1
-      if (j <= i || ships.alive[j] === 0 || (ships.hp[j] ?? 0) <= 0) continue
-      const rj = hullRadius(ships.shipClass[j] ?? 0)
-      let dx = (ships.x[j] ?? 0) - (ships.x[i] ?? 0)
-      let dy = (ships.y[j] ?? 0) - (ships.y[i] ?? 0)
+      if (j <= i || alive[j] === 0 || (hp[j] ?? 0) <= 0) continue
+      const rj = HULL_RADIUS[klass[j] ?? 0] ?? HULL_RADIUS[1]
+      let dx = (xs[j] ?? 0) - x
+      let dy = (ys[j] ?? 0) - y
       const min = ri + rj
       const distSq = dx * dx + dy * dy
       if (distSq >= min * min) continue
@@ -214,11 +228,11 @@ export function separateShips(state: SimState, _dt = 0.1): void {
       }
       const nx = dx / dist
       const ny = dy / dist
-      const closing = ((ships.vx[i] ?? 0) - (ships.vx[j] ?? 0)) * nx + ((ships.vy[i] ?? 0) - (ships.vy[j] ?? 0)) * ny
+      const closing = ((vxs[i] ?? 0) - (vxs[j] ?? 0)) * nx + ((vys[i] ?? 0) - (vys[j] ?? 0)) * ny
       if (closing > COLLISION.closing && pairs < COLLISION.maxPairs) {
         pairs += 1
-        const heavy = massOf(ships.shipClass[i] ?? 0)
-        const light = massOf(ships.shipClass[j] ?? 0)
+        const heavy = massOf(klass[i] ?? 0)
+        const light = massOf(klass[j] ?? 0)
         if (heavy >= light * COLLISION.massRatio) kill(state, j)
         else if (light >= heavy * COLLISION.massRatio) kill(state, i)
         else {
@@ -229,10 +243,14 @@ export function separateShips(state: SimState, _dt = 0.1): void {
       const overlap = min - dist
       const shareI = rj / (ri + rj)
       const shareJ = ri / (ri + rj)
-      ships.x[i] = (ships.x[i] ?? 0) - nx * overlap * shareI
-      ships.y[i] = (ships.y[i] ?? 0) - ny * overlap * shareI
-      ships.x[j] = (ships.x[j] ?? 0) + nx * overlap * shareJ
-      ships.y[j] = (ships.y[j] ?? 0) + ny * overlap * shareJ
+      x -= nx * overlap * shareI
+      y -= ny * overlap * shareI
+      xs[i] = x
+      ys[i] = y
+      x = xs[i] ?? x
+      y = ys[i] ?? y
+      xs[j] = (xs[j] ?? 0) + nx * overlap * shareJ
+      ys[j] = (ys[j] ?? 0) + ny * overlap * shareJ
     }
   }
 }

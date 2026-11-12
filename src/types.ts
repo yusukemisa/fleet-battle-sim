@@ -118,6 +118,14 @@ export interface Ships {
   /** 1 while the ship is still sailing to its station. */
   approach: Uint8Array
   heading: Float32Array
+  /** Cosine of `heading`, saved so the next step does not recompute it. */
+  headingCos: Float64Array
+  /** Sine of `heading`. */
+  headingSin: Float64Array
+  /** The heading value that `headingCos` and `headingSin` were built from. */
+  headingStamp: Float32Array
+  /** 1 once the saved sine and cosine match `headingStamp`. */
+  headingKnown: Uint8Array
   /** Current yaw rate, radians per second. */
   yaw: Float32Array
   alive: Uint8Array
