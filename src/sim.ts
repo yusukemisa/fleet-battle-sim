@@ -1,11 +1,11 @@
-import { acquireSq, CLASS_STATS, DEFAULT_LINE, FIELD, FLEET_STANDOFF, fleetLine, GUNNERY, hullHp, RANKS, SHIP_CLASS_IDS, SHIP_STATS, SIM_TIME_SCALE, SLOT_PITCH, SWEEP, stepYaw, thrust, volleyGap, volleyPhase, type ShipClassId, type ShipStats } from './balance.ts'
+import { acquireSq, BLAST, CLASS_STATS, DEFAULT_LINE, FIELD, FLEET_STANDOFF, fleetLine, GUNNERY, hullHp, hullRadius, RANKS, SHIP_CLASS_IDS, SHIP_STATS, SIM_TIME_SCALE, SLOT_PITCH, STRAY, SWEEP, stepYaw, thrust, volleyGap, volleyPhase, type ShipClassId, type ShipStats } from './balance.ts'
 import { anchorFleets, assignTargets, fitGroups, fleetIndex, FLEET_NAMES as FLEET_TITLES, separateFleets } from './fleets.ts'
 import { armorZone, inArc, inBattery, inFiringArc, wrapAngle } from './combat.ts'
 import { chooseTactic, COMMANDERS, employClass, type BattleFacts, type Bearing } from './commanders.ts'
 import { formationExtent, layoutFormation } from './formations.ts'
-import { batteryCooldown, cacheBows, cacheSpread, crossfireScale, emptyTally, hasClearShot, pickBatteryTarget, pickTarget, pointBlankChance, setBatteryCooldown, shotBlocked } from './gunnery.ts'
+import { batteryCooldown, blastDamage, cacheBows, cacheSpread, crossfireScale, emptyTally, hasClearShot, pickBatteryTarget, pickTarget, setBatteryCooldown, shotBlocked, strayChance } from './gunnery.ts'
 import { refreshCover, rotateRanks } from './ranks.ts'
-import { collectNear, createScratch, fillSpatialHash } from './spatial.ts'
+import { collectInto, collectNear, createScratch, fillSpatialHash } from './spatial.ts'
 import { orderPoints, stepMoveOrder } from './move.ts'
 import { assessDivision, threatenedHeading } from './threat.ts'
 import { separateShips } from './collide.ts'
@@ -1398,6 +1398,7 @@ function fight(state: SimState, dt: number): void {
   state.scratch.opened.set(ships.hp)
   state.scratch.incoming.fill(0)
   state.scratch.bearing.fill(99)
+  state.scratch.blasts = 0
   if (state.gunnery === 'legacy') {
     fightLegacy(state, dt)
     return
@@ -1439,6 +1440,7 @@ function fight(state: SimState, dt: number): void {
     if (k < n0) volley(state, left, dt)
     if (k < n1) volley(state, right, dt)
   }
+  drainBlasts(state)
 }
 
 function volley(state: SimState, index: number, dt: number): void {
@@ -1497,6 +1499,7 @@ function fightLegacy(state: SimState, dt: number): void {
     if (!anyBatteryReady(state, i)) continue
     fireBatteries(state, i, dt, true)
   }
+  drainBlasts(state)
 }
 
 function noteIdle(state: SimState, index: number, dt: number, searched: boolean): void {
@@ -1629,13 +1632,16 @@ function shootBattery(state: SimState, index: number, target: number, batteryInd
   if ((ships.hp[target] ?? 0) <= 0 || (opened > 0 && queued >= opened)) state.tally.overkill += 1
   state.scratch.incoming[target] = queued + blow * GUNNERY.reserve
   state.tally.shots += 1
-  const hit = rand(state) <= pointBlankChance(ships.shipClass[index] ?? 0, dist, state.stats.hitChance)
+  const hit = rand(state) <= state.stats.hitChance
   const spread = hit ? 0.4 : 8
   const ox = (rand(state) - 0.5) * spread
   const oy = (rand(state) - 0.5) * spread
   const mount = batteryMount(hx, hy, battery.id)
   spawnBeam(state, sx + mount.x, sy + mount.y, tx + ox, ty + oy, side, batteryIndex === 0 ? 0 : 1)
-  if (!hit) return true
+  if (!hit) {
+    clipShot(state, index, tx, ty, blow * STRAY.power, target)
+    return true
+  }
   state.scratch.bearing[target] = angle
   state.hits[zone][side] += 1
   const before = ships.hp[target] ?? 0
@@ -1650,7 +1656,12 @@ function shootBattery(state: SimState, index: number, target: number, batteryInd
   state.classOnClass[shooterClass * 3 + victimClass] = (state.classOnClass[shooterClass * 3 + victimClass] ?? 0) + dealt
   ships.hp[target] = before - blow
   ships.flash[target] = 1
+  const excess = blow - before
   if ((ships.hp[target] ?? 0) <= 0) destroy(state, target)
+  if (excess > 0) {
+    const step = dist || 1
+    clipShot(state, index, tx + ((tx - sx) / step) * 24, ty + ((ty - sy) / step) * 24, excess * STRAY.overpen, target)
+  }
   return true
 }
 
@@ -1661,6 +1672,8 @@ function batteryMount(hx: number, hy: number, id: string): { x: number; y: numbe
   if (id === 'starboard') return { x: -lx * 8, y: -ly * 8 }
   return { x: hx * 14, y: hy * 14 }
 }
+
+const blastQueue: number[] = []
 
 function destroy(state: SimState, index: number): void {
   const ships = state.ships
@@ -1680,6 +1693,102 @@ function destroy(state: SimState, index: number): void {
   state.booms.y[slot] = ships.y[index] ?? 0
   state.booms.life[slot] = FIELD.boomLife
   state.booms.side[slot] = side
+  blastQueue.push(index)
+}
+
+/** A miss or an overpenetrating shell clips the nearest other hull when the impact is crowded. */
+function clipShot(state: SimState, shooter: number, x: number, y: number, blow: number, skip: number): void {
+  if (blow <= 0.05) return
+  const ships = state.ships
+  const splash = state.scratch.splash
+  const n = collectInto(state.scratch.hash, x, y, STRAY.radius, ships.x, ships.y, splash)
+  let bystanders = 0
+  let best = -1
+  let bestD = Infinity
+  for (let k = 0; k < n; k++) {
+    const ship = splash[k] ?? -1
+    if (ship < 0 || ship === shooter || ship === skip || ships.alive[ship] === 0) continue
+    bystanders += 1
+    const dx = (ships.x[ship] ?? 0) - x
+    const dy = (ships.y[ship] ?? 0) - y
+    const dist = dx * dx + dy * dy
+    if (dist < bestD) {
+      bestD = dist
+      best = ship
+    }
+  }
+  if (best < 0 || rand(state) > strayChance(bystanders)) return
+  hurtFromShot(state, shooter, best, blow)
+}
+
+function hurtFromShot(state: SimState, shooter: number, target: number, blow: number): void {
+  const ships = state.ships
+  if (ships.alive[target] === 0) return
+  const before = ships.hp[target] ?? 0
+  if (before <= 0) return
+  const dealt = Math.min(before, blow)
+  const origin = ships.side[shooter] === 1 ? 1 : 0
+  const victimSide = ships.side[target] === 1 ? 1 : 0
+  if (origin !== victimSide) {
+    const sx = ships.x[shooter] ?? 0
+    const sy = ships.y[shooter] ?? 0
+    const tx = ships.x[target] ?? 0
+    const ty = ships.y[target] ?? 0
+    const victim = CLASS_STATS[ships.shipClass[target] ?? 0] ?? state.stats
+    const zone = armorZone(ships.heading[target] ?? 0, tx, ty, sx, sy, victim)
+    state.hits[zone][origin] += 1
+    state.tally.hits += 1
+    state.tally.damage += dealt
+    state.dealt[origin] = (state.dealt[origin] ?? 0) + dealt
+    const shooterClass = ships.shipClass[shooter] ?? 0
+    if (shooterClass === 2) state.destroyerDealt[origin] = (state.destroyerDealt[origin] ?? 0) + dealt
+    state.classDamage[shooterClass] = (state.classDamage[shooterClass] ?? 0) + dealt
+    const victimClass = ships.shipClass[target] ?? 0
+    state.classOnClass[shooterClass * 3 + victimClass] = (state.classOnClass[shooterClass * 3 + victimClass] ?? 0) + dealt
+  }
+  ships.hp[target] = before - blow
+  ships.flash[target] = 1
+  if ((ships.hp[target] ?? 0) <= 0) destroy(state, target)
+}
+
+const blastHold = new Int32Array(48)
+
+function drainBlasts(state: SimState): void {
+  while (blastQueue.length > 0 && state.scratch.blasts < BLAST.max) {
+    const index = blastQueue.pop()
+    if (index === undefined) break
+    state.scratch.blasts += 1
+    explode(state, index)
+  }
+  blastQueue.length = 0
+}
+
+/** Radius damage around a destroyed hull. A battleship reaches farther than a destroyer. */
+export function explode(state: SimState, index: number): void {
+  const ships = state.ships
+  const radius = hullRadius(ships.shipClass[index] ?? 0)
+  const reach = radius * BLAST.reach
+  const x = ships.x[index] ?? 0
+  const y = ships.y[index] ?? 0
+  const splash = state.scratch.splash
+  const n = collectInto(state.scratch.hash, x, y, reach, ships.x, ships.y, splash)
+  let kept = 0
+  for (let k = 0; k < n && kept < blastHold.length; k++) {
+    const ship = splash[k] ?? -1
+    if (ship < 0 || ship === index || ships.alive[ship] === 0) continue
+    blastHold[kept++] = ship
+  }
+  for (let k = 0; k < kept; k++) {
+    const ship = blastHold[k] ?? -1
+    if (ship < 0 || ships.alive[ship] === 0) continue
+    const dist = Math.hypot((ships.x[ship] ?? 0) - x, (ships.y[ship] ?? 0) - y)
+    const blow = blastDamage(radius, dist)
+    if (blow <= 0) continue
+    const before = ships.hp[ship] ?? 0
+    ships.hp[ship] = before - blow
+    ships.flash[ship] = 1
+    if ((ships.hp[ship] ?? 0) <= 0) destroy(state, ship)
+  }
 }
 
 function spawnBeam(state: SimState, x1: number, y1: number, x2: number, y2: number, side: number, kind: number): void {

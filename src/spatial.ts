@@ -26,6 +26,10 @@ export interface CombatScratch {
   opened: Float32Array
   /** Approach angle of the last hit on this hull. 99 means none yet this step. */
   bearing: Float32Array
+  /** Neighbors gathered for a stray shot or a blast, so the gunnery list stays intact. */
+  splash: Int32Array
+  /** Explosions already resolved this step. */
+  blasts: number
   exposed: Uint8Array
   cosArc: number
   cosBow: number
@@ -67,6 +71,8 @@ export function createScratch(count: number, cell: number): CombatScratch {
     incoming: new Float32Array(count),
     opened: new Float32Array(count),
     bearing: new Float32Array(count).fill(99),
+    splash: new Int32Array(count),
+    blasts: 0,
     exposed: new Uint8Array(count),
     cosArc: 1,
     cosBow: 1,
@@ -127,6 +133,19 @@ export function collectNear(
   xs: Float32Array,
   ys: Float32Array,
 ): number {
+  return collectInto(hash, x, y, radius, xs, ys, hash.found)
+}
+
+/** Same search as {@link collectNear}, writing into `dest` so callers can keep `hash.found`. */
+export function collectInto(
+  hash: SpatialHash,
+  x: number,
+  y: number,
+  radius: number,
+  xs: Float32Array,
+  ys: Float32Array,
+  dest: Int32Array,
+): number {
   const cell = hash.cell
   const reach = Math.ceil(radius / cell)
   const cx = Math.floor(x / cell)
@@ -134,10 +153,10 @@ export function collectNear(
   const gen = hash.generation
   const mask = hash.mask
   const radiusSq = radius * radius
-  const found = hash.found
+  const limit = dest.length
   let n = 0
-  for (let oy = -reach; oy <= reach; oy++) {
-    for (let ox = -reach; ox <= reach; ox++) {
+  for (let oy = -reach; oy <= reach && n < limit; oy++) {
+    for (let ox = -reach; ox <= reach && n < limit; ox++) {
       const key = cellKey(cx + ox, cy + oy)
       let slot = key & mask
       let guard = 0
@@ -145,10 +164,10 @@ export function collectNear(
         if (hash.stamp[slot] !== gen) break
         if (hash.keys[slot] === key) {
           let ship = hash.head[slot] ?? -1
-          while (ship >= 0) {
+          while (ship >= 0 && n < limit) {
             const dx = (xs[ship] ?? 0) - x
             const dy = (ys[ship] ?? 0) - y
-            if (dx * dx + dy * dy <= radiusSq) found[n++] = ship
+            if (dx * dx + dy * dy <= radiusSq) dest[n++] = ship
             ship = hash.next[ship] ?? -1
           }
           break

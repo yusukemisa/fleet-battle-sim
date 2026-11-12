@@ -1,15 +1,20 @@
-import { CLASS_STATS, GUNNERY, hullHp, hullRadius, type BatterySpec } from './balance.ts'
+import { BLAST, CLASS_STATS, GUNNERY, STRAY, hullHp, hullRadius, type BatterySpec } from './balance.ts'
 import { armorFactor, inArc, inBattery } from './combat.ts'
 import { withdrawalFor } from './ranks.ts'
 import { collectNear } from './spatial.ts'
 import type { GunneryTally, SimState } from './types.ts'
 
-/** Hit chance after the point-blank penalty. Big guns fall off harder than destroyers. */
-export function pointBlankChance(classIndex: number, dist: number, base: number): number {
-  const blank = GUNNERY.pointBlank[classIndex] ?? GUNNERY.pointBlank[1]
-  if (dist >= blank) return base
-  const floor = GUNNERY.pointFloor[classIndex] ?? GUNNERY.pointFloor[1]
-  return base * (floor + (1 - floor) * (dist / blank))
+/** Chance a packed impact clips some other hull. Zero when the target is alone. */
+export function strayChance(bystanders: number): number {
+  if (bystanders <= 0) return 0
+  return Math.min(STRAY.cap, bystanders * STRAY.perShip)
+}
+
+/** Hit points at `dist` from an exploding hull of the given radius. */
+export function blastDamage(radius: number, dist: number): number {
+  const reach = radius * BLAST.reach
+  if (reach <= 0 || dist >= reach) return 0
+  return Math.min(BLAST.cap, BLAST.power * radius * (1 - dist / reach))
 }
 
 /** 1, or the crossfire bonus when the new shot comes from a different bearing. */
