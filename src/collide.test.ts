@@ -13,7 +13,7 @@ describe('hulls', () => {
   })
 
   it('slides overlapping ships apart instead of letting them share a point', () => {
-    let state = createSim({ shipCount: 100, commanders: ['manual', 'manual'] })
+    const state = createSim({ shipCount: 100, commanders: ['manual', 'manual'] })
     state.ships.alive.fill(0)
     state.ships.alive[0] = 1
     state.ships.alive[1] = 1
@@ -29,6 +29,42 @@ describe('hulls', () => {
     separateShips(state)
     const gap = Math.hypot((state.ships.x[0] ?? 0) - (state.ships.x[1] ?? 0), (state.ships.y[0] ?? 0) - (state.ships.y[1] ?? 0))
     expect(gap).toBeGreaterThan(HULL_RADIUS[0] + HULL_RADIUS[2] - 0.2)
+  })
+
+  it('hurts the lighter hull more in a ram and ignores a brush with no closing speed', () => {
+    const state = createSim({ shipCount: 100, commanders: ['manual', 'manual'] })
+    const ships = state.ships
+    ships.alive.fill(0)
+    ships.alive[0] = 1
+    ships.alive[1] = 1
+    ships.shipClass[0] = 0
+    ships.shipClass[1] = 2
+    ships.hp[0] = 54
+    ships.hp[1] = 18
+    ships.x[0] = 0
+    ships.y[0] = 0
+    ships.x[1] = 4
+    ships.y[1] = 0
+    ships.vx[0] = 0
+    ships.vy[0] = 0
+    ships.vx[1] = 0
+    ships.vy[1] = 0
+    separateShips(state)
+    expect(state.ram).toBe(0)
+    expect(ships.hp[1]).toBe(18)
+    ships.x[0] = 0
+    ships.y[0] = 0
+    ships.x[1] = 4
+    ships.y[1] = 0
+    ships.vx[0] = 50
+    ships.vx[1] = -30
+    separateShips(state)
+    const bbLost = 54 - (ships.hp[0] ?? 0)
+    const ddLost = 18 - (ships.hp[1] ?? 0)
+    expect(ddLost).toBeGreaterThan(0)
+    expect(ddLost + 0.02).toBeGreaterThanOrEqual(bbLost)
+    expect(ships.hp[1]).toBeGreaterThan(10)
+    expect(ships.alive[1]).toBe(1)
   })
 
   it('does not fire through a hull sitting on the line', () => {

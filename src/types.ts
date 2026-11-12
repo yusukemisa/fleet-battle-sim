@@ -381,6 +381,8 @@ export interface SimState {
   damage: [number, number]
   /** Hit-point damage landed by each side. */
   dealt: [number, number]
+  /** Hit points removed by hulls colliding, friend or foe. */
+  ram: number
   /** Of that damage, the share landed by destroyers. */
   destroyerDealt: [number, number]
   commandAt: number

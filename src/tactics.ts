@@ -1,4 +1,4 @@
-import { anchorPace, CLASS_MODS, SWEEP } from './balance.ts'
+import { anchorPace, CLASS_MODS, SWEEP, lineRange } from './balance.ts'
 import { aimUnderThreat, wideFlankGoal } from './threat.ts'
 import type { Division, Tactic, TacticContext, TacticId } from './types.ts'
 
@@ -65,7 +65,33 @@ function aim(div: Division, ctx: TacticContext): void {
   div.focusY = bestY
 }
 
+function standoffRange(div: Division): number {
+  return lineRange(div.classId, div.alive)
+}
+
+function nearestEnemyAnchor(div: Division, ctx: TacticContext): { x: number; y: number; dist: number } {
+  let x = ctx.enemyX
+  let y = ctx.enemyY
+  let dist = hypot(ctx.enemyX - div.ax, ctx.enemyY - div.ay)
+  for (const other of ctx.divisions) {
+    if (other.side === div.side || other.alive === 0) continue
+    const gap = hypot(other.ax - div.ax, other.ay - div.ay)
+    if (gap < dist) {
+      dist = gap
+      x = other.ax
+      y = other.ay
+    }
+  }
+  return { x, y, dist }
+}
+
 function charge(div: Division, ctx: TacticContext, dt: number, speed: number): void {
+  const near = nearestEnemyAnchor(div, ctx)
+  if (near.dist < standoffRange(div)) {
+    steer(div, div.ax - near.x, div.ay - near.y, 24, dt)
+    face(div, near.x, near.y, dt)
+    return
+  }
   const clear = lineClearance(div, ctx, ctx.enemyX, ctx.enemyY)
   const side = div.flankSign === 0 ? 1 : div.flankSign
   steer(div, ctx.enemyX - div.ax + clear * side * 70, ctx.enemyY - div.ay, speed, dt)
@@ -113,8 +139,16 @@ function pierce(div: Division, ctx: TacticContext, dt: number, speed: number): v
   const len = hypot(dx, dy) || 1
   dx /= len
   dy /= len
-  const bx = ctx.enemyX + dx * 320
-  const by = ctx.enemyY + dy * 320
+  const near = nearestEnemyAnchor(div, ctx)
+  if (div.classId !== 'destroyer' && near.dist < standoffRange(div)) {
+    steer(div, div.ax - near.x, div.ay - near.y, 24, dt)
+    face(div, near.x, near.y, dt)
+    return
+  }
+  const side = div.flankSign === 0 ? (div.slot < 2 ? -1 : 1) : div.flankSign
+  const past = div.classId === 'destroyer' ? 280 : 80
+  const bx = ctx.enemyX + dx * past - dy * side * 180
+  const by = ctx.enemyY + dy * past + dx * side * 180
   steer(div, bx - div.ax, by - div.ay, speed, dt)
   face(div, bx, by, dt)
 }
@@ -246,7 +280,8 @@ function hook(div: Division, ctx: TacticContext, dt: number, speed: number, mode
       div.phase = 0
       div.phaseT = 0
     }
-    const ahead = polarPoint(prey, side, orbit, mode === 'rear' ? 340 : 380)
+    const ring = standoffRange(div)
+    const ahead = polarPoint(prey, side, orbit, ring)
     div.markX = ahead.x
     div.markY = ahead.y
     steer(div, ahead.x - div.ax, ahead.y - div.ay, speed * 0.9, dt)
@@ -598,7 +633,35 @@ function lineClearance(div: Division, ctx: TacticContext, tx: number, ty: number
   return 0
 }
 
+function repelFriends(div: Division, ctx: TacticContext, dt: number): void {
+  const gap = div.classId === 'battleship' ? 140 : div.classId === 'cruiser' ? 100 : 70
+  let px = 0
+  let py = 0
+  for (const other of ctx.divisions) {
+    if (other.side !== div.side || other === div || other.alive === 0) continue
+    const dx = div.ax - other.ax
+    const dy = div.ay - other.ay
+    const dist = hypot(dx, dy)
+    if (dist >= gap || dist < 1) continue
+    const push = (gap - dist) / gap
+    px += (dx / dist) * push
+    py += (dy / dist) * push
+  }
+  if (px === 0 && py === 0) return
+  const a = 1 - Math.exp(-2.4 * dt)
+  div.vx += px * 48 * a
+  div.vy += py * 48 * a
+}
+
 export function stepDivision(div: Division, ctx: TacticContext, dt: number, wheel = true): void {
+  try {
+    stepDivisionBody(div, ctx, dt, wheel)
+  } finally {
+    repelFriends(div, ctx, dt)
+  }
+}
+
+function stepDivisionBody(div: Division, ctx: TacticContext, dt: number, wheel: boolean): void {
   if (engageIfIdle(div, ctx, dt)) return
   if ((div.phase === 5 || div.phase === 7 || div.phase === 8) && div.classId === 'battleship') {
     div.shaped = false
@@ -707,7 +770,7 @@ export const TACTICS = {
     sweep: true,
     step(div, ctx, dt) {
       tagged(div, false, ctx)
-      orbit(div, ctx, dt, 32, 210, 0.11)
+      orbit(div, ctx, dt, 32, standoffRange(div), 0.09)
     },
   },
   breakthrough: {

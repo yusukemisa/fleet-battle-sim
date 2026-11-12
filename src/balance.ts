@@ -240,6 +240,17 @@ export function hullRadius(classIndex: number): number {
   return HULL_RADIUS[classIndex] ?? HULL_RADIUS[1]
 }
 
+/**
+ * How far a division's anchor stays from the nearest enemy anchor.
+ * Small divisions hold gun range. Large ones add their own radius so the near edge does not cross hulls.
+ */
+export function lineRange(classId: ShipClassId, ships: number): number {
+  const radius = 8 * Math.sqrt(Math.max(1, ships))
+  const gun = classId === 'battleship' ? 560 : classId === 'cruiser' ? 420 : 240
+  const water = classId === 'battleship' ? 280 : classId === 'cruiser' ? 160 : 70
+  return Math.max(gun, 2 * radius + water)
+}
+
 function deriveClass(id: ShipClassId): ShipStats {
   const mods = CLASS_MODS[id]
   const bow = BATTERIES[0]
@@ -414,6 +425,28 @@ export const GUNNERY = {
   cell: 180,
   /** Keep the current target unless a new one scores this much higher. */
   stick: 1.35,
+  /** Inside this range, hit chance falls. Battleship, cruiser, destroyer. */
+  pointBlank: [180, 120, 48],
+  /** Hit chance remaining at range 0, as a fraction of the normal chance. */
+  pointFloor: [0.24, 0.35, 0.62],
+  /** Extra damage when a hull is already being hit from another bearing. */
+  crossfire: 1.22,
+  crossAngle: 0.9,
+} as const
+
+/**
+ * Hulls that are still closing when they overlap both take damage.
+ * Energy is closing speed times the overlap fraction. The lighter hull
+ * takes the larger share, so a destroyer ramming a battleship suffers more.
+ * A brush with little closing speed barely registers.
+ */
+export const RAM = {
+  /** Damage per second at one unit of excess closing speed and a full overlap. */
+  power: 0.55,
+  /** Slower than this is a nudge, not a ram. */
+  closing: 18,
+  /** A hull cannot lose more than this many hit points per second to rams. */
+  cap: 0.7,
 } as const
 
 /** How often a division reorders wounded ships behind healthy ones. */

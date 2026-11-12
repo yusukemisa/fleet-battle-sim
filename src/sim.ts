@@ -3,7 +3,7 @@ import { anchorFleets, assignTargets, fitGroups, fleetIndex, FLEET_NAMES as FLEE
 import { armorZone, inArc, inBattery, inFiringArc, wrapAngle } from './combat.ts'
 import { chooseTactic, COMMANDERS, employClass, type BattleFacts, type Bearing } from './commanders.ts'
 import { formationExtent, layoutFormation } from './formations.ts'
-import { batteryCooldown, cacheBows, cacheSpread, emptyTally, hasClearShot, pickBatteryTarget, pickTarget, setBatteryCooldown, shotBlocked } from './gunnery.ts'
+import { batteryCooldown, cacheBows, cacheSpread, crossfireScale, emptyTally, hasClearShot, pickBatteryTarget, pickTarget, pointBlankChance, setBatteryCooldown, shotBlocked } from './gunnery.ts'
 import { refreshCover, rotateRanks } from './ranks.ts'
 import { collectNear, createScratch, fillSpatialHash } from './spatial.ts'
 import { orderPoints, stepMoveOrder } from './move.ts'
@@ -343,6 +343,7 @@ function deployGrouped(state: SimState): void {
   state.hits.rear[1] = 0
   state.dealt[0] = 0
   state.dealt[1] = 0
+  state.ram = 0
   state.destroyerDealt[0] = 0
   state.destroyerDealt[1] = 0
   state.tally.shots = 0
@@ -750,6 +751,7 @@ function allocate(
     stats,
     damage,
     dealt: [0, 0],
+    ram: 0,
     destroyerDealt: [0, 0],
     commandAt: 0,
     log: [],
@@ -860,6 +862,7 @@ function deploy(state: SimState): void {
   state.hits.rear[1] = 0
   state.dealt[0] = 0
   state.dealt[1] = 0
+  state.ram = 0
   state.destroyerDealt[0] = 0
   state.destroyerDealt[1] = 0
   const tally = state.tally
@@ -1376,7 +1379,15 @@ function moveShips(state: SimState, dt: number): void {
     ships.y[i] = y + hy * speed * dt
     if ((ships.flash[i] ?? 0) > 0) ships.flash[i] = Math.max(0, (ships.flash[i] ?? 0) - dt * 4)
   }
-  separateShips(state)
+  separateShips(state, dt)
+  reapRammed(state)
+}
+
+function reapRammed(state: SimState): void {
+  const ships = state.ships
+  for (let i = 0; i < ships.count; i++) {
+    if (ships.alive[i] === 1 && (ships.hp[i] ?? 0) <= 0) destroy(state, i)
+  }
 }
 
 function fight(state: SimState, dt: number): void {
@@ -1386,6 +1397,7 @@ function fight(state: SimState, dt: number): void {
   fillSpatialHash(state.scratch.hash, ships.x, ships.y, ships.alive, ships.count)
   state.scratch.opened.set(ships.hp)
   state.scratch.incoming.fill(0)
+  state.scratch.bearing.fill(99)
   if (state.gunnery === 'legacy') {
     fightLegacy(state, dt)
     return
@@ -1472,6 +1484,7 @@ function holdBattery(state: SimState, index: number, batteryIndex: number, dt: n
 
 function fightLegacy(state: SimState, dt: number): void {
   const ships = state.ships
+  state.scratch.bearing.fill(99)
   const stagger = FIELD.stagger
   const frame = state.frame
   for (let i = 0; i < ships.count; i++) {
@@ -1607,19 +1620,23 @@ function shootBattery(state: SimState, index: number, target: number, batteryInd
   const zone = armorZone(ships.heading[target] ?? 0, tx, ty, sx, sy, victim)
   const factor = zone === 'front' ? victim.armorFront : zone === 'rear' ? victim.armorRear : victim.armorSide
   const scale = (state.damage[side] ?? state.stats.damage) / Math.max(0.01, state.stats.damage)
-  const blow = battery.guns * battery.power * scale * factor
+  const dist = Math.hypot(tx - sx, ty - sy)
+  const angle = Math.atan2(sy - ty, sx - tx)
+  let blow = battery.guns * battery.power * scale * factor
+  blow *= crossfireScale(state.scratch.bearing[target] ?? 99, angle)
   const opened = state.scratch.opened[target] ?? 0
   const queued = state.scratch.incoming[target] ?? 0
   if ((ships.hp[target] ?? 0) <= 0 || (opened > 0 && queued >= opened)) state.tally.overkill += 1
   state.scratch.incoming[target] = queued + blow * GUNNERY.reserve
   state.tally.shots += 1
-  const hit = rand(state) <= state.stats.hitChance
+  const hit = rand(state) <= pointBlankChance(ships.shipClass[index] ?? 0, dist, state.stats.hitChance)
   const spread = hit ? 0.4 : 8
   const ox = (rand(state) - 0.5) * spread
   const oy = (rand(state) - 0.5) * spread
   const mount = batteryMount(hx, hy, battery.id)
   spawnBeam(state, sx + mount.x, sy + mount.y, tx + ox, ty + oy, side, batteryIndex === 0 ? 0 : 1)
   if (!hit) return true
+  state.scratch.bearing[target] = angle
   state.hits[zone][side] += 1
   const before = ships.hp[target] ?? 0
   state.tally.hits += 1

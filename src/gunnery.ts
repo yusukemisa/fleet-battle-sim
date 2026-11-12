@@ -4,6 +4,22 @@ import { withdrawalFor } from './ranks.ts'
 import { collectNear } from './spatial.ts'
 import type { GunneryTally, SimState } from './types.ts'
 
+/** Hit chance after the point-blank penalty. Big guns fall off harder than destroyers. */
+export function pointBlankChance(classIndex: number, dist: number, base: number): number {
+  const blank = GUNNERY.pointBlank[classIndex] ?? GUNNERY.pointBlank[1]
+  if (dist >= blank) return base
+  const floor = GUNNERY.pointFloor[classIndex] ?? GUNNERY.pointFloor[1]
+  return base * (floor + (1 - floor) * (dist / blank))
+}
+
+/** 1, or the crossfire bonus when the new shot comes from a different bearing. */
+export function crossfireScale(previous: number, angle: number): number {
+  if (previous > 8) return 1
+  let delta = Math.abs(angle - previous)
+  if (delta > Math.PI) delta = Math.PI * 2 - delta
+  return delta > GUNNERY.crossAngle ? GUNNERY.crossfire : 1
+}
+
 export function emptyTally(): GunneryTally {
   return { shots: 0, hits: 0, damage: 0, overkill: 0, idle: 0, held: 0, wide: 0, deaths: 0, deathTime: 0 }
 }
