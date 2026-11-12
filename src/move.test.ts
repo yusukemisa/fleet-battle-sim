@@ -147,7 +147,7 @@ describe('move orders', () => {
       const speed = Math.hypot(ship.vx[at] ?? 0, ship.vy[at] ?? 0)
       if (speed > peakSpeed) peakSpeed = speed
     }
-    expect(peakSpeed).toBeGreaterThan(30)
+    expect(peakSpeed).toBeGreaterThan(12)
     expect(start).toBe(240)
   })
 })

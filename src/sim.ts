@@ -9,6 +9,7 @@ import { collectInto, collectNear, createScratch, fillSpatialHash } from './spat
 import { orderPoints, stepMoveOrder } from './move.ts'
 import { assessDivision, threatenedHeading } from './threat.ts'
 import { avoidanceBrake, avoidanceX, avoidanceY, separateShips, steerClear } from './collide.ts'
+import { backOff, gunHold, holdFronts, shipGap, standoffX, standoffY } from './standoff.ts'
 import { decideTransformer, forgetTransformer, recordDecision, tacticsFrom } from './brain/dt.ts'
 import { featurize } from './brain/features.ts'
 import { DECISION_INTERVAL, decidePolicy, defaultBrain, preferredFormation } from './brain/policy.ts'
@@ -841,6 +842,7 @@ function makeDivision(side: SideId, slot: DivisionSlot, fleet: number = side): D
     alive: 0,
     roster: 0,
     pack: 0,
+    press: 0,
   }
 }
 
@@ -1254,6 +1256,7 @@ function step(state: SimState, dt: number): void {
     stepDivision(division, ctx, dt, !shaped || fleet.maneuver === 'wheel')
   }
   if (state.fleets.length > 2) separateFleets(state)
+  holdFronts(state)
   if (state.time >= state.rankAt) {
     rotateRanks(state)
     const every = state.maneuver === 'shaped' ? RANKS.shapedInterval : RANKS.interval
@@ -1415,6 +1418,16 @@ function moveShips(state: SimState, dt: number): void {
       desired = Math.atan2((ships.y[target] ?? 0) - y, (ships.x[target] ?? 0) - x)
     }
     if (!rejoin) desired = threatenedHeading(division, desired, x, y)
+    const gap = shipGap(i)
+    const hold = gunHold(classId)
+    const tooClose = division.roster >= 40 && gap < hold
+    if (tooClose) {
+      const sx = standoffX(i)
+      const sy = standoffY(i)
+      const inner = backOff(classId)
+      // Inside the gun line, keep the bow on the enemy and stop. Inside the inner band, leave.
+      desired = gap < inner ? Math.atan2(sy, sx) : Math.atan2(-sy, -sx)
+    }
     const axv = avoidanceX(i)
     const ayv = avoidanceY(i)
     const avoidMag = axv * axv + ayv * ayv
@@ -1438,12 +1451,22 @@ function moveShips(state: SimState, dt: number): void {
     else if (along > 0.2) speed = Math.min(stats.maxSpeed, dist * 1.5)
     else if (along < -0.2) speed = -reverse
     if (keepUp) speed = Math.max(speed, Math.min(stats.maxSpeed, Math.max(divSpeed, 18)))
+    if (battleship && division.roster >= 40 && dist < 160) speed = Math.min(speed, 14)
+    if (tooClose) {
+      const inner = backOff(classId)
+      speed = gap < inner ? Math.min(12, Math.max(speed, 8)) : 0
+    }
     const off = Math.abs(error)
     if (off > 0.8) speed *= 0.45
     else if (off > 0.35) speed *= 0.75
     if (avoidMag > 0.2) speed *= 0.35
     else if (caution) speed *= 0.62
     speed *= 1 - 0.82 * avoidanceBrake(i)
+    if (division.roster >= 40) {
+      const leaving = tooClose && gap < backOff(classId)
+      const cap = leaving ? 22 : 18
+      speed = speed < 0 ? -Math.min(-speed, cap) : Math.min(speed, cap)
+    }
     const stepSpeed = prevSpeed + Math.max(-accel, Math.min(accel, speed - prevSpeed))
     speed = stepSpeed
     ships.vx[i] = hx * speed

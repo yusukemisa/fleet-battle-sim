@@ -252,6 +252,8 @@ export interface Division {
   roster: number
   /** Share of sampled ships in this division with a neighbor inside the near-miss range. */
   pack: number
+  /** Share of sampled ships inside ramming distance of an enemy hull. */
+  press: number
 }
 
 export interface FormationLayout {

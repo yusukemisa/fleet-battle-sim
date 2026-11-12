@@ -39,13 +39,16 @@ function sampleAssault(state: SimState, fleet: number): number {
 function sampleSpacing(state: SimState, fleet: number): number {
   const side = state.fleets[fleet]?.side ?? 0
   let pack = 0
+  let press = 0
   let count = 0
   for (const division of state.divisions) {
     if (division.fleet !== fleet || division.alive <= 0) continue
     pack += division.pack
+    press += division.press
     count += 1
   }
-  const clear = count === 0 ? 1 : Math.max(0, 1 - pack / count)
+  const crowd = count === 0 ? 0 : (pack + press) / (2 * count)
+  const clear = Math.max(0, 1 - crowd)
   const losses = state.lost[side] ?? 0
   const crashed = losses <= 0 ? 0 : Math.min(1, (state.collisionDeaths[side] ?? 0) / losses)
   return clear * (1 - 0.45 * crashed)
