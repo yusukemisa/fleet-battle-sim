@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { decideTransformer, probeLogits, transformerLogits, useDtWeights, type DtWeights } from './dt.ts'
+import { INPUT_SIZE } from './features.ts'
 import { createSim, dispatch } from '../sim.ts'
 import { observe } from './observe.ts'
 
@@ -13,7 +14,7 @@ describe('decision transformer', () => {
     for (let i = 0; i < probe.length; i++) {
       expect(logits?.[i] ?? 0).toBeCloseTo(probe[i] ?? 0, 2)
     }
-    const past = transformerLogits(new Float64Array(99), [{ obs: new Float64Array(99), act: [0, -1, -1, -1, -1] }], weights.target, weights)
+    const past = transformerLogits(new Float64Array(INPUT_SIZE), [{ obs: new Float64Array(INPUT_SIZE), act: [0, -1, -1, -1, -1] }], weights.target, weights)
     const expected = weights.probePast ?? []
     expect(expected.length).toBe(40)
     for (let i = 0; i < expected.length; i++) {

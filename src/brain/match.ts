@@ -36,6 +36,21 @@ function sampleAssault(state: SimState, fleet: number): number {
   return living === 0 ? 0 : rushing / living
 }
 
+function sampleSpacing(state: SimState, fleet: number): number {
+  const side = state.fleets[fleet]?.side ?? 0
+  let pack = 0
+  let count = 0
+  for (const division of state.divisions) {
+    if (division.fleet !== fleet || division.alive <= 0) continue
+    pack += division.pack
+    count += 1
+  }
+  const clear = count === 0 ? 1 : Math.max(0, 1 - pack / count)
+  const losses = state.lost[side] ?? 0
+  const crashed = losses <= 0 ? 0 : Math.min(1, (state.collisionDeaths[side] ?? 0) / losses)
+  return clear * (1 - 0.45 * crashed)
+}
+
 function sampleCohesion(state: SimState, fleet: number): number {
   const own = state.fleets[fleet]
   if (!own) return 1
@@ -69,6 +84,7 @@ export function playMatch(setup: MatchSetup): BattleReport {
   let contactTime = -1
   let assault = 0
   let cohesion = 0
+  let spacing = 0
   let samples = 0
   let steps = 0
   try {
@@ -82,6 +98,7 @@ export function playMatch(setup: MatchSetup): BattleReport {
       if (steps % 8 === 0) {
         assault += sampleAssault(state, focus)
         cohesion += sampleCohesion(state, focus)
+        spacing += sampleSpacing(state, focus)
         samples += 1
       }
     }
@@ -106,6 +123,7 @@ export function playMatch(setup: MatchSetup): BattleReport {
       destroyerDealt: state.destroyerDealt[focus] ?? 0,
       assault: samples === 0 ? 0 : assault / samples,
       cohesion: samples === 0 ? 1 : cohesion / samples,
+      spacing: samples === 0 ? 1 : spacing / samples,
       time: state.time,
     }
   } finally {

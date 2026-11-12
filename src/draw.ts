@@ -63,7 +63,7 @@ export function draw(
     paintShips(ctx, state, camera, width, height, size, 0, BLUE)
     paintShips(ctx, state, camera, width, height, size, 1, RED)
   }
-  paintShips(ctx, state, camera, width, height, size, 'flash', '#f4f1df')
+  paintFlashes(ctx, state, camera, width, height, size)
 
   strokeBeams(ctx, state, camera, width, height)
   strokeBooms(ctx, state, camera, width, height)
@@ -141,7 +141,6 @@ function paintFleet(
       if (ships.alive[i] === 0 || (ships.shipClass[i] ?? 0) !== klass) continue
       const division = state.divisions[ships.division[i] ?? 0]
       if (!division || division.fleet !== fleetIndex) continue
-      if ((ships.flash[i] ?? 0) > 0.55) continue
       const p = worldToScreen(ships.x[i] ?? 0, ships.y[i] ?? 0, camera, width, height)
       const heading = ships.heading[i] ?? 0
       const hx = Math.cos(heading)
@@ -167,7 +166,7 @@ function paintShips(
   width: number,
   height: number,
   size: number,
-  side: 0 | 1 | 'flash',
+  side: 0 | 1,
   color: string,
 ): void {
   const ships = state.ships
@@ -181,9 +180,7 @@ function paintShips(
     ctx.beginPath()
     const bow = new Path2D()
     for (let i = 0; i < ships.count; i++) {
-      if (ships.alive[i] === 0 || (ships.shipClass[i] ?? 0) !== klass) continue
-      const flash = (ships.flash[i] ?? 0) > 0.55
-      if (side === 'flash' ? !flash : flash || ships.side[i] !== side) continue
+      if (ships.alive[i] === 0 || (ships.shipClass[i] ?? 0) !== klass || ships.side[i] !== side) continue
       const p = worldToScreen(ships.x[i] ?? 0, ships.y[i] ?? 0, camera, width, height)
       const heading = ships.heading[i] ?? 0
       const hx = Math.cos(heading)
@@ -200,6 +197,37 @@ function paintShips(
     ctx.lineWidth = Math.max(0.6, hullW * 0.62)
     ctx.stroke(bow)
   }
+}
+
+/** A short glint, not a white hull. Dense fights stay in their side color. */
+function paintFlashes(
+  ctx: CanvasRenderingContext2D,
+  state: SimState,
+  camera: Camera,
+  width: number,
+  height: number,
+  size: number,
+): void {
+  const ships = state.ships
+  const stride = ships.count >= 10000 ? 3 : ships.count >= 4000 ? 2 : 1
+  const cap = ships.count >= 10000 ? 500 : 1600
+  ctx.strokeStyle = 'rgba(244, 241, 223, 0.5)'
+  ctx.lineWidth = Math.max(0.5, size * 0.28)
+  ctx.beginPath()
+  let drawn = 0
+  for (let i = state.frame % stride; i < ships.count; i += stride) {
+    if (ships.alive[i] === 0 || (ships.flash[i] ?? 0) <= 0.72) continue
+    if (drawn >= cap) break
+    drawn += 1
+    const p = worldToScreen(ships.x[i] ?? 0, ships.y[i] ?? 0, camera, width, height)
+    const heading = ships.heading[i] ?? 0
+    const hx = Math.cos(heading)
+    const hy = -Math.sin(heading)
+    const mark = Math.max(1.2, size * 0.45)
+    ctx.moveTo(p.x - hx * mark, p.y - hy * mark)
+    ctx.lineTo(p.x + hx * mark, p.y + hy * mark)
+  }
+  ctx.stroke()
 }
 
 function drawOrders(

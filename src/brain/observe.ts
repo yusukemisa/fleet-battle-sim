@@ -16,6 +16,8 @@ export interface DivisionView {
   vx: number
   vy: number
   tacticId: TacticId
+  /** 0 when the division has sea room, 1 when sampled ships are inside a near miss. */
+  pack: number
 }
 
 export interface FleetView {
@@ -59,6 +61,7 @@ function viewDivision(division: Division, id: number): DivisionView {
     vx: round(division.vx),
     vy: round(division.vy),
     tacticId: division.tacticId,
+    pack: round(division.pack),
   }
 }
 

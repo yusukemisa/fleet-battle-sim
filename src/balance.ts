@@ -458,18 +458,18 @@ export const BLAST = {
 } as const
 
 /**
- * Hulls that are still closing when they overlap both take damage.
- * Energy is closing speed times the overlap fraction. The lighter hull
- * takes the larger share, so a destroyer ramming a battleship suffers more.
- * A brush with little closing speed barely registers.
+ * A real hull collision destroys the ships. Friend or foe does not matter.
+ * Mass is the square of the hull radius: battleship 50.4, cruiser 17.6, destroyer 5.3.
+ * When the heavier mass is at least `massRatio` times the lighter, only the lighter
+ * dies. Battleship against cruiser is 2.9, so both die. Cruiser against destroyer is
+ * 3.3, and battleship against destroyer is 9.5, so only the destroyer dies.
+ * A brush slower than `closing` is pushed apart and both live.
+ * The step resolves at most `maxPairs` lethal collisions. Later overlaps are only pushed apart.
  */
-export const RAM = {
-  /** Damage per second at one unit of excess closing speed and a full overlap. */
-  power: 0.55,
-  /** Slower than this is a nudge, not a ram. */
-  closing: 18,
-  /** A hull cannot lose more than this many hit points per second to rams. */
-  cap: 0.7,
+export const COLLISION = {
+  closing: 64,
+  massRatio: 3,
+  maxPairs: 48,
 } as const
 
 /** How often a division reorders wounded ships behind healthy ones. */

@@ -8,7 +8,7 @@ import { refreshCover, rotateRanks } from './ranks.ts'
 import { collectInto, collectNear, createScratch, fillSpatialHash } from './spatial.ts'
 import { orderPoints, stepMoveOrder } from './move.ts'
 import { assessDivision, threatenedHeading } from './threat.ts'
-import { separateShips } from './collide.ts'
+import { avoidanceBrake, avoidanceX, avoidanceY, separateShips, steerClear } from './collide.ts'
 import { decideTransformer, forgetTransformer, recordDecision, tacticsFrom } from './brain/dt.ts'
 import { featurize } from './brain/features.ts'
 import { DECISION_INTERVAL, decidePolicy, defaultBrain, preferredFormation } from './brain/policy.ts'
@@ -344,6 +344,8 @@ function deployGrouped(state: SimState): void {
   state.dealt[0] = 0
   state.dealt[1] = 0
   state.ram = 0
+  state.collisionDeaths[0] = 0
+  state.collisionDeaths[1] = 0
   state.destroyerDealt[0] = 0
   state.destroyerDealt[1] = 0
   state.tally.shots = 0
@@ -752,6 +754,7 @@ function allocate(
     damage,
     dealt: [0, 0],
     ram: 0,
+    collisionDeaths: [0, 0],
     destroyerDealt: [0, 0],
     commandAt: 0,
     log: [],
@@ -837,6 +840,7 @@ function makeDivision(side: SideId, slot: DivisionSlot, fleet: number = side): D
     screen: false,
     alive: 0,
     roster: 0,
+    pack: 0,
   }
 }
 
@@ -863,6 +867,8 @@ function deploy(state: SimState): void {
   state.dealt[0] = 0
   state.dealt[1] = 0
   state.ram = 0
+  state.collisionDeaths[0] = 0
+  state.collisionDeaths[1] = 0
   state.destroyerDealt[0] = 0
   state.destroyerDealt[1] = 0
   const tally = state.tally
@@ -1309,6 +1315,7 @@ function classStatsOf(id: (typeof SHIP_CLASS_IDS)[number]): ShipStats {
 
 function moveShips(state: SimState, dt: number): void {
   const ships = state.ships
+  steerClear(state)
   for (let i = 0; i < ships.count; i++) {
     if (ships.alive[i] === 0) continue
     const stats = CLASS_STATS[ships.shipClass[i] ?? 0] ?? state.stats
@@ -1365,6 +1372,12 @@ function moveShips(state: SimState, dt: number): void {
       desired = Math.atan2((ships.y[target] ?? 0) - y, (ships.x[target] ?? 0) - x)
     }
     if (!rejoin) desired = threatenedHeading(division, desired, x, y)
+    const axv = avoidanceX(i)
+    const ayv = avoidanceY(i)
+    const avoidMag = axv * axv + ayv * ayv
+    const caution = avoidMag > 0.04
+    if (avoidMag > 0.2) desired = Math.atan2(ayv, axv)
+    else if (caution) desired += wrapAngle(Math.atan2(ayv, axv) - desired) * 0.8
     const prevHeading = ships.heading[i] ?? desired
     const prevSpeed = (ships.vx[i] ?? 0) * Math.cos(prevHeading) + (ships.vy[i] ?? 0) * Math.sin(prevHeading)
     let heading = prevHeading
@@ -1384,6 +1397,9 @@ function moveShips(state: SimState, dt: number): void {
     const off = Math.abs(error)
     if (off > 0.8) speed *= 0.45
     else if (off > 0.35) speed *= 0.75
+    if (avoidMag > 0.2) speed *= 0.35
+    else if (caution) speed *= 0.62
+    speed *= 1 - 0.82 * avoidanceBrake(i)
     const stepSpeed = prevSpeed + Math.max(-accel, Math.min(accel, speed - prevSpeed))
     speed = stepSpeed
     ships.vx[i] = hx * speed

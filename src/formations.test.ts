@@ -198,10 +198,18 @@ describe('formations', () => {
       const large = layoutFormation(id, 5000)
       const smallBox = bounds(small)
       const largeBox = bounds(large)
-      expect(largeBox.width, id).toBeGreaterThan(smallBox.width * 1.4)
-      expect(largeBox.depth, id).toBeGreaterThan(smallBox.depth * 1.4)
-      expect(minSpacing(large), id).toBeGreaterThan(7)
+      expect(largeBox.width, id).toBeGreaterThan(smallBox.width * 1.8)
+      expect(largeBox.depth, id).toBeGreaterThan(smallBox.depth * 0.45)
+      expect(minSpacing(large), id).toBeGreaterThanOrEqual(Math.min(minSpacing(small), 22) - 0.5)
     }
+  })
+
+  it('opens a 5,000-ship line well beyond the 500-ship pitch', () => {
+    const small = minSpacing(layoutFormation('oujin', 500))
+    const large = minSpacing(layoutFormation('oujin', 5000))
+    expect(large).toBeGreaterThan(30)
+    expect(large).toBeGreaterThan(small * 0.85)
+    expect(bounds(layoutFormation('kakuyoku', 5000)).width).toBeGreaterThan(bounds(layoutFormation('kakuyoku', 500)).width * 2)
   })
 
   it('keeps every slot outside the largest hull', () => {

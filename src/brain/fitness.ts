@@ -12,23 +12,27 @@ export const REWARD = {
     earlyContact: 0.35,
     damageShare: 0.3,
     assault: 0.25,
+    spacing: 0.15,
   },
   cunning: {
     win: 0.85,
     exchange: 0.45,
     flank: 0.3,
     destroyer: 0.25,
+    spacing: 0.2,
   },
   guard: {
     win: 0.65,
     survive: 0.45,
     cover: 0.35,
     cohesion: 0.25,
+    spacing: 0.25,
   },
   balanced: {
     win: 1,
     alive: 0.15,
     cvar: 0.6,
+    spacing: 0.2,
   },
 } as const
 
@@ -66,6 +70,8 @@ export interface BattleReport {
   assault: number
   /** 1 when the divisions stay near the fleet centre. */
   cohesion: number
+  /** 1 when ships keep their distance. Near misses and collision losses pull it down. */
+  spacing: number
   time: number
 }
 
@@ -74,21 +80,21 @@ export function scoreBattle(personality: Personality, report: BattleReport): num
   if (personality === 'fierce') {
     const share = report.dealt / Math.max(1, report.dealt + report.taken)
     const weights = REWARD.fierce
-    return weights.win * win + weights.earlyContact * report.contact + weights.damageShare * share + weights.assault * report.assault
+    return weights.win * win + weights.earlyContact * report.contact + weights.damageShare * share + weights.assault * report.assault + weights.spacing * report.spacing
   }
   if (personality === 'cunning') {
     const ratio = report.exchange
     const exchange = ratio / (1 + ratio)
     const destroyerShare = report.destroyerDealt / Math.max(1, report.dealt)
     const weights = REWARD.cunning
-    return weights.win * win + weights.exchange * exchange + weights.flank * report.flank + weights.destroyer * destroyerShare * exchange
+    return weights.win * win + weights.exchange * exchange + weights.flank * report.flank + weights.destroyer * destroyerShare * exchange + weights.spacing * report.spacing
   }
   if (personality === 'guard') {
     const cover = 1 - report.exposure
     const weights = REWARD.guard
-    return weights.win * win + weights.survive * report.alive + weights.cover * cover + weights.cohesion * report.cohesion
+    return weights.win * win + weights.survive * report.alive + weights.cover * cover + weights.cohesion * report.cohesion + weights.spacing * report.spacing
   }
-  return REWARD.balanced.win * win + REWARD.balanced.alive * report.alive
+  return REWARD.balanced.win * win + REWARD.balanced.alive * report.alive + REWARD.balanced.spacing * report.spacing
 }
 
 /** Mean for the three personalities. 常勝 mixes that mean with its worst quartile. */

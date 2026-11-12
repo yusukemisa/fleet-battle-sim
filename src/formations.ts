@@ -1,4 +1,10 @@
 import { SLOT_PITCH } from './balance.ts'
+
+/** Slot spacing. A 500-ship fleet stays on the minimum. Larger fleets extend their wings. */
+function formationPitch(ships: number): number {
+  const scale = Math.sqrt(Math.max(ships, 1) / 500)
+  return SLOT_PITCH * Math.min(1.85, Math.max(1, scale))
+}
 import type { Formation, FormationId, FormationLayout } from './types.ts'
 
 const GOLDEN = Math.PI * (3 - Math.sqrt(5))
@@ -58,10 +64,11 @@ function placeOujin(layout: FormationLayout): void {
     if (extra > 0) extra -= 1
     sizes.push(size)
   }
-  const pitch = n > 400 ? SLOT_PITCH : SLOT_PITCH + 2
-  const gap = pitch * 2.4
+  const pitch = Math.max(formationPitch(n), n > 400 ? SLOT_PITCH : SLOT_PITCH + 2)
+  const wide = n > 800
+  const gap = pitch * (wide ? 3.8 : 2.4)
   const specs = sizes.map((size) => {
-    const cols = Math.max(1, Math.ceil(Math.sqrt(size * 1.35)))
+    const cols = Math.max(1, Math.ceil(wide ? size / 4 : Math.sqrt(size * 1.35)))
     const rows = Math.max(1, Math.ceil(size / cols))
     return { size, cols, rows, width: Math.max(0, cols - 1) * pitch }
   })
@@ -94,13 +101,23 @@ function placeKakuyoku(layout: FormationLayout): void {
   for (let arm = 0; arm < 2; arm++) {
     const sign = arm === 0 ? -1 : 1
     const take = arms[arm] ?? 0
-    const ranks = n <= 800 ? (n > 200 ? 6 : 3) : Math.max(6, Math.min(40, Math.round(Math.sqrt(take) / 2.1)))
-    const along = Math.max(1, Math.ceil(take / Math.max(1, ranks)))
-    const pitch = SLOT_PITCH
-    const length = Math.max(n <= 800 ? Math.hypot(390, 470) : 0, pitch * Math.max(along - 1, 1))
-    const thickPitch = SLOT_PITCH
-    const dx = sign * 390
-    const dy = 470
+    const pitch = formationPitch(n)
+    const thickPitch = pitch
+    let ranks = n <= 800 ? (n > 200 ? 6 : 3) : 4
+    let along = Math.max(1, Math.ceil(take / Math.max(1, ranks)))
+    let length = n <= 800 ? Math.max(Math.hypot(390, 470), pitch * Math.max(along - 1, 1)) : pitch * Math.max(along - 1, 1)
+    const dxAbs = n > 800 ? 780 : 390
+    const dyAbs = n > 800 ? 260 : 470
+    if (n > 800) {
+      const share = dyAbs / Math.hypot(dxAbs, dyAbs)
+      while (length * share > 980 && ranks < 30) {
+        ranks += 2
+        along = Math.max(1, Math.ceil(take / ranks))
+        length = pitch * Math.max(along - 1, 1)
+      }
+    }
+    const dx = sign * dxAbs
+    const dy = dyAbs
     const len = Math.hypot(dx, dy)
     const px = -dy / len
     const py = dx / len
@@ -129,7 +146,7 @@ function placeEngetsu(layout: FormationLayout): void {
     : Math.max(2, Math.round(Math.sqrt(wing) / 2.6))
   const per = Math.ceil(wing / ranks)
   const arc = Math.PI * 0.78
-  const shipGap = Math.max(SLOT_PITCH, n > 400 ? SLOT_PITCH : SLOT_PITCH + 2)
+  const shipGap = Math.max(formationPitch(n), n > 400 ? SLOT_PITCH : SLOT_PITCH + 2)
   const gap = Math.max(classic ? SLOT_PITCH / 0.45 : SLOT_PITCH, classic ? 460 / per : shipGap)
   const radius = (gap * Math.max(per - 1, 1)) / arc
   for (let i = 0; i < wing; i++) {
@@ -182,7 +199,10 @@ function placeGyorin(layout: FormationLayout): void {
   const growth = Math.sqrt(Math.max(n, 500) / 500)
   const rawPitch = (520 / Math.max(rows, 1)) * growth
   const perScale = Math.max(...counts, 1)
-  const disk = Math.max(rawPitch * (n > 800 ? 0.4 : 0.3), SLOT_PITCH * Math.sqrt(perScale))
+  const disk =
+    n > 800
+      ? Math.max(formationPitch(n), SLOT_PITCH * Math.sqrt(perScale))
+      : Math.max(rawPitch * 0.3, SLOT_PITCH * Math.sqrt(perScale))
   const pitch = Math.max(rawPitch, disk * 2.2)
   const rowGap = Math.max(rawPitch * 0.9, disk * 2.05)
   const frontY = ((rows - 1) * rowGap) / 2
@@ -229,9 +249,10 @@ function placeHoshi(layout: FormationLayout): void {
     const t = rows === 1 ? 1 : r / (rows - 1)
     const share = r === rows - 1 ? n - ship : Math.max(1, Math.round((n * (weight[r] ?? 1)) / sum))
     const take = Math.min(Math.max(share, 0), n - ship)
-    const fitted = ((take - 1) * SLOT_PITCH) / 2
+    const rowPitch = n > 800 ? formationPitch(n) : SLOT_PITCH
+    const fitted = ((take - 1) * rowPitch) / 2
     const half = Math.max(2, baseHalf * Math.pow(Math.max(t, 0.04), 0.9), fitted)
-    const yStep = Math.max(SLOT_PITCH, length / Math.max(rows - 1, 1))
+    const yStep = Math.max(rowPitch, length / Math.max(rows - 1, 1))
     const y = (rows - 1) * yStep * 0.46 - t * (rows - 1) * yStep
     for (let k = 0; k < take; k++) {
       const u = take === 1 ? 0.5 : k / (take - 1)
@@ -285,7 +306,8 @@ function placeHouen(layout: FormationLayout): void {
     left -= take
     tight = Math.min(tight, (2 * Math.PI * radius) / Math.max(1, take))
   }
-  if (tight < SLOT_PITCH && tight > 0) radii = radii.map((radius) => radius * (SLOT_PITCH / tight))
+  const ringPitch = formationPitch(n)
+  if (tight < ringPitch && tight > 0) radii = radii.map((radius) => radius * (ringPitch / tight))
   const weight = radii.reduce((sum, r) => sum + r, 0)
   let ship = innerCount
   const outerIndex = new Array<number>(outerCount)

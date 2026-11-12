@@ -633,6 +633,13 @@ function lineClearance(div: Division, ctx: TacticContext, tx: number, ty: number
   return 0
 }
 
+function halfDepth(div: Division): number {
+  const fleetShips = Math.max(div.roster * 5, 1)
+  const pitch = 22 * Math.min(1.85, Math.max(1, Math.sqrt(fleetShips / 500)))
+  const rows = fleetShips > 800 ? 4 : Math.max(2, Math.ceil(Math.sqrt(Math.max(div.roster, 1) / 1.35)))
+  return Math.max(36, ((rows - 1) * pitch) / 2 + 18)
+}
+
 function repelFriends(div: Division, ctx: TacticContext, dt: number): void {
   const gap = div.classId === 'battleship' ? 140 : div.classId === 'cruiser' ? 100 : 70
   let px = 0
@@ -647,10 +654,44 @@ function repelFriends(div: Division, ctx: TacticContext, dt: number): void {
     px += (dx / dist) * push
     py += (dy / dist) * push
   }
-  if (px === 0 && py === 0) return
+  if (px !== 0 || py !== 0) {
+    const a = 1 - Math.exp(-2.4 * dt)
+    div.vx += px * 48 * a
+    div.vy += py * 48 * a
+  }
+  if (div.roster < 80) return
+  const horizon = 1.4
+  const ax = div.ax + div.vx * horizon
+  const ay = div.ay + div.vy * horizon
+  let lxSum = 0
+  let lySum = 0
+  for (const other of ctx.divisions) {
+    if (other === div || other.alive === 0 || other.roster < 80) continue
+    const bx = other.ax + other.vx * horizon
+    const by = other.ay + other.vy * horizon
+    const dx = ax - bx
+    const dy = ay - by
+    const dist = hypot(dx, dy) || 1
+    const bulk = halfDepth(div) + halfDepth(other) + (other.side === div.side ? 28 : 16)
+    if (dist >= bulk) continue
+    const rx = other.ax - div.ax
+    const ry = other.ay - div.ay
+    const approach = (div.vx - other.vx) * rx + (div.vy - other.vy) * ry
+    if (approach <= 0) continue
+    const rvx = div.vx - other.vx
+    const rvy = div.vy - other.vy
+    const rl = hypot(rvx, rvy) || 1
+    const side = dx * (-rvy) + dy * rvx
+    const sign = side > 0 ? 1 : side < 0 ? -1 : Math.sign(div.slot - other.slot || div.fleet - other.fleet || 1)
+    const push = (bulk - dist) / bulk
+    lxSum += (-rvy / rl) * sign * push
+    lySum += (rvx / rl) * sign * push
+  }
+  const mag = hypot(lxSum, lySum)
+  if (mag < 1e-4) return
   const a = 1 - Math.exp(-2.4 * dt)
-  div.vx += px * 48 * a
-  div.vy += py * 48 * a
+  div.vx += (lxSum / mag) * 22 * a
+  div.vy += (lySum / mag) * 22 * a
 }
 
 export function stepDivision(div: Division, ctx: TacticContext, dt: number, wheel = true): void {
