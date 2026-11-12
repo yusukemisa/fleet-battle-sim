@@ -15,6 +15,8 @@ npm run dev
 
 `npm test` でシミュレーションのテスト、`npm run lint` で型検査と lint が走ります。
 
+公開版は https://yusukemisa.github.io/fleet-battle-sim/ です。`main` への push で GitHub Actions がテストとビルドを行い、`dist` を GitHub Pages に置きます。初回だけ、リポジトリの Settings → Pages → Build and deployment → Source を **GitHub Actions** にしてください。この設定はワークフローからは変えられません。
+
 ## 操作する
 
 初期の隻数は 1,000 です。上の「隻数」は、両軍 1 艦隊ずつの均等な戦いに戻す近道です。100、1,000、10,000、20,000 から選べます。開戦前だけ変更できます。複数艦隊にしているときは「個別」と出ます。
