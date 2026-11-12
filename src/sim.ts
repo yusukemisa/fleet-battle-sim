@@ -1,4 +1,4 @@
-import { acquireSq, BLAST, CLASS_STATS, DEFAULT_LINE, FIELD, FLEET_STANDOFF, fleetLine, GUNNERY, hullHp, hullRadius, RANKS, SHIP_CLASS_IDS, SHIP_STATS, SIM_TIME_SCALE, SLOT_PITCH, STRAY, SWEEP, stepYaw, thrust, volleyGap, volleyPhase, type ShipClassId, type ShipStats } from './balance.ts'
+import { acquireSq, BLAST, CLASS_STATS, DEFAULT_LINE, FIELD, FLEET_STANDOFF, fleetLine, GUNNERY, hullHp, hullRadius, RANKS, SHIP_CLASS_IDS, SHIP_STATS, SIM_TIME_SCALE, SLOT_PITCH, STRAY, SWEEP, stepYawInto, thrust, volleyGap, volleyPhase, type ShipClassId, type ShipStats } from './balance.ts'
 import { anchorFleets, assignTargets, fitGroups, fleetIndex, FLEET_NAMES as FLEET_TITLES, separateFleets } from './fleets.ts'
 import { armorZone, inArc, inBattery, inFiringArc, wrapAngle } from './combat.ts'
 import { chooseTactic, COMMANDERS, employClass, type BattleFacts, type Bearing } from './commanders.ts'
@@ -1313,15 +1313,35 @@ function classStatsOf(id: (typeof SHIP_CLASS_IDS)[number]): ShipStats {
   return CLASS_STATS[SHIP_CLASS_IDS.indexOf(id)] ?? SHIP_STATS
 }
 
+let motionSpeed = new Float32Array(0)
+let motionHeading = new Float32Array(0)
+
+function cacheDivisionMotion(state: SimState): void {
+  const n = state.divisions.length
+  if (motionSpeed.length < n) {
+    motionSpeed = new Float32Array(n)
+    motionHeading = new Float32Array(n)
+  }
+  for (let index = 0; index < n; index++) {
+    const division = state.divisions[index]
+    if (!division) continue
+    motionSpeed[index] = Math.hypot(division.vx, division.vy)
+    motionHeading[index] = Math.atan2(division.fy, division.fx)
+  }
+}
+
 function moveShips(state: SimState, dt: number): void {
   const ships = state.ships
   steerClear(state)
+  cacheDivisionMotion(state)
+  const spun = { yaw: 0, delta: 0 }
   for (let i = 0; i < ships.count; i++) {
     if (ships.alive[i] === 0) continue
     const stats = CLASS_STATS[ships.shipClass[i] ?? 0] ?? state.stats
     const reverse = stats.maxSpeed * stats.reverse
     const accel = thrust(stats.response) * dt
-    const division = state.divisions[ships.division[i] ?? 0]
+    const divisionIndex = ships.division[i] ?? 0
+    const division = state.divisions[divisionIndex]
     if (!division) continue
     const x = ships.x[i] ?? 0
     const y = ships.y[i] ?? 0
@@ -1331,7 +1351,7 @@ function moveShips(state: SimState, dt: number): void {
     const dy = ty - y
     const dist = Math.hypot(dx, dy)
     const guns = TACTICS[division.tacticId].guns && !division.sweeping
-    const divisionHeading = Math.atan2(division.fy, division.fx)
+    const divisionHeading = motionHeading[divisionIndex] ?? 0
     // Inside one slot pitch the station is close enough. Chasing it makes a blocked ship
     // yaw toward a point that collision keeps moving to the other side.
     const settled = dist <= SLOT_PITCH
@@ -1343,27 +1363,33 @@ function moveShips(state: SimState, dt: number): void {
       const reach = stats.range
       targetInRange = rdx * rdx + rdy * rdy <= reach * reach
     }
-    const stranded = (ships.shipClass[i] ?? 0) === 2 ? 180 : 480
-    const divSpeed = Math.hypot(division.vx, division.vy)
-    const shipSpeed = Math.hypot(ships.vx[i] ?? 0, ships.vy[i] ?? 0)
-    const slotAhead = dx * division.vx + dy * division.vy
-    const headingNow = ships.heading[i] ?? 0
-    const towardSlot = dx * Math.cos(headingNow) + dy * Math.sin(headingNow)
-    const battleship = (ships.shipClass[i] ?? 0) === 0
-    const ring = state.fleets[division.fleet]?.formationId === 'houen'
-    // A stopped battleship whose slot is pulling away turns back. 方円 is left
-    // on the old distance rule so the ring does not unfold.
-    const stuck = battleship && !ring && !targetInRange && dist > 60 && shipSpeed < 6 && divSpeed > 4 && slotAhead > 80
-    const catching = battleship && !ring && !targetInRange && dist > SLOT_PITCH && shipSpeed > 4 && towardSlot > 16
-    // Large blocks never reach the 480 rejoin line: the ship is still inside
-    // the formation. Point it at the slot until it is moving.
-    const keepUp =
-      battleship &&
-      !ring &&
-      division.roster >= 40 &&
-      !targetInRange &&
-      dist <= stranded &&
-      (shipSpeed <= 14 || dist <= SLOT_PITCH)
+    const classId = ships.shipClass[i] ?? 0
+    const stranded = classId === 2 ? 180 : 480
+    const battleship = classId === 0
+    const fleet = state.fleets[division.fleet]
+    const ring = fleet?.formationId === 'houen'
+    let divSpeed = 0
+    let stuck = false
+    let catching = false
+    let keepUp = false
+    if (battleship && !ring && !targetInRange) {
+      const svx = ships.vx[i] ?? 0
+      const svy = ships.vy[i] ?? 0
+      const speedSq = svx * svx + svy * svy
+      divSpeed = motionSpeed[divisionIndex] ?? 0
+      const slotAhead = dx * division.vx + dy * division.vy
+      // A stopped battleship whose slot is pulling away turns back. 方円 is left
+      // on the old distance rule so the ring does not unfold.
+      stuck = dist > 60 && speedSq < 36 && divSpeed > 4 && slotAhead > 80
+      // Large blocks never reach the 480 rejoin line: the ship is still inside
+      // the formation. Point it at the slot until it is moving.
+      keepUp = division.roster >= 40 && dist <= stranded && (speedSq <= 196 || dist <= SLOT_PITCH)
+      if (dist > SLOT_PITCH && speedSq > 16) {
+        const headingNow = ships.heading[i] ?? 0
+        const towardSlot = dx * Math.cos(headingNow) + dy * Math.sin(headingNow)
+        catching = towardSlot > 16
+      }
+    }
     const rejoin = (!targetInRange && dist > stranded) || stuck || catching || keepUp
     let desired = divisionHeading
     const falling = ships.falling[i] === 1
@@ -1399,7 +1425,7 @@ function moveShips(state: SimState, dt: number): void {
     const prevSpeed = (ships.vx[i] ?? 0) * Math.cos(prevHeading) + (ships.vy[i] ?? 0) * Math.sin(prevHeading)
     let heading = prevHeading
     const error = wrapAngle(desired - heading)
-    const spun = stepYaw(ships.yaw[i] ?? 0, error, stats.turnRate, stats.yawAccel, dt)
+    stepYawInto(spun, ships.yaw[i] ?? 0, error, stats.turnRate, stats.yawAccel, dt)
     ships.yaw[i] = spun.yaw
     heading += spun.delta
     ships.heading[i] = heading

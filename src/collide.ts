@@ -8,6 +8,7 @@ const LOOK = 0.7
 let avoidX = new Float32Array(0)
 let avoidY = new Float32Array(0)
 let brake = new Float32Array(0)
+let steerHot = false
 const NEAR_KEEP = 8
 const nearD = new Float32Array(NEAR_KEEP)
 const nearJ = new Int32Array(NEAR_KEEP)
@@ -38,35 +39,58 @@ export function steerClear(state: SimState): void {
     avoidX = new Float32Array(n)
     avoidY = new Float32Array(n)
     brake = new Float32Array(n)
-  } else {
+  }
+  if (state.frame === 0 && steerHot) {
     avoidX.fill(0)
     avoidY.fill(0)
     brake.fill(0)
+    steerHot = false
   }
-  for (const division of state.divisions) division.pack = 0
-  if (n === 0) return
-  const hash = state.scratch.collide
-  fillSpatialHash(hash, ships.x, ships.y, ships.alive, n)
-  const hot = new Uint8Array(state.divisions.length)
-  for (let a = 0; a < state.divisions.length; a++) {
-    const division = state.divisions[a]
+  const divisions = state.divisions
+  let hotCount = 0
+  const hot = new Uint8Array(divisions.length)
+  for (let a = 0; a < divisions.length; a++) {
+    const division = divisions[a]
     if (!division || division.alive === 0) continue
     const reach = Math.max(520, halfBody(division) + 160)
-    for (let b = 0; b < state.divisions.length; b++) {
+    const reachSq = reach * reach
+    for (let b = 0; b < divisions.length; b++) {
       if (a === b) continue
-      const other = state.divisions[b]
+      const other = divisions[b]
       if (!other || other.alive === 0 || other.fleet === division.fleet) continue
       const dx = division.ax - other.ax
       const dy = division.ay - other.ay
-      if (dx * dx + dy * dy < reach * reach) {
+      if (dx * dx + dy * dy < reachSq) {
         hot[a] = 1
+        hotCount += 1
         break
       }
     }
   }
-  const crowdHit = new Int32Array(state.divisions.length)
-  const crowdSeen = new Int32Array(state.divisions.length)
-  for (let i = 0; i < n; i++) {
+  if (hotCount === 0) {
+    if (steerHot) {
+      avoidX.fill(0)
+      avoidY.fill(0)
+      brake.fill(0)
+      steerHot = false
+    }
+    for (const division of divisions) division.pack = 0
+    return
+  }
+  steerHot = true
+  for (const division of divisions) division.pack = 0
+  if (n === 0) return
+  const hash = state.scratch.collide
+  fillSpatialHash(hash, ships.x, ships.y, ships.alive, n)
+  const crowdHit = new Int32Array(divisions.length)
+  const crowdSeen = new Int32Array(divisions.length)
+  // A 10k battle refreshes a quarter of the hulls each frame and keeps the last vector on the rest.
+  const stride = n >= 8000 ? 4 : 1
+  const start = state.frame % stride
+  for (let i = start; i < n; i += stride) {
+    avoidX[i] = 0
+    avoidY[i] = 0
+    brake[i] = 0
     if (ships.alive[i] !== 1) continue
     const divisionIndex = ships.division[i] ?? 0
     if (hot[divisionIndex] !== 1) continue
@@ -77,8 +101,7 @@ export function steerClear(state: SimState): void {
     const ri = hullRadius(ships.shipClass[i] ?? 0)
     const reach = Math.min(72, Math.hypot(vx, vy) * LOOK + ri + MAX_RADIUS + 14)
     const found = collectNear(hash, x, y, reach, ships.x, ships.y)
-    const division = divisionIndex
-    if (division < crowdSeen.length) crowdSeen[division] = (crowdSeen[division] ?? 0) + 1
+    if (divisionIndex < crowdSeen.length) crowdSeen[divisionIndex] = (crowdSeen[divisionIndex] ?? 0) + 1
     let crowded = false
     const keep = NEAR_KEEP
     nearD.fill(Infinity)
@@ -131,10 +154,10 @@ export function steerClear(state: SimState): void {
       avoidX[i] = (avoidX[i] ?? 0) - (dx / dist) * push
       avoidY[i] = (avoidY[i] ?? 0) - (dy / dist) * push
     }
-    if (crowded && division < crowdHit.length) crowdHit[division] = (crowdHit[division] ?? 0) + 1
+    if (crowded && divisionIndex < crowdHit.length) crowdHit[divisionIndex] = (crowdHit[divisionIndex] ?? 0) + 1
   }
-  for (let index = 0; index < state.divisions.length; index++) {
-    const division = state.divisions[index]
+  for (let index = 0; index < divisions.length; index++) {
+    const division = divisions[index]
     const seen = crowdSeen[index] ?? 0
     if (division && seen > 0) division.pack = (crowdHit[index] ?? 0) / seen
   }

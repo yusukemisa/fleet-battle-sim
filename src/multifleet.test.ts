@@ -87,6 +87,7 @@ describe('multiple fleets', () => {
     }
     samples.sort((a, b) => a - b)
     const median = samples[Math.floor(samples.length / 2)] ?? 0
+    console.log(`six-fleet 10k median step ${median.toFixed(2)} ms`)
     // A 2-core runner measured 12.9ms here after stray shots. 14ms is still inside a 16.7ms frame.
     expect(median).toBeLessThan(14)
   })
