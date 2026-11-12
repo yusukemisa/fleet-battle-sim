@@ -118,5 +118,14 @@ function duel(heading: number, targetAngle: number, distance: number): SimState 
   ships.slotX[0] = 0
   ships.slotY[0] = 0
   ships.division[0] = 0
+  ships.command.fill(0)
+  for (const fleet of state.fleets) {
+    fleet.flagship = -1
+    fleet.flagAt = -1
+  }
+  for (const division of state.divisions) {
+    division.flagship = -1
+    division.flagAt = -1
+  }
   return state
 }

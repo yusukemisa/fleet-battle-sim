@@ -1,146 +1,146 @@
 {
   "personality": "balanced",
-  "seconds": 389,
+  "seconds": 390,
   "curve": [
     {
       "gen": 0,
-      "mean": 0.587,
-      "best": 0.995,
-      "center": 0.476,
-      "mirror": 0.5
+      "mean": 0.569,
+      "best": 0.982,
+      "center": 0.719,
+      "mirror": 0.833
     },
     {
       "gen": 1,
-      "mean": 0.686,
-      "best": 1.225,
-      "center": 0.733,
+      "mean": 0.602,
+      "best": 0.984,
+      "center": 0.725,
       "mirror": 0.667
     },
     {
       "gen": 2,
-      "mean": 0.66,
-      "best": 1.226,
-      "center": 0.733,
-      "mirror": 0.667
+      "mean": 0.643,
+      "best": 1.219,
+      "center": 0.977,
+      "mirror": 0.833
     },
     {
       "gen": 3,
-      "mean": 0.644,
-      "best": 0.996,
-      "center": 0.982,
-      "mirror": 0.833
-    },
-    {
-      "gen": 4,
-      "mean": 0.66,
-      "best": 1.235,
-      "center": 0.983,
-      "mirror": 0.833
-    },
-    {
-      "gen": 5,
-      "mean": 0.576,
-      "best": 0.984,
-      "center": 0.994,
-      "mirror": 0.833
-    },
-    {
-      "gen": 6,
-      "mean": 0.572,
-      "best": 0.992,
-      "center": 0.971,
-      "mirror": 0.833
-    },
-    {
-      "gen": 7,
-      "mean": 0.727,
-      "best": 1.218,
-      "center": 0.98,
-      "mirror": 0.833
-    },
-    {
-      "gen": 8,
-      "mean": 0.619,
-      "best": 1.218,
-      "center": 0.978,
-      "mirror": 0.833
-    },
-    {
-      "gen": 9,
-      "mean": 0.629,
-      "best": 1.001,
-      "center": 1.224,
-      "mirror": 1
-    },
-    {
-      "gen": 10,
-      "mean": 0.589,
-      "best": 1.002,
-      "center": 1.236,
-      "mirror": 1
-    },
-    {
-      "gen": 11,
-      "mean": 0.586,
-      "best": 1.237,
-      "center": 0.476,
-      "mirror": 0.5
-    },
-    {
-      "gen": 12,
-      "mean": 0.64,
-      "best": 0.986,
-      "center": 0.98,
-      "mirror": 0.833
-    },
-    {
-      "gen": 13,
-      "mean": 0.682,
-      "best": 0.995,
-      "center": 0.983,
-      "mirror": 0.833
-    },
-    {
-      "gen": 14,
-      "mean": 0.637,
-      "best": 1.236,
-      "center": 0.986,
-      "mirror": 0.833
-    },
-    {
-      "gen": 15,
-      "mean": 0.675,
-      "best": 1.22,
-      "center": 0.973,
-      "mirror": 0.833
-    },
-    {
-      "gen": 16,
-      "mean": 0.638,
-      "best": 0.988,
-      "center": 0.973,
-      "mirror": 0.833
-    },
-    {
-      "gen": 17,
-      "mean": 0.681,
-      "best": 0.992,
+      "mean": 0.56,
+      "best": 1.005,
       "center": 0.979,
       "mirror": 0.833
     },
     {
-      "gen": 18,
-      "mean": 0.633,
-      "best": 0.995,
-      "center": 0.73,
+      "gen": 4,
+      "mean": 0.665,
+      "best": 1.227,
+      "center": 0.979,
+      "mirror": 0.833
+    },
+    {
+      "gen": 5,
+      "mean": 0.554,
+      "best": 0.998,
+      "center": 1.236,
+      "mirror": 1
+    },
+    {
+      "gen": 6,
+      "mean": 0.647,
+      "best": 0.982,
+      "center": 0.987,
+      "mirror": 1
+    },
+    {
+      "gen": 7,
+      "mean": 0.609,
+      "best": 0.992,
+      "center": 0.986,
+      "mirror": 0.833
+    },
+    {
+      "gen": 8,
+      "mean": 0.673,
+      "best": 1.241,
+      "center": 1.241,
+      "mirror": 1
+    },
+    {
+      "gen": 9,
+      "mean": 0.571,
+      "best": 0.977,
+      "center": 1.252,
+      "mirror": 1
+    },
+    {
+      "gen": 10,
+      "mean": 0.605,
+      "best": 1.215,
+      "center": 1.244,
+      "mirror": 1
+    },
+    {
+      "gen": 11,
+      "mean": 0.615,
+      "best": 0.999,
+      "center": 1.012,
+      "mirror": 0.833
+    },
+    {
+      "gen": 12,
+      "mean": 0.549,
+      "best": 0.751,
+      "center": 0.481,
       "mirror": 0.667
     },
     {
-      "gen": 19,
-      "mean": 0.62,
-      "best": 0.981,
-      "center": 0.984,
+      "gen": 13,
+      "mean": 0.637,
+      "best": 0.994,
+      "center": 1.001,
       "mirror": 0.833
+    },
+    {
+      "gen": 14,
+      "mean": 0.644,
+      "best": 1.002,
+      "center": 0.994,
+      "mirror": 0.833
+    },
+    {
+      "gen": 15,
+      "mean": 0.57,
+      "best": 1.229,
+      "center": 1.239,
+      "mirror": 1
+    },
+    {
+      "gen": 16,
+      "mean": 0.638,
+      "best": 0.99,
+      "center": 0.736,
+      "mirror": 0.667
+    },
+    {
+      "gen": 17,
+      "mean": 0.538,
+      "best": 0.989,
+      "center": 1.229,
+      "mirror": 1
+    },
+    {
+      "gen": 18,
+      "mean": 0.658,
+      "best": 0.993,
+      "center": 1.007,
+      "mirror": 0.833
+    },
+    {
+      "gen": 19,
+      "mean": 0.578,
+      "best": 1.22,
+      "center": 1.248,
+      "mirror": 1
     }
   ]
 }
