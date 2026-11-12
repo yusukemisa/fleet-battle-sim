@@ -8,8 +8,16 @@ import type { Division, Fleet, SimState } from './types.ts'
  * the hull nearest the center division and nothing read it.
  */
 export const FLAGSHIP = {
+  /** Floor for the fleet circle. Also the radius at or below `fleetPivot` ships. */
   fleetRadius: 640,
+  /** Floor for a division circle. Also the radius at or below `divisionPivot` ships. */
   divisionRadius: 300,
+  /**
+   * Command circles grow with sqrt(ships) after this many hulls, so a 10,000-ship
+   * side covers about the central half of a wide line while 100 and 1,000 stay put.
+   */
+  fleetPivot: 3600,
+  divisionPivot: 120,
   divisionDelay: 8,
   fleetDelay: 12,
   hitFleet: 0.012,
@@ -28,6 +36,18 @@ export const FLAGSHIP = {
   disruptResponse: 0.88,
   disruptHit: -0.02,
 } as const
+
+/** Fleet flagship reach. Unchanged at 100 and 1,000 ships; wider once the side is larger. */
+export function fleetCommandRadius(ships: number): number {
+  const scale = Math.sqrt(Math.max(1, ships) / FLAGSHIP.fleetPivot)
+  return FLAGSHIP.fleetRadius * Math.max(1, scale)
+}
+
+/** Division flagship reach. Unchanged for a small division; covers most of a large one. */
+export function divisionCommandRadius(ships: number): number {
+  const scale = Math.sqrt(Math.max(1, ships) / FLAGSHIP.divisionPivot)
+  return FLAGSHIP.divisionRadius * Math.max(1, scale)
+}
 
 export interface CommandMods {
   /** Added to hit chance. */
@@ -68,6 +88,8 @@ let fleetX = new Float32Array(0)
 let fleetY = new Float32Array(0)
 let fleetOn = new Uint8Array(0)
 let fleetDown = new Uint8Array(0)
+let fleetR2 = new Float32Array(0)
+let divR2 = new Float32Array(0)
 
 /** One pass per step. Later lookups are array reads, so the shot loop stays cheap. */
 export function refreshCommand(state: SimState): void {
@@ -88,6 +110,7 @@ export function refreshCommand(state: SimState): void {
     divOn = new Uint8Array(divisions)
     divDown = new Uint8Array(divisions)
     divFleet = new Uint8Array(divisions)
+    divR2 = new Float32Array(divisions)
   } else {
     divOn.fill(0)
     divDown.fill(0)
@@ -97,6 +120,7 @@ export function refreshCommand(state: SimState): void {
     fleetY = new Float32Array(fleets)
     fleetOn = new Uint8Array(fleets)
     fleetDown = new Uint8Array(fleets)
+    fleetR2 = new Float32Array(fleets)
   } else {
     fleetOn.fill(0)
     fleetDown.fill(0)
@@ -106,6 +130,8 @@ export function refreshCommand(state: SimState): void {
     const division = state.divisions[index]
     if (!division) continue
     divFleet[index] = division.fleet
+    const reach = divisionCommandRadius(division.roster)
+    divR2[index] = reach * reach
     const at = division.flagship
     if (at >= 0 && ships.alive[at] === 1) {
       divOn[index] = 1
@@ -116,6 +142,8 @@ export function refreshCommand(state: SimState): void {
   for (let index = 0; index < fleets; index++) {
     const fleet = state.fleets[index]
     if (!fleet) continue
+    const reach = fleetCommandRadius(fleet.ships)
+    fleetR2[index] = reach * reach
     const at = fleet.flagship
     if (at >= 0 && ships.alive[at] === 1) {
       fleetOn[index] = 1
@@ -123,8 +151,6 @@ export function refreshCommand(state: SimState): void {
       fleetY[index] = ships.y[at] ?? 0
     } else if (fleet.flagAt > 0 && time < fleet.flagAt) fleetDown[index] = 1
   }
-  const divR = FLAGSHIP.divisionRadius * FLAGSHIP.divisionRadius
-  const fleetR = FLAGSHIP.fleetRadius * FLAGSHIP.fleetRadius
   const sx = ships.x
   const sy = ships.y
   const alive = ships.alive
@@ -146,13 +172,13 @@ export function refreshCommand(state: SimState): void {
     if (divOn[division] === 1) {
       const dx = (divX[division] ?? 0) - x
       const dy = (divY[division] ?? 0) - y
-      divUp = dx * dx + dy * dy <= divR
+      divUp = dx * dx + dy * dy <= (divR2[division] ?? 0)
     }
     let fleetUp = false
     if (fleetOn[fleet] === 1) {
       const dx = (fleetX[fleet] ?? 0) - x
       const dy = (fleetY[fleet] ?? 0) - y
-      fleetUp = dx * dx + dy * dy <= fleetR
+      fleetUp = dx * dx + dy * dy <= (fleetR2[fleet] ?? 0)
     }
     const disrupted = divDown[division] === 1 || fleetDown[fleet] === 1
     let hit = 0
@@ -224,8 +250,8 @@ function writeMods(state: SimState, index: number): void {
   const fleet = division ? state.fleets[division.fleet] : undefined
   const x = ships.x[index] ?? 0
   const y = ships.y[index] ?? 0
-  const divUp = division ? near(state, division.flagship, x, y, FLAGSHIP.divisionRadius) : false
-  const fleetUp = fleet ? near(state, fleet.flagship, x, y, FLAGSHIP.fleetRadius) : false
+  const divUp = division ? near(state, division.flagship, x, y, divisionCommandRadius(division.roster)) : false
+  const fleetUp = fleet ? near(state, fleet.flagship, x, y, fleetCommandRadius(fleet.ships)) : false
   const disrupted =
     (division != null && division.flagship < 0 && division.flagAt > 0 && state.time < division.flagAt) ||
     (fleet != null && fleet.flagship < 0 && fleet.flagAt > 0 && state.time < fleet.flagAt)

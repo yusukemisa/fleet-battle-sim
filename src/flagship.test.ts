@@ -5,7 +5,9 @@ import {
   FLAGSHIP,
   appointFlagships,
   commandMods,
+  divisionCommandRadius,
   exposedFlagship,
+  fleetCommandRadius,
   noteFlagshipLoss,
 } from './flagship.ts'
 import { createSim, dispatch } from './sim.ts'
@@ -85,6 +87,52 @@ describe('flagships', () => {
     const restored = commandMods(state, fleet.flagship)
     expect(restored.hit).toBeGreaterThan(0)
     expect(restored.turn).toBeGreaterThan(1)
+  })
+
+  it('keeps small fleets on the old radii and covers the middle of a 10,000-ship line', () => {
+    expect(fleetCommandRadius(50)).toBe(FLAGSHIP.fleetRadius)
+    expect(fleetCommandRadius(500)).toBe(FLAGSHIP.fleetRadius)
+    expect(divisionCommandRadius(10)).toBe(FLAGSHIP.divisionRadius)
+    expect(divisionCommandRadius(100)).toBe(FLAGSHIP.divisionRadius)
+    const state = createSim({ shipCount: 20000, formations: ['oujin', 'oujin'], brains: ['rule', 'rule'] })
+    const ships = state.ships
+    const fleet = state.fleets[0]
+    if (!fleet) throw new Error('missing fleet')
+    const radius = fleetCommandRadius(fleet.ships)
+    expect(radius).toBeGreaterThan(1000)
+    expect(radius).toBeLessThan(1300)
+    const fx = ships.x[fleet.flagship] ?? 0
+    const fy = ships.y[fleet.flagship] ?? 0
+    let alive = 0
+    let inside = 0
+    for (let i = 0; i < ships.count / 2; i++) {
+      if (ships.alive[i] !== 1) continue
+      alive += 1
+      const dx = (ships.x[i] ?? 0) - fx
+      const dy = (ships.y[i] ?? 0) - fy
+      if (dx * dx + dy * dy <= radius * radius) inside += 1
+    }
+    const share = inside / alive
+    expect(share).toBeGreaterThan(0.3)
+    expect(share).toBeLessThan(0.5)
+    for (const division of state.divisions) {
+      if (division.side !== 0 || division.roster === 0) continue
+      const at = division.flagship
+      const reach = divisionCommandRadius(division.roster)
+      const x = ships.x[at] ?? 0
+      const y = ships.y[at] ?? 0
+      let n = 0
+      let hit = 0
+      const index = state.divisions.indexOf(division)
+      for (let i = 0; i < ships.count / 2; i++) {
+        if (ships.alive[i] !== 1 || ships.division[i] !== index) continue
+        n += 1
+        const dx = (ships.x[i] ?? 0) - x
+        const dy = (ships.y[i] ?? 0) - y
+        if (dx * dx + dy * dy <= reach * reach) hit += 1
+      }
+      expect(hit / n).toBeGreaterThan(0.9)
+    }
   })
 
   it('holds the flagship division and hunts an exposed enemy flagship', () => {
