@@ -20,6 +20,8 @@ export interface DivisionView {
   pack: number
   /** 0 clear of the enemy, 1 when sampled ships are inside ramming distance. */
   press: number
+  /** 0 none, 0.5 division flagship, 1 this division holds the fleet flagship. */
+  flag: number
 }
 
 export interface FleetView {
@@ -47,7 +49,11 @@ function round(value: number): number {
   return Math.round(value * 10) / 10
 }
 
-function viewDivision(division: Division, id: number): DivisionView {
+function viewDivision(state: SimState, division: Division, id: number): DivisionView {
+  const fleet = state.fleets[division.fleet]
+  const at = division.flagship
+  const live = at >= 0 && state.ships.alive[at] === 1
+  const flag = !live ? 0 : fleet && fleet.flagship === at ? 1 : 0.5
   return {
     id,
     fleet: division.fleet,
@@ -65,6 +71,7 @@ function viewDivision(division: Division, id: number): DivisionView {
     tacticId: division.tacticId,
     pack: round(division.pack),
     press: round(division.press),
+    flag,
   }
 }
 
@@ -79,7 +86,7 @@ export function observe(state: SimState, fleetIndex: number): Observation {
     const division = state.divisions[id]
     if (!division || division.alive === 0) continue
     if (division.fleet !== fleet.index && division.fleet !== enemy.index) continue
-    divisions.push(viewDivision(division, id))
+    divisions.push(viewDivision(state, division, id))
   }
   return {
     time: round(state.time),

@@ -1,4 +1,5 @@
 import { CLASS_MODS, FIELD, SHIP_CLASS_IDS, classMods } from './balance.ts'
+import { FLAGSHIP } from './flagship.ts'
 import { orderPoints } from './move.ts'
 import { pathCrossesBow } from './threat.ts'
 import { FORMATIONS } from './formations.ts'
@@ -64,6 +65,7 @@ export function draw(
     paintShips(ctx, state, camera, width, height, size, 1, RED)
   }
   paintFlashes(ctx, state, camera, width, height, size)
+  paintFlagships(ctx, state, camera, width, height)
 
   strokeBeams(ctx, state, camera, width, height)
   strokeBooms(ctx, state, camera, width, height)
@@ -362,6 +364,46 @@ function slotBox(state: SimState, index: number): { minX: number; maxX: number; 
 function blockSize(zoom: number, count: number): number {
   const unit = count >= 24000 ? 1.5 : count >= 16000 ? 2 : count >= 10000 ? 2.6 : count >= 1000 ? 4 : 9
   return Math.max(1.2, Math.min(13, zoom * unit))
+}
+
+function paintFlagships(
+  ctx: CanvasRenderingContext2D,
+  state: SimState,
+  camera: Camera,
+  width: number,
+  height: number,
+): void {
+  const ships = state.ships
+  ctx.save()
+  ctx.lineWidth = 1
+  ctx.setLineDash([5, 6])
+  for (const fleet of state.fleets) {
+    const at = fleet.flagship
+    if (at < 0 || ships.alive[at] !== 1) continue
+    const atScreen = worldToScreen(ships.x[at] ?? 0, ships.y[at] ?? 0, camera, width, height)
+    ctx.beginPath()
+    ctx.arc(atScreen.x, atScreen.y, FLAGSHIP.fleetRadius * camera.zoom, 0, Math.PI * 2)
+    ctx.strokeStyle = 'rgba(232, 196, 92, 0.28)'
+    ctx.stroke()
+  }
+  ctx.setLineDash([])
+  for (const division of state.divisions) {
+    const at = division.flagship
+    if (at < 0 || ships.alive[at] !== 1) continue
+    const atScreen = worldToScreen(ships.x[at] ?? 0, ships.y[at] ?? 0, camera, width, height)
+    const fleetFlag = state.fleets[division.fleet]?.flagship === at
+    ctx.beginPath()
+    ctx.arc(atScreen.x, atScreen.y, fleetFlag ? 12 : 7, 0, Math.PI * 2)
+    ctx.strokeStyle = fleetFlag ? 'rgba(244, 214, 96, 0.95)' : 'rgba(226, 220, 196, 0.75)'
+    ctx.lineWidth = fleetFlag ? 2 : 1.15
+    ctx.stroke()
+    if (fleetFlag) {
+      ctx.beginPath()
+      ctx.arc(atScreen.x, atScreen.y, 5, 0, Math.PI * 2)
+      ctx.stroke()
+    }
+  }
+  ctx.restore()
 }
 
 function worldToScreen(x: number, y: number, camera: Camera, width: number, height: number): { x: number; y: number } {

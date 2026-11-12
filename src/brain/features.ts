@@ -1,7 +1,7 @@
 import { FORMATION_IDS } from '../types.ts'
 import type { DivisionView, Observation } from './observe.ts'
 
-const SLOT = 10
+const SLOT = 11
 const COMMANDERS = ['fierce', 'cunning', 'guard', 'balanced'] as const
 
 /** Own 5 divisions, enemy 5 divisions, both formations, own commander, range, closing, strength. */
@@ -19,6 +19,7 @@ function writeSlot(out: Float64Array, at: number, division: DivisionView | undef
   out[at + 7] = division.vy / 80
   out[at + 8] = division.pack
   out[at + 9] = division.press
+  out[at + 10] = division.flag
 }
 
 /** Fixed-length features. Missing divisions stay zero. */

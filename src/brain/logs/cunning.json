@@ -1,89 +1,89 @@
 {
   "personality": "cunning",
-  "seconds": 389,
+  "seconds": 391,
   "curve": [
     {
       "gen": 0,
-      "mean": 1.1,
-      "best": 1.258,
-      "center": 1.022,
-      "mirror": 1
+      "mean": 1.186,
+      "best": 1.488,
+      "center": 0.92,
+      "mirror": 0.5
     },
     {
       "gen": 1,
-      "mean": 1.201,
-      "best": 1.385,
-      "center": 1.034,
+      "mean": 1.142,
+      "best": 1.386,
+      "center": 0.918,
       "mirror": 0.5
     },
     {
       "gen": 2,
-      "mean": 1.143,
-      "best": 1.367,
-      "center": 0.91,
-      "mirror": 1
+      "mean": 1.167,
+      "best": 1.379,
+      "center": 1.142,
+      "mirror": 0.5
     },
     {
       "gen": 3,
-      "mean": 1.136,
-      "best": 1.276,
-      "center": 1.031,
-      "mirror": 1
+      "mean": 1.12,
+      "best": 1.367,
+      "center": 0.806,
+      "mirror": 0.5
     },
     {
       "gen": 4,
-      "mean": 1.227,
-      "best": 1.492,
-      "center": 1.028,
+      "mean": 1.166,
+      "best": 1.483,
+      "center": 1.145,
       "mirror": 1
     },
     {
       "gen": 5,
-      "mean": 1.131,
-      "best": 1.341,
-      "center": 0.815,
-      "mirror": 0.5
+      "mean": 1.22,
+      "best": 1.374,
+      "center": 1.152,
+      "mirror": 1
     },
     {
       "gen": 6,
-      "mean": 1.16,
-      "best": 1.261,
-      "center": 1.153,
+      "mean": 1.159,
+      "best": 1.321,
+      "center": 1.032,
       "mirror": 0.5
     },
     {
       "gen": 7,
-      "mean": 1.111,
-      "best": 1.37,
-      "center": 1.032,
+      "mean": 1.146,
+      "best": 1.254,
+      "center": 1.024,
       "mirror": 1
     },
     {
       "gen": 8,
-      "mean": 1.15,
-      "best": 1.367,
-      "center": 1.025,
-      "mirror": 1
+      "mean": 1.119,
+      "best": 1.352,
+      "center": 1.019,
+      "mirror": 0.5
     },
     {
       "gen": 9,
-      "mean": 1.112,
-      "best": 1.347,
-      "center": 1.018,
+      "mean": 1.174,
+      "best": 1.494,
+      "center": 1.117,
       "mirror": 1
     },
     {
       "gen": 10,
-      "mean": 1.137,
-      "best": 1.354,
-      "center": 1.144,
-      "mirror": 1
+      "mean": 1.136,
+      "best": 1.368,
+      "center": 0.914,
+      "mirror": 0.5
     },
     {
       "gen": 11,
-      "mean": 1.207,
-      "best": 1.457,
-      "center": 1.026,
+      "mean": 1.129,
+      "best": 1.392,
+      "center": 1.016,
       "mirror": 0.5
     }
   ]

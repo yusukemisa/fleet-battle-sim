@@ -9,6 +9,7 @@ import { collectInto, collectNear, createScratch, fillSpatialHash } from './spat
 import { orderPoints, stepMoveOrder } from './move.ts'
 import { assessDivision, threatenedHeading } from './threat.ts'
 import { avoidanceBrake, avoidanceX, avoidanceY, separateShips, steerClear } from './collide.ts'
+import { appointFlagships, commandMods, noteFlagshipLoss, refreshCommand } from './flagship.ts'
 import { backOff, gunHold, holdFronts, shipGap, standoffX, standoffY } from './standoff.ts'
 import { decideTransformer, forgetTransformer, recordDecision, tacticsFrom } from './brain/dt.ts'
 import { featurize } from './brain/features.ts'
@@ -300,6 +301,8 @@ function createGrouped(config: SimConfig): SimState {
       prey: -1,
       bias: 1,
       reach: 0,
+      flagship: -1,
+      flagAt: 0,
     }
   }
   state.fleets = fleets
@@ -386,6 +389,7 @@ function deployGrouped(state: SimState): void {
   state.alive[0] = alive[0]
   state.alive[1] = alive[1]
   refreshCentroids(state)
+  appointFlagships(state)
 }
 
 function reflowAnchors(state: SimState): void {
@@ -484,6 +488,8 @@ function placeFleet(state: SimState, fleet: Fleet, offset: number): void {
     division.rush = false
     division.headOn = false
     division.ordered = false
+    division.flagship = -1
+    division.flagAt = 0
   }
   for (let i = 0; i < count; i++) {
     const at = offset + i
@@ -504,22 +510,6 @@ function placeFleet(state: SimState, fleet: Fleet, offset: number): void {
     if (dy > reach) reach = dy
   }
   fleet.reach = reach
-  const center = state.divisions[fleet.index * DIVISIONS_PER_SIDE + 2]
-  if (!center) return
-  let best = -1
-  let bestD = Infinity
-  for (let i = 0; i < count; i++) {
-    const at = offset + i
-    if (ships.division[at] !== center.fleet * DIVISIONS_PER_SIDE + 2) continue
-    const dx = (ships.x[at] ?? 0) - center.ax
-    const dy = (ships.y[at] ?? 0) - center.ay
-    const d = dx * dx + dy * dy
-    if (d < bestD) {
-      bestD = d
-      best = at
-    }
-  }
-  if (best >= 0) ships.command[best] = 1
 }
 
 function setSpeed(state: SimState, speed: Speed): SimState {
@@ -740,8 +730,8 @@ function allocate(
       target: new Int32Array(count),
     },
     fleets: [
-      { index: 0, ordinal: 0, side: 0, name: FLEET_NAMES[0], ships: count / 2, requested: count / 2, formationId: DEFAULT_FORMATION, commanderId: DEFAULT_COMMANDER, brain: 'rule', ai: idleAi(), orders: null, centerX: -FIELD.fleetCenter, centerY: 0, meanX: -FIELD.fleetCenter, meanY: 0, enemyFleet: 1, cover: false, plan: 'none', planUntil: 0, facingX: 1, facingY: 0, sweepLeg: 0, maneuver: 'press', maneuverUntil: 0, prey: -1, bias: 1, reach: 0 },
-      { index: 1, ordinal: 0, side: 1, name: FLEET_NAMES[1], ships: count / 2, requested: count / 2, formationId: DEFAULT_FORMATION, commanderId: DEFAULT_COMMANDER, brain: 'rule', ai: idleAi(), orders: null, centerX: FIELD.fleetCenter, centerY: 0, meanX: FIELD.fleetCenter, meanY: 0, enemyFleet: 0, cover: false, plan: 'none', planUntil: 0, facingX: -1, facingY: 0, sweepLeg: 0, maneuver: 'press', maneuverUntil: 0, prey: -1, bias: 1, reach: 0 },
+      { index: 0, ordinal: 0, side: 0, name: FLEET_NAMES[0], ships: count / 2, requested: count / 2, formationId: DEFAULT_FORMATION, commanderId: DEFAULT_COMMANDER, brain: 'rule', ai: idleAi(), orders: null, centerX: -FIELD.fleetCenter, centerY: 0, meanX: -FIELD.fleetCenter, meanY: 0, enemyFleet: 1, cover: false, plan: 'none', planUntil: 0, facingX: 1, facingY: 0, sweepLeg: 0, maneuver: 'press', maneuverUntil: 0, prey: -1, bias: 1, reach: 0, flagship: -1, flagAt: 0 },
+      { index: 1, ordinal: 0, side: 1, name: FLEET_NAMES[1], ships: count / 2, requested: count / 2, formationId: DEFAULT_FORMATION, commanderId: DEFAULT_COMMANDER, brain: 'rule', ai: idleAi(), orders: null, centerX: FIELD.fleetCenter, centerY: 0, meanX: FIELD.fleetCenter, meanY: 0, enemyFleet: 0, cover: false, plan: 'none', planUntil: 0, facingX: -1, facingY: 0, sweepLeg: 0, maneuver: 'press', maneuverUntil: 0, prey: -1, bias: 1, reach: 0, flagship: -1, flagAt: 0 },
     ],
     divisions,
     alive: [count / 2, count / 2],
@@ -843,6 +833,8 @@ function makeDivision(side: SideId, slot: DivisionSlot, fleet: number = side): D
     roster: 0,
     pack: 0,
     press: 0,
+    flagship: -1,
+    flagAt: 0,
   }
 }
 
@@ -904,10 +896,15 @@ function deploy(state: SimState): void {
   state.fleets[1].prey = -1
   state.fleets[0].bias = 1
   state.fleets[1].bias = 1
+  state.fleets[0].flagship = -1
+  state.fleets[1].flagship = -1
+  state.fleets[0].flagAt = 0
+  state.fleets[1].flagAt = 0
   for (const side of sides) placeSide(state, side, half)
   state.alive[0] = half
   state.alive[1] = half
   refreshCentroids(state)
+  appointFlagships(state)
 }
 
 function placeSide(state: SimState, side: SideId, half: number): void {
@@ -995,6 +992,8 @@ function placeSide(state: SimState, side: SideId, half: number): void {
     division.rush = false
     division.headOn = false
     division.ordered = false
+    division.flagship = -1
+    division.flagAt = 0
   }
   for (let i = 0; i < half; i++) {
     const at = offset + i
@@ -1009,28 +1008,6 @@ function placeSide(state: SimState, side: SideId, half: number): void {
     ships.falling[at] = 0
     ships.heading[at] = Math.atan2(division.fy, division.fx)
   }
-  markCommander(state, side, half)
-}
-
-function markCommander(state: SimState, side: SideId, half: number): void {
-  const ships = state.ships
-  const division = state.divisions[side * DIVISIONS_PER_SIDE + 2]
-  if (!division) return
-  let best = -1
-  let bestD = Infinity
-  const offset = side * half
-  for (let i = 0; i < half; i++) {
-    const at = offset + i
-    if (ships.division[at] !== division.side * DIVISIONS_PER_SIDE + 2) continue
-    const dx = ships.x[at]! - division.ax
-    const dy = ships.y[at]! - division.ay
-    const d = dx * dx + dy * dy
-    if (d < bestD) {
-      bestD = d
-      best = at
-    }
-  }
-  if (best >= 0) ships.command[best] = 1
 }
 
 /** Rule fleets, and AI fleets that have no valid orders yet, keep the existing commander. */
@@ -1168,6 +1145,8 @@ function driveAi(state: SimState): void {
 }
 
 function step(state: SimState, dt: number): void {
+  appointFlagships(state)
+  refreshCommand(state)
   refreshCentroids(state)
   driveAi(state)
   if (state.time >= state.commandAt) {
@@ -1342,7 +1321,9 @@ function moveShips(state: SimState, dt: number): void {
     if (ships.alive[i] === 0) continue
     const stats = CLASS_STATS[ships.shipClass[i] ?? 0] ?? state.stats
     const reverse = stats.maxSpeed * stats.reverse
-    const accel = thrust(stats.response) * dt
+    const mods = commandMods(state, i)
+    const accel = thrust(stats.response * mods.response) * dt
+    const turnRate = stats.turnRate * mods.turn
     const divisionIndex = ships.division[i] ?? 0
     const division = state.divisions[divisionIndex]
     if (!division) continue
@@ -1438,7 +1419,7 @@ function moveShips(state: SimState, dt: number): void {
     const prevSpeed = (ships.vx[i] ?? 0) * Math.cos(prevHeading) + (ships.vy[i] ?? 0) * Math.sin(prevHeading)
     let heading = prevHeading
     const error = wrapAngle(desired - heading)
-    stepYawInto(spun, ships.yaw[i] ?? 0, error, stats.turnRate, stats.yawAccel, dt)
+    stepYawInto(spun, ships.yaw[i] ?? 0, error, turnRate, stats.yawAccel, dt)
     ships.yaw[i] = spun.yaw
     heading += spun.delta
     ships.heading[i] = heading
@@ -1711,9 +1692,12 @@ function shootBattery(state: SimState, index: number, target: number, batteryInd
   const hy = state.scratch.bowY[index] ?? 0
   if (!inBattery(hx, hy, sx, sy, tx, ty, battery)) return false
   if (shotBlocked(state, index, target)) return false
+  const shot = commandMods(state, index)
+  const hitAdd = shot.hit
+  const rof = shot.rof
   const overdue = batteryCooldown(state, index, batteryIndex)
   const carry = overdue < -dt - COOLDOWN_SLACK ? 0 : overdue
-  setBatteryCooldown(state, index, batteryIndex, volleyGap(state.rng, index, batteryIndex, battery.cooldown) + carry)
+  setBatteryCooldown(state, index, batteryIndex, volleyGap(state.rng, index, batteryIndex, battery.cooldown) * rof + carry)
   const side = ships.side[index] === 1 ? 1 : 0
   const victim = CLASS_STATS[ships.shipClass[target] ?? 0] ?? state.stats
   const zone = armorZone(ships.heading[target] ?? 0, tx, ty, sx, sy, victim)
@@ -1723,12 +1707,13 @@ function shootBattery(state: SimState, index: number, target: number, batteryInd
   const angle = Math.atan2(sy - ty, sx - tx)
   let blow = battery.guns * battery.power * scale * factor
   blow *= crossfireScale(state.scratch.bearing[target] ?? 99, angle)
+  blow *= commandMods(state, target).evade
   const opened = state.scratch.opened[target] ?? 0
   const queued = state.scratch.incoming[target] ?? 0
   if ((ships.hp[target] ?? 0) <= 0 || (opened > 0 && queued >= opened)) state.tally.overkill += 1
   state.scratch.incoming[target] = queued + blow * GUNNERY.reserve
   state.tally.shots += 1
-  const hit = rand(state) <= state.stats.hitChance
+  const hit = rand(state) <= Math.min(1, Math.max(0, state.stats.hitChance + hitAdd))
   const spread = hit ? 0.4 : 8
   const ox = (rand(state) - 0.5) * spread
   const oy = (rand(state) - 0.5) * spread
@@ -1774,6 +1759,7 @@ const blastQueue: number[] = []
 function destroy(state: SimState, index: number): void {
   const ships = state.ships
   if (ships.alive[index] === 0) return
+  noteFlagshipLoss(state, index)
   ships.alive[index] = 0
   ships.hp[index] = 0
   const division = state.divisions[ships.division[index] ?? 0]
@@ -1820,9 +1806,10 @@ function clipShot(state: SimState, shooter: number, x: number, y: number, blow: 
 function hurtFromShot(state: SimState, shooter: number, target: number, blow: number): void {
   const ships = state.ships
   if (ships.alive[target] === 0) return
+  const taken = blow * commandMods(state, target).evade
   const before = ships.hp[target] ?? 0
   if (before <= 0) return
-  const dealt = Math.min(before, blow)
+  const dealt = Math.min(before, taken)
   const origin = ships.side[shooter] === 1 ? 1 : 0
   const victimSide = ships.side[target] === 1 ? 1 : 0
   if (origin !== victimSide) {
@@ -1842,7 +1829,7 @@ function hurtFromShot(state: SimState, shooter: number, target: number, blow: nu
     const victimClass = ships.shipClass[target] ?? 0
     state.classOnClass[shooterClass * 3 + victimClass] = (state.classOnClass[shooterClass * 3 + victimClass] ?? 0) + dealt
   }
-  ships.hp[target] = before - blow
+  ships.hp[target] = before - taken
   ships.flash[target] = 1
   if ((ships.hp[target] ?? 0) <= 0) destroy(state, target)
 }
@@ -1878,7 +1865,7 @@ export function explode(state: SimState, index: number): void {
     const ship = blastHold[k] ?? -1
     if (ship < 0 || ships.alive[ship] === 0) continue
     const dist = Math.hypot((ships.x[ship] ?? 0) - x, (ships.y[ship] ?? 0) - y)
-    const blow = blastDamage(radius, dist)
+    const blow = blastDamage(radius, dist) * commandMods(state, ship).evade
     if (blow <= 0) continue
     const before = ships.hp[ship] ?? 0
     ships.hp[ship] = before - blow

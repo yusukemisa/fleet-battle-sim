@@ -199,6 +199,15 @@ function scene(): SimState {
     ships.slotY[i] = 0
     ships.division[i] = 0
   }
+  ships.command.fill(0)
+  for (const fleet of state.fleets) {
+    fleet.flagship = -1
+    fleet.flagAt = -1
+  }
+  for (const division of state.divisions) {
+    division.flagship = -1
+    division.flagAt = -1
+  }
   return state
 }
 

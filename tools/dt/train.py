@@ -14,7 +14,7 @@ from pathlib import Path
 import torch
 from torch import nn
 
-OBS = 119
+OBS = 129
 SLOTS = 5
 TACTICS = 8
 ACT = SLOTS * TACTICS

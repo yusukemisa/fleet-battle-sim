@@ -1,6 +1,7 @@
 import { anchorPace, CLASS_MODS, CLASS_STATS, classIndex, MANEUVER } from './balance.ts'
 import type { PostureWeights } from './commanders.ts'
 import { COMMANDERS, lightDuty } from './commanders.ts'
+import { guardOwnFlagship, huntExposedFlagship } from './flagship.ts'
 import { aimUnderThreat, wideFlankGoal } from './threat.ts'
 import { stepDivision, tacticById, wheelDivision } from './tactics.ts'
 import type { CommanderId, Division, Fleet, ManeuverId, SideId, SimState, TacticContext, TacticId } from './types.ts'
@@ -434,6 +435,8 @@ export function updatePlan(state: SimState, side: SideId, fleetIndex?: number): 
   }
   chooseCounter(state, fleet, sit)
   directLights(state, fleet.side, fleetIndex)
+  guardOwnFlagship(state, fleet)
+  huntExposedFlagship(state, fleet)
 }
 
 /**

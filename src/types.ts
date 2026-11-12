@@ -186,6 +186,10 @@ export interface Fleet {
   bias: number
   /** Lateral half-extent at deployment. Friendly fleets stay this far apart. */
   reach: number
+  /** Ship index of the fleet flagship, or -1 while command is disrupted. */
+  flagship: number
+  /** Sim time when a successor may be appointed. Negative suspends command. */
+  flagAt: number
 }
 
 export interface Division {
@@ -254,6 +258,10 @@ export interface Division {
   pack: number
   /** Share of sampled ships inside ramming distance of an enemy hull. */
   press: number
+  /** Ship index of this division's flagship, or -1 while command is disrupted. */
+  flagship: number
+  /** Sim time when a successor may be appointed. Negative suspends command. */
+  flagAt: number
 }
 
 export interface FormationLayout {

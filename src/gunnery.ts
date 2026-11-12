@@ -1,5 +1,6 @@
 import { BLAST, CLASS_STATS, GUNNERY, STRAY, hullHp, hullRadius, type BatterySpec } from './balance.ts'
 import { armorFactor, inArc, inBattery } from './combat.ts'
+import { exposedFlagship } from './flagship.ts'
 import { withdrawalFor } from './ranks.ts'
 import { collectNear } from './spatial.ts'
 import type { GunneryTally, SimState } from './types.ts'
@@ -167,6 +168,7 @@ export function pickBatteryTarget(
       score /= 1 + fd * GUNNERY.focus
     }
     if (division && division.hunt >= 0 && (ships.division[other] ?? -1) === division.hunt) score *= 3
+    if (exposedFlagship(state, other)) score *= 1.6
     score -= dist * GUNNERY.near
     if (other === prefer && battery.id === 'bow') preferScore = score
     if (score > bestScore || (score === bestScore && other < best)) {
@@ -258,6 +260,7 @@ export function pickTarget(state: SimState, index: number): number {
       score /= 1 + fd * GUNNERY.focus
     }
     if (division && division.hunt >= 0 && (ships.division[other] ?? -1) === division.hunt) score *= 3
+    if (exposedFlagship(state, other)) score *= 1.6
     score -= dist * GUNNERY.near
     if (other === prefer) preferScore = score
     if (score > bestScore || (score === bestScore && other < best)) {
