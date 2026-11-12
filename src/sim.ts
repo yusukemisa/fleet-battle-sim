@@ -1,4 +1,4 @@
-import { acquireSq, BLAST, CLASS_STATS, DEFAULT_LINE, FIELD, FLEET_STANDOFF, fleetLine, GUNNERY, hullHp, hullRadius, RANKS, SHIP_CLASS_IDS, SHIP_STATS, SIM_TIME_SCALE, SLOT_PITCH, STRAY, SWEEP, stepYawInto, thrust, volleyGap, volleyPhase, type ShipClassId, type ShipStats } from './balance.ts'
+import { acquireSq, BLAST, CLASS_STATS, DEFAULT_LINE, FIELD, FLEET_STANDOFF, fleetLine, GUNNERY, hullHp, hullRadius, RANKS, SHIP_CLASS_IDS, SHIP_STATS, SIM_TIME_SCALE, SLOT_PITCH, STRAY, SWEEP, stepYawInto, volleyGap, volleyPhase, type ShipClassId, type ShipStats } from './balance.ts'
 import { anchorFleets, assignTargets, fitGroups, fleetIndex, FLEET_NAMES as FLEET_TITLES, separateFleets } from './fleets.ts'
 import { armorZone, inArc, inBattery, inFiringArc, wrapAngle } from './combat.ts'
 import { chooseTactic, COMMANDERS, employClass, type BattleFacts, type Bearing } from './commanders.ts'
@@ -8,9 +8,9 @@ import { refreshCover, rotateRanks } from './ranks.ts'
 import { collectInto, collectNear, createScratch, fillSpatialHash } from './spatial.ts'
 import { orderPoints, stepMoveOrder } from './move.ts'
 import { assessDivision, threatenedHeading } from './threat.ts'
-import { avoidanceBrake, avoidanceX, avoidanceY, separateShips, steerClear } from './collide.ts'
-import { appointFlagships, commandMods, noteFlagshipLoss, refreshCommand } from './flagship.ts'
-import { backOff, gunHold, holdFronts, shipGap, standoffX, standoffY } from './standoff.ts'
+import { avoidanceVectors, separateShips, steerClear } from './collide.ts'
+import { appointFlagships, commandMods, commandRates, noteFlagshipLoss, refreshCommand } from './flagship.ts'
+import { BACK_OFF, GUN_HOLD, holdFronts, holdVectors } from './standoff.ts'
 import { decideTransformer, forgetTransformer, recordDecision, tacticsFrom } from './brain/dt.ts'
 import { featurize } from './brain/features.ts'
 import { DECISION_INTERVAL, decidePolicy, defaultBrain, preferredFormation } from './brain/policy.ts'
@@ -721,6 +721,10 @@ function allocate(
       falling: new Uint8Array(count),
       approach: new Uint8Array(count),
       heading: new Float32Array(count),
+      headingCos: new Float64Array(count),
+      headingSin: new Float64Array(count),
+      headingStamp: new Float32Array(count),
+      headingKnown: new Uint8Array(count),
       yaw: new Float32Array(count),
       alive: new Uint8Array(count),
       side: new Uint8Array(count),
@@ -1316,14 +1320,17 @@ function moveShips(state: SimState, dt: number): void {
   const ships = state.ships
   steerClear(state)
   cacheDivisionMotion(state)
+  const [turnOf, responseOf] = commandRates()
+  const [gapOf, awayXOf, awayYOf] = holdVectors()
+  const [avoidXs, avoidYs, brakes] = avoidanceVectors()
   const spun = { yaw: 0, delta: 0 }
   for (let i = 0; i < ships.count; i++) {
     if (ships.alive[i] === 0) continue
     const stats = CLASS_STATS[ships.shipClass[i] ?? 0] ?? state.stats
     const reverse = stats.maxSpeed * stats.reverse
-    const mods = commandMods(state, i)
-    const accel = thrust(stats.response * mods.response) * dt
-    const turnRate = stats.turnRate * mods.turn
+    const modsTurn = turnOf[i] ?? 1
+    const accel = stats.response * (responseOf[i] ?? 1) * 14 * dt
+    const turnRate = stats.turnRate * modsTurn
     const divisionIndex = ships.division[i] ?? 0
     const division = state.divisions[divisionIndex]
     if (!division) continue
@@ -1386,45 +1393,58 @@ function moveShips(state: SimState, dt: number): void {
       // The rally point is behind. Keep the bow toward the enemy and creep, so the stern stays out of their guns.
       desired = Math.abs(delta) > (70 * Math.PI) / 180 ? threat : aim
     } else if (division.shaped && division.focus) {
-      desired = Math.atan2(division.fy, division.fx)
+      desired = divisionHeading
     } else if (division.shaped) {
       let chase = ships.approach[i] === 1
       if (dist > 180) chase = true
       else if (dist < 90) chase = false
       ships.approach[i] = chase ? 1 : 0
-      desired = chase ? Math.atan2(dy, dx) : Math.atan2(division.fy, division.fx)
+      desired = chase ? Math.atan2(dy, dx) : divisionHeading
     } else if (!guns && !settled) {
       desired = Math.atan2(dy, dx)
     } else if (target >= 0 && ships.alive[target] === 1) {
       desired = Math.atan2((ships.y[target] ?? 0) - y, (ships.x[target] ?? 0) - x)
     }
-    if (!rejoin) desired = threatenedHeading(division, desired, x, y)
-    const gap = shipGap(i)
-    const hold = gunHold(classId)
+    if (!rejoin && division.guard > 0 && !division.yielding && !division.broadsideOk) {
+      desired = threatenedHeading(division, desired, x, y)
+    }
+    const gap = gapOf[divisionIndex] ?? 1e6
+    const hold = GUN_HOLD[classId] ?? GUN_HOLD[0]
     const tooClose = division.roster >= 40 && gap < hold
     if (tooClose) {
-      const sx = standoffX(i)
-      const sy = standoffY(i)
-      const inner = backOff(classId)
-      // Inside the gun line, keep the bow on the enemy and stop. Inside the inner band, leave.
-      desired = gap < inner ? Math.atan2(sy, sx) : Math.atan2(-sy, -sx)
+      const sx = awayXOf[divisionIndex] ?? 0
+      const sy = awayYOf[divisionIndex] ?? 0
+      // The whole hold keeps the bow on the enemy, including the reverse out of
+      // the inner band. Pointing the bow away silences every battery.
+      desired = Math.atan2(-sy, -sx)
     }
-    const axv = avoidanceX(i)
-    const ayv = avoidanceY(i)
+    const axv = avoidXs[i] ?? 0
+    const ayv = avoidYs[i] ?? 0
     const avoidMag = axv * axv + ayv * ayv
     const caution = avoidMag > 0.04
     if (avoidMag > 0.2) desired = Math.atan2(ayv, axv)
     else if (caution) desired += wrapAngle(Math.atan2(ayv, axv) - desired) * 0.8
     const prevHeading = ships.heading[i] ?? desired
-    const prevSpeed = (ships.vx[i] ?? 0) * Math.cos(prevHeading) + (ships.vy[i] ?? 0) * Math.sin(prevHeading)
+    let prevCos = ships.headingCos[i] ?? 0
+    let prevSin = ships.headingSin[i] ?? 0
+    if (ships.headingKnown[i] !== 1 || ships.headingStamp[i] !== prevHeading) {
+      prevCos = Math.cos(prevHeading)
+      prevSin = Math.sin(prevHeading)
+    }
+    const prevSpeed = (ships.vx[i] ?? 0) * prevCos + (ships.vy[i] ?? 0) * prevSin
     let heading = prevHeading
     const error = wrapAngle(desired - heading)
     stepYawInto(spun, ships.yaw[i] ?? 0, error, turnRate, stats.yawAccel, dt)
     ships.yaw[i] = spun.yaw
     heading += spun.delta
     ships.heading[i] = heading
+    const stored = ships.heading[i] ?? heading
     const hx = Math.cos(heading)
     const hy = Math.sin(heading)
+    ships.headingCos[i] = stored === heading ? hx : Math.cos(stored)
+    ships.headingSin[i] = stored === heading ? hy : Math.sin(stored)
+    ships.headingStamp[i] = stored
+    ships.headingKnown[i] = 1
     const along = dist > 1e-4 ? (dx * hx + dy * hy) / dist : 1
     let speed = 0
     if (settled) speed = along > 0.5 ? Math.min(14, dist) : 0
@@ -1433,19 +1453,26 @@ function moveShips(state: SimState, dt: number): void {
     else if (along < -0.2) speed = -reverse
     if (keepUp) speed = Math.max(speed, Math.min(stats.maxSpeed, Math.max(divSpeed, 18)))
     if (battleship && division.roster >= 40 && dist < 160) speed = Math.min(speed, 14)
-    if (tooClose) {
-      const inner = backOff(classId)
-      speed = gap < inner ? Math.min(12, Math.max(speed, 8)) : 0
-    }
     const off = Math.abs(error)
     if (off > 0.8) speed *= 0.45
     else if (off > 0.35) speed *= 0.75
     if (avoidMag > 0.2) speed *= 0.35
     else if (caution) speed *= 0.62
-    speed *= 1 - 0.82 * avoidanceBrake(i)
+    speed *= 1 - 0.82 * (brakes[i] ?? 0)
+    if (tooClose) {
+      const inner = BACK_OFF[classId] ?? BACK_OFF[0]
+      if (gap >= inner) speed = 0
+      else {
+        const bowOn = Math.abs(wrapAngle(desired - heading)) < 0.7
+        speed = bowOn ? -Math.min(12, Math.max(Math.abs(speed), 8)) : 0
+      }
+    }
     if (division.roster >= 40) {
-      const leaving = tooClose && gap < backOff(classId)
-      const cap = leaving ? 22 : 18
+      const leaving = tooClose && gap < (BACK_OFF[classId] ?? BACK_OFF[0])
+      // Still out of gun range: a slightly faster cruise, still under the
+      // collision closing speed when two ships meet head-on.
+      const far = gap > hold + 80
+      const cap = leaving ? 22 : far ? 26 : 18
       speed = speed < 0 ? -Math.min(-speed, cap) : Math.min(speed, cap)
     }
     const stepSpeed = prevSpeed + Math.max(-accel, Math.min(accel, speed - prevSpeed))
@@ -1471,6 +1498,7 @@ function fight(state: SimState, dt: number): void {
   const ships = state.ships
   cacheBows(state)
   cacheSpread(state)
+  cacheDivisionReach(state)
   fillSpatialHash(state.scratch.hash, ships.x, ships.y, ships.alive, ships.count)
   state.scratch.opened.set(ships.hp)
   state.scratch.incoming.fill(0)
@@ -1487,17 +1515,32 @@ function fight(state: SimState, dt: number): void {
   // Large steps already fire on the frame cooldown elapses. Small steps stagger ships that are still waiting.
   const period = dt >= 0.05 ? 1 : Math.max(1, Math.round(0.45 / dt))
   const frame = state.frame
+  const cd = ships.cooldown
+  const gun = ships.gunCd
+  const alive = ships.alive
+  const batteries = state.stats.batteries
+  const bow = batteries[0]
+  const port = batteries[1]
+  const starboard = batteries[2]
+  const rng = state.rng
+  const slack = COOLDOWN_SLACK
   for (let i = 0; i < ships.count; i++) {
-    if (ships.alive[i] === 0) continue
-    tickBatteries(state, i, dt)
-    scatterWaiting(state, i, dt)
-    if (anyBatteryReady(state, i)) {
+    if (alive[i] === 0) continue
+    let c0 = (cd[i] ?? 0) - dt
+    let c1 = (gun[i * 2] ?? 0) - dt
+    let c2 = (gun[i * 2 + 1] ?? 0) - dt
+    if (c0 <= slack && c0 + dt < -slack && bow) c0 = volleyPhase(rng, i, 0, bow.cooldown)
+    if (c1 <= slack && c1 + dt < -slack && port) c1 = volleyPhase(rng, i, 1, port.cooldown)
+    if (c2 <= slack && c2 + dt < -slack && starboard) c2 = volleyPhase(rng, i, 2, starboard.cooldown)
+    cd[i] = c0
+    gun[i * 2] = c1
+    gun[i * 2 + 1] = c2
+    if (c0 <= slack || c1 <= slack || c2 <= slack) {
       const look = state.scratch.look[i] ?? -1
-      let fresh = false
-      for (let b = 0; b < state.stats.batteries.length; b++) {
-        const now = batteryCooldown(state, i, b)
-        if (now <= COOLDOWN_SLACK && now + dt > COOLDOWN_SLACK) fresh = true
-      }
+      const fresh =
+        (c0 <= slack && c0 + dt > slack) ||
+        (c1 <= slack && c1 + dt > slack) ||
+        (c2 <= slack && c2 + dt > slack)
       if (fresh || look < 0 || frame - look >= period) {
         state.scratch.look[i] = frame
         if (ships.side[i] === 1) red[n1++] = i
@@ -1506,7 +1549,7 @@ function fight(state: SimState, dt: number): void {
       continue
     }
     const target = ships.target[i] ?? -1
-    if (target >= 0 && ships.alive[target] === 0) {
+    if (target >= 0 && alive[target] === 0) {
       ships.target[i] = frame % period === i % period ? pickTarget(state, i) : -1
     }
   }
@@ -1643,6 +1686,60 @@ function acquire(state: SimState, index: number): void {
   ships.target[index] = best
 }
 
+let divisionReachSq = new Float64Array(0)
+let divisionReach = new Float64Array(0)
+
+/** Farthest living hull from each division anchor, so a gun can be rejected without looking at the enemy centroid. */
+function cacheDivisionReach(state: SimState): void {
+  const nDiv = state.divisions.length
+  if (divisionReachSq.length < nDiv) {
+    divisionReachSq = new Float64Array(nDiv)
+    divisionReach = new Float64Array(nDiv)
+  }
+  divisionReachSq.fill(0, 0, nDiv)
+  const ships = state.ships
+  const xs = ships.x
+  const ys = ships.y
+  const alive = ships.alive
+  const divOf = ships.division
+  for (let i = 0; i < ships.count; i++) {
+    if (alive[i] !== 1) continue
+    const d = divOf[i] ?? 0
+    const division = state.divisions[d]
+    if (!division) continue
+    const dx = (xs[i] ?? 0) - division.ax
+    const dy = (ys[i] ?? 0) - division.ay
+    const distSq = dx * dx + dy * dy
+    if (distSq > (divisionReachSq[d] ?? 0)) divisionReachSq[d] = distSq
+  }
+  for (let d = 0; d < nDiv; d++) divisionReach[d] = Math.sqrt(divisionReachSq[d] ?? 0)
+}
+
+/**
+ * True when no enemy hull can be inside `maxR`.
+ * A hull within `maxR` of this ship puts its division anchor within `maxR` plus that division's extent.
+ */
+function enemyOutOfRange(state: SimState, index: number, sx: number, sy: number, maxR: number): boolean {
+  const side = state.ships.side[index] === 1 ? 1 : 0
+  const enemy = side === 0 ? 1 : 0
+  const cdx = (state.centroidX[enemy] ?? 0) - sx
+  const cdy = (state.centroidY[enemy] ?? 0) - sy
+  if (cdx * cdx + cdy * cdy <= (maxR + 220) * (maxR + 220)) return false
+  // Small fleets fit inside the centroid margin. Large ones do not: a wing can
+  // be inside gun range while the enemy centroid is still thousands away.
+  if (state.ships.count < 2000) return true
+  const divisions = state.divisions
+  for (let d = 0; d < divisions.length; d++) {
+    const division = divisions[d]
+    if (!division || division.side === side || division.alive === 0) continue
+    const dx = division.ax - sx
+    const dy = division.ay - sy
+    const limit = maxR + (divisionReach[d] ?? 0) + 1
+    if (dx * dx + dy * dy <= limit * limit) return false
+  }
+  return true
+}
+
 function fireBatteries(state: SimState, index: number, dt: number, legacy: boolean): void {
   const ships = state.ships
   const batteries = (CLASS_STATS[ships.shipClass[index] ?? 0] ?? state.stats).batteries
@@ -1650,10 +1747,7 @@ function fireBatteries(state: SimState, index: number, dt: number, legacy: boole
   for (const battery of batteries) maxR = Math.max(maxR, battery.maxRange)
   const sx = ships.x[index] ?? 0
   const sy = ships.y[index] ?? 0
-  const enemy = ships.side[index] === 1 ? 0 : 1
-  const cdx = (state.centroidX[enemy] ?? 0) - sx
-  const cdy = (state.centroidY[enemy] ?? 0) - sy
-  if (cdx * cdx + cdy * cdy > (maxR + 220) * (maxR + 220)) {
+  if (enemyOutOfRange(state, index, sx, sy, maxR)) {
     for (let b = 0; b < batteries.length; b++) holdBattery(state, index, b, dt)
     if (batteryCooldown(state, index, 0) <= COOLDOWN_SLACK) noteIdle(state, index, dt, true)
     return

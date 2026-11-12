@@ -66,6 +66,11 @@ export function cacheBows(state: SimState): void {
   scratch.cosStern = Math.cos(state.stats.armorStern)
   for (let i = 0; i < ships.count; i++) {
     if (ships.alive[i] === 0) continue
+    if (ships.headingKnown[i] === 1 && ships.headingStamp[i] === (ships.heading[i] ?? 0)) {
+      scratch.bowX[i] = ships.headingCos[i] ?? 1
+      scratch.bowY[i] = ships.headingSin[i] ?? 0
+      continue
+    }
     const heading = ships.heading[i] ?? 0
     scratch.bowX[i] = Math.cos(heading)
     scratch.bowY[i] = Math.sin(heading)

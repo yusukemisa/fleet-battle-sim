@@ -1,15 +1,17 @@
 import type { SimState } from './types.ts'
 
-/** Bow-on hold for a large division. Inside the inner band the front backs away. */
-export const GUN_HOLD = [560, 460, 360] as const
-const BACK = [420, 340, 280] as const
+/**
+ * Bow-on hold for a large division, BB / CL / DD.
+ * Each hold sits inside that class's bow reach (900 / ~774 / ~468) with margin,
+ * and each inner band sits above the bow's minimum (280 / ~241 / ~146) so a
+ * front that has stopped can still shoot.
+ */
+export const GUN_HOLD = [680, 560, 360] as const
+export const BACK_OFF = [400, 320, 220] as const
 /** Closer than this counts as ramming distance for the learned penalty. */
 export const RAM_PRESS = 96
 const LARGE = 40
 
-let gapOf = new Float32Array(0)
-let awayX = new Float32Array(0)
-let awayY = new Float32Array(0)
 let idleUntil = -1
 let gap = new Float32Array(0)
 let ax = new Float32Array(0)
@@ -53,19 +55,23 @@ export function gunHold(index: number): number {
 }
 
 export function backOff(index: number): number {
-  return BACK[index] ?? BACK[0]
+  return BACK_OFF[index] ?? BACK_OFF[0]
 }
 
-export function shipGap(index: number): number {
-  return gapOf[index] ?? 1e6
+export function holdVectors(): readonly [Float32Array, Float32Array, Float32Array] {
+  return [gap, ax, ay]
 }
 
-export function standoffX(index: number): number {
-  return awayX[index] ?? 0
+export function divisionGap(index: number): number {
+  return gap[index] ?? 1e6
 }
 
-export function standoffY(index: number): number {
-  return awayY[index] ?? 0
+export function divisionAwayX(index: number): number {
+  return ax[index] ?? 0
+}
+
+export function divisionAwayY(index: number): number {
+  return ay[index] ?? 0
 }
 
 /** Sample the enemy front and hold large divisions there. Small fleets are unchanged. */
@@ -76,14 +82,6 @@ export function holdFronts(state: SimState): void {
   if (state.frame === 0) idleUntil = -1
   if (state.frame > 0 && state.frame < idleUntil) return
   scratch(divisions.length)
-  if (gapOf.length < n) {
-    gapOf = new Float32Array(n)
-    awayX = new Float32Array(n)
-    awayY = new Float32Array(n)
-  }
-  gapOf.fill(1e6)
-  awayX.fill(0)
-  awayY.fill(0)
   for (const division of divisions) division.press = 0
   gap.fill(1e6)
   pressed.fill(0)
@@ -176,12 +174,6 @@ export function holdFronts(state: SimState): void {
     const count = samples[index] ?? 0
     if (division && count > 0) division.press = (pressed[index] ?? 0) / count
   }
-  for (let i = 0; i < n; i++) {
-    const own = ships.division[i] ?? 0
-    gapOf[i] = gap[own] ?? 1e6
-    awayX[i] = ax[own] ?? 0
-    awayY[i] = ay[own] ?? 0
-  }
   let nearest = 1e6
   for (let index = 0; index < divisions.length; index++) {
     const division = divisions[index]
@@ -189,22 +181,10 @@ export function holdFronts(state: SimState): void {
     const front = gap[index] ?? 1e6
     nearest = Math.min(nearest, front)
     const hold = gunHold(classIndex(division.classId))
+    const ux = aimX[index] ?? 0
+    const uy = aimY[index] ?? 0
+    if (ux === 0 && uy === 0) continue
     if (front >= hold) continue
-    let ux = 0
-    let uy = 0
-    let enemyDist = 1e6
-    for (const other of divisions) {
-      if (!other || other.side === division.side || other.alive === 0) continue
-      const dx = other.ax - division.ax
-      const dy = other.ay - division.ay
-      const dist = Math.hypot(dx, dy) || 1
-      if (dist < enemyDist) {
-        enemyDist = dist
-        ux = dx / dist
-        uy = dy / dist
-      }
-    }
-    if (enemyDist > 1e5) continue
     const closing = division.vx * ux + division.vy * uy
     if (closing > 0) {
       division.vx -= ux * closing

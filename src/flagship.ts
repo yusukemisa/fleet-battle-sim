@@ -190,6 +190,20 @@ export function refreshCommand(state: SimState): void {
   bound = state
 }
 
+/** Turn-rate multiplier written by {@link refreshCommand}. 1 when this hull has no bonus. */
+export function commandTurn(index: number): number {
+  return turnBuf[index] ?? 1
+}
+
+/** Acceleration multiplier written by {@link refreshCommand}. */
+export function commandResponse(index: number): number {
+  return responseBuf[index] ?? 1
+}
+
+export function commandRates(): readonly [Float32Array, Float32Array] {
+  return [turnBuf, responseBuf]
+}
+
 /** Bonuses for one hull. The returned object is reused, so copy the numbers. */
 export function commandMods(state: SimState, index: number): CommandMods {
   if (bound === state) {
