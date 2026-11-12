@@ -1,146 +1,146 @@
 {
   "personality": "balanced",
-  "seconds": 390,
+  "seconds": 389,
   "curve": [
     {
       "gen": 0,
-      "mean": 0.782,
-      "best": 1.228,
-      "center": 0.979,
-      "mirror": 0.833
+      "mean": 0.587,
+      "best": 0.995,
+      "center": 0.476,
+      "mirror": 0.5
     },
     {
       "gen": 1,
-      "mean": 0.745,
-      "best": 1.223,
-      "center": 0.726,
+      "mean": 0.686,
+      "best": 1.225,
+      "center": 0.733,
       "mirror": 0.667
     },
     {
       "gen": 2,
-      "mean": 0.725,
-      "best": 1.239,
-      "center": 0.725,
+      "mean": 0.66,
+      "best": 1.226,
+      "center": 0.733,
       "mirror": 0.667
     },
     {
       "gen": 3,
-      "mean": 0.629,
-      "best": 0.991,
-      "center": 1.232,
-      "mirror": 1
+      "mean": 0.644,
+      "best": 0.996,
+      "center": 0.982,
+      "mirror": 0.833
     },
     {
       "gen": 4,
-      "mean": 0.602,
-      "best": 0.982,
-      "center": 1.233,
-      "mirror": 1
+      "mean": 0.66,
+      "best": 1.235,
+      "center": 0.983,
+      "mirror": 0.833
     },
     {
       "gen": 5,
-      "mean": 0.635,
-      "best": 1.22,
-      "center": 1.221,
-      "mirror": 1
+      "mean": 0.576,
+      "best": 0.984,
+      "center": 0.994,
+      "mirror": 0.833
     },
     {
       "gen": 6,
-      "mean": 0.736,
-      "best": 1.214,
-      "center": 1.243,
-      "mirror": 1
+      "mean": 0.572,
+      "best": 0.992,
+      "center": 0.971,
+      "mirror": 0.833
     },
     {
       "gen": 7,
-      "mean": 0.699,
-      "best": 0.984,
-      "center": 1.243,
-      "mirror": 1
+      "mean": 0.727,
+      "best": 1.218,
+      "center": 0.98,
+      "mirror": 0.833
     },
     {
       "gen": 8,
-      "mean": 0.589,
-      "best": 1.235,
-      "center": 0.972,
+      "mean": 0.619,
+      "best": 1.218,
+      "center": 0.978,
       "mirror": 0.833
     },
     {
       "gen": 9,
-      "mean": 0.835,
-      "best": 1.236,
-      "center": 0.988,
-      "mirror": 0.833
+      "mean": 0.629,
+      "best": 1.001,
+      "center": 1.224,
+      "mirror": 1
     },
     {
       "gen": 10,
-      "mean": 0.752,
-      "best": 1.236,
-      "center": 1.245,
+      "mean": 0.589,
+      "best": 1.002,
+      "center": 1.236,
       "mirror": 1
     },
     {
       "gen": 11,
-      "mean": 0.789,
-      "best": 1.223,
-      "center": 0.988,
-      "mirror": 0.833
+      "mean": 0.586,
+      "best": 1.237,
+      "center": 0.476,
+      "mirror": 0.5
     },
     {
       "gen": 12,
-      "mean": 0.653,
-      "best": 0.987,
+      "mean": 0.64,
+      "best": 0.986,
       "center": 0.98,
       "mirror": 0.833
     },
     {
       "gen": 13,
-      "mean": 0.765,
-      "best": 0.989,
-      "center": 1.255,
-      "mirror": 1
-    },
-    {
-      "gen": 14,
-      "mean": 0.715,
-      "best": 1.232,
+      "mean": 0.682,
+      "best": 0.995,
       "center": 0.983,
       "mirror": 0.833
     },
     {
+      "gen": 14,
+      "mean": 0.637,
+      "best": 1.236,
+      "center": 0.986,
+      "mirror": 0.833
+    },
+    {
       "gen": 15,
-      "mean": 0.739,
-      "best": 1.231,
-      "center": 0.979,
+      "mean": 0.675,
+      "best": 1.22,
+      "center": 0.973,
       "mirror": 0.833
     },
     {
       "gen": 16,
-      "mean": 0.748,
-      "best": 1.229,
-      "center": 1.242,
-      "mirror": 1
+      "mean": 0.638,
+      "best": 0.988,
+      "center": 0.973,
+      "mirror": 0.833
     },
     {
       "gen": 17,
-      "mean": 0.775,
-      "best": 1.226,
-      "center": 0.97,
+      "mean": 0.681,
+      "best": 0.992,
+      "center": 0.979,
       "mirror": 0.833
     },
     {
       "gen": 18,
-      "mean": 0.802,
-      "best": 1.229,
-      "center": 1.231,
-      "mirror": 1
+      "mean": 0.633,
+      "best": 0.995,
+      "center": 0.73,
+      "mirror": 0.667
     },
     {
       "gen": 19,
-      "mean": 0.6,
-      "best": 0.994,
-      "center": 0.727,
-      "mirror": 0.667
+      "mean": 0.62,
+      "best": 0.981,
+      "center": 0.984,
+      "mirror": 0.833
     }
   ]
 }

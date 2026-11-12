@@ -64,11 +64,12 @@ function placeOujin(layout: FormationLayout): void {
     if (extra > 0) extra -= 1
     sizes.push(size)
   }
-  const pitch = Math.max(formationPitch(n), n > 400 ? SLOT_PITCH : SLOT_PITCH + 2)
-  const wide = n > 800
-  const gap = pitch * (wide ? 3.8 : 2.4)
+  const pitch = n > 400 ? SLOT_PITCH : SLOT_PITCH + 2
+  // Keep the hull gap fixed and add ranks. Scaling the pitch and spending it
+  // all on width turned a large 横陣 into a ribbon thousands of ships across.
+  const gap = pitch * 2.2
   const specs = sizes.map((size) => {
-    const cols = Math.max(1, Math.ceil(wide ? size / 4 : Math.sqrt(size * 1.35)))
+    const cols = Math.max(1, Math.ceil(Math.sqrt(size * 1.15)))
     const rows = Math.max(1, Math.ceil(size / cols))
     return { size, cols, rows, width: Math.max(0, cols - 1) * pitch }
   })
