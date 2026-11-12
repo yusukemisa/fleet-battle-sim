@@ -31,7 +31,7 @@ describe('hulls', () => {
     expect(gap).toBeGreaterThan(HULL_RADIUS[0] + HULL_RADIUS[2] - 0.2)
   })
 
-  it('hurts the lighter hull more in a ram and ignores a brush with no closing speed', () => {
+  it('destroys only the lighter hull in a ram, both hulls of equal weight, and ignores a brush', () => {
     const state = createSim({ shipCount: 100, commanders: ['manual', 'manual'] })
     const ships = state.ships
     ships.alive.fill(0)
@@ -50,21 +50,63 @@ describe('hulls', () => {
     ships.vx[1] = 0
     ships.vy[1] = 0
     separateShips(state)
-    expect(state.ram).toBe(0)
+    expect(state.collisionDeaths[0] + state.collisionDeaths[1]).toBe(0)
+    expect(ships.hp[0]).toBe(54)
     expect(ships.hp[1]).toBe(18)
     ships.x[0] = 0
     ships.y[0] = 0
     ships.x[1] = 4
     ships.y[1] = 0
-    ships.vx[0] = 50
-    ships.vx[1] = -30
+    ships.vx[0] = 40
+    ships.vx[1] = -40
     separateShips(state)
-    const bbLost = 54 - (ships.hp[0] ?? 0)
-    const ddLost = 18 - (ships.hp[1] ?? 0)
-    expect(ddLost).toBeGreaterThan(0)
-    expect(ddLost + 0.02).toBeGreaterThanOrEqual(bbLost)
-    expect(ships.hp[1]).toBeGreaterThan(10)
-    expect(ships.alive[1]).toBe(1)
+    expect(ships.hp[0]).toBe(54)
+    expect(ships.hp[1]).toBe(0)
+    expect(state.collisionDeaths.reduce((sum, value) => sum + value, 0)).toBe(1)
+    ships.alive[2] = 1
+    ships.alive[3] = 1
+    ships.shipClass[2] = 0
+    ships.shipClass[3] = 0
+    ships.hp[2] = 54
+    ships.hp[3] = 54
+    ships.x[2] = 0
+    ships.y[2] = 80
+    ships.x[3] = 6
+    ships.y[3] = 80
+    ships.vx[2] = 50
+    ships.vx[3] = -50
+    separateShips(state)
+    expect(ships.hp[2]).toBe(0)
+    expect(ships.hp[3]).toBe(0)
+  })
+
+  it('caps how many lethal collisions one step will resolve', () => {
+    const state = createSim({ shipCount: 1000, commanders: ['manual', 'manual'] })
+    const ships = state.ships
+    ships.alive.fill(0)
+    for (let pair = 0; pair < 80; pair++) {
+      const a = pair * 2
+      const b = a + 1
+      ships.alive[a] = 1
+      ships.alive[b] = 1
+      ships.shipClass[a] = 0
+      ships.shipClass[b] = 0
+      ships.hp[a] = 54
+      ships.hp[b] = 54
+      ships.x[a] = pair * 40
+      ships.y[a] = 0
+      ships.x[b] = pair * 40 + 4
+      ships.y[b] = 0
+      ships.vx[a] = 40
+      ships.vx[b] = -40
+    }
+    separateShips(state)
+    const dead = state.collisionDeaths[0] + state.collisionDeaths[1]
+    expect(dead).toBeLessThanOrEqual(48 * 2)
+    expect(dead).toBeGreaterThan(0)
+    let spared = 0
+    for (let i = 0; i < 160; i++) if ((ships.hp[i] ?? 0) > 0) spared += 1
+    expect(spared).toBeGreaterThan(0)
   })
 
   it('does not fire through a hull sitting on the line', () => {

@@ -250,6 +250,8 @@ export interface Division {
   screen: boolean
   alive: number
   roster: number
+  /** Share of sampled ships in this division with a neighbor inside the near-miss range. */
+  pack: number
 }
 
 export interface FormationLayout {
@@ -383,6 +385,8 @@ export interface SimState {
   dealt: [number, number]
   /** Hit points removed by hulls colliding, friend or foe. */
   ram: number
+  /** Ships destroyed by a hull collision, per side. */
+  collisionDeaths: [number, number]
   /** Of that damage, the share landed by destroyers. */
   destroyerDealt: [number, number]
   commandAt: number

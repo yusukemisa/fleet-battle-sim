@@ -1,245 +1,89 @@
 {
   "personality": "fierce",
-  "seconds": 336,
+  "seconds": 391,
   "curve": [
     {
       "gen": 0,
-      "mean": 1.306,
-      "best": 1.504,
-      "center": 1.44
+      "mean": 1.528,
+      "best": 1.814,
+      "center": 1.787,
+      "mirror": 1
     },
     {
       "gen": 1,
-      "mean": 1.202,
-      "best": 1.538,
-      "center": 1.573
+      "mean": 1.568,
+      "best": 1.807,
+      "center": 1.784,
+      "mirror": 1
     },
     {
       "gen": 2,
-      "mean": 1.203,
-      "best": 1.379,
-      "center": 1.448
+      "mean": 1.494,
+      "best": 1.78,
+      "center": 1.778,
+      "mirror": 1
     },
     {
       "gen": 3,
-      "mean": 1.259,
-      "best": 1.551,
-      "center": 1.584
+      "mean": 1.486,
+      "best": 1.732,
+      "center": 1.897,
+      "mirror": 1
     },
     {
       "gen": 4,
-      "mean": 1.257,
-      "best": 1.541,
-      "center": 1.456
+      "mean": 1.49,
+      "best": 1.679,
+      "center": 1.779,
+      "mirror": 1
     },
     {
       "gen": 5,
-      "mean": 1.281,
-      "best": 1.523,
-      "center": 1.581
+      "mean": 1.43,
+      "best": 1.695,
+      "center": 1.897,
+      "mirror": 1
     },
     {
       "gen": 6,
-      "mean": 1.258,
-      "best": 1.539,
-      "center": 1.573
+      "mean": 1.496,
+      "best": 1.697,
+      "center": 1.905,
+      "mirror": 1
     },
     {
       "gen": 7,
-      "mean": 1.267,
-      "best": 1.522,
-      "center": 1.46
+      "mean": 1.498,
+      "best": 1.708,
+      "center": 1.781,
+      "mirror": 1
     },
     {
       "gen": 8,
-      "mean": 1.288,
-      "best": 1.564,
-      "center": 1.585
+      "mean": 1.514,
+      "best": 1.761,
+      "center": 1.907,
+      "mirror": 1
     },
     {
       "gen": 9,
-      "mean": 1.25,
-      "best": 1.67,
-      "center": 1.453
+      "mean": 1.473,
+      "best": 1.681,
+      "center": 1.91,
+      "mirror": 1
     },
     {
       "gen": 10,
-      "mean": 1.176,
-      "best": 1.514,
-      "center": 1.59
+      "mean": 1.498,
+      "best": 1.716,
+      "center": 1.912,
+      "mirror": 1
     },
     {
       "gen": 11,
-      "mean": 1.252,
-      "best": 1.564,
-      "center": 1.599
-    },
-    {
-      "gen": 12,
-      "mean": 1.303,
-      "best": 1.512,
-      "center": 1.345,
-      "mirror": 0
-    },
-    {
-      "gen": 13,
-      "mean": 1.32,
-      "best": 1.557,
-      "center": 1.349,
-      "mirror": 0
-    },
-    {
-      "gen": 14,
-      "mean": 1.329,
-      "best": 1.522,
-      "center": 1.357,
-      "mirror": 0
-    },
-    {
-      "gen": 15,
-      "mean": 1.394,
-      "best": 1.638,
-      "center": 1.477,
-      "mirror": 0.5
-    },
-    {
-      "gen": 16,
-      "mean": 1.295,
-      "best": 1.511,
-      "center": 1.484,
-      "mirror": 0.5
-    },
-    {
-      "gen": 17,
-      "mean": 1.309,
-      "best": 1.538,
-      "center": 1.606,
-      "mirror": 1
-    },
-    {
-      "gen": 18,
-      "mean": 1.309,
-      "best": 1.611,
-      "center": 1.224,
-      "mirror": 0
-    },
-    {
-      "gen": 19,
-      "mean": 1.291,
-      "best": 1.54,
-      "center": 1.481,
-      "mirror": 0.5
-    },
-    {
-      "gen": 20,
-      "mean": 1.391,
-      "best": 1.713,
-      "center": 1.48,
-      "mirror": 0.5
-    },
-    {
-      "gen": 21,
-      "mean": 1.337,
-      "best": 1.605,
-      "center": 1.477,
-      "mirror": 0.5
-    },
-    {
-      "gen": 22,
-      "mean": 1.339,
-      "best": 1.552,
-      "center": 1.475,
-      "mirror": 0.5
-    },
-    {
-      "gen": 23,
-      "mean": 1.412,
-      "best": 1.671,
-      "center": 1.486,
-      "mirror": 0.5
-    },
-    {
-      "gen": 24,
-      "mean": 1.328,
-      "best": 1.521,
-      "center": 1.61,
-      "mirror": 1
-    },
-    {
-      "gen": 25,
-      "mean": 1.345,
-      "best": 1.661,
-      "center": 1.473,
-      "mirror": 0.5
-    },
-    {
-      "gen": 26,
-      "mean": 1.387,
-      "best": 1.538,
-      "center": 1.468,
-      "mirror": 0.5
-    },
-    {
-      "gen": 27,
-      "mean": 1.345,
-      "best": 1.666,
-      "center": 1.468,
-      "mirror": 1
-    },
-    {
-      "gen": 28,
-      "mean": 1.31,
-      "best": 1.611,
-      "center": 1.482,
-      "mirror": 1
-    },
-    {
-      "gen": 29,
-      "mean": 1.36,
-      "best": 1.546,
-      "center": 1.478,
-      "mirror": 0.5
-    },
-    {
-      "gen": 30,
-      "mean": 1.308,
-      "best": 1.559,
-      "center": 1.6,
-      "mirror": 1
-    },
-    {
-      "gen": 31,
-      "mean": 1.343,
-      "best": 1.629,
-      "center": 1.346,
-      "mirror": 0
-    },
-    {
-      "gen": 32,
-      "mean": 1.343,
-      "best": 1.561,
-      "center": 1.344,
-      "mirror": 0
-    },
-    {
-      "gen": 33,
-      "mean": 1.297,
-      "best": 1.541,
-      "center": 1.47,
-      "mirror": 0.5
-    },
-    {
-      "gen": 34,
-      "mean": 1.346,
-      "best": 1.677,
-      "center": 1.476,
-      "mirror": 0.5
-    },
-    {
-      "gen": 35,
-      "mean": 1.393,
-      "best": 1.696,
-      "center": 1.48,
+      "mean": 1.479,
+      "best": 1.816,
+      "center": 1.779,
       "mirror": 1
     }
   ]

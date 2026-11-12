@@ -161,6 +161,7 @@ describe('commander brain', () => {
       destroyerDealt: 0,
       assault: 0,
       cohesion: 1,
+      spacing: 1,
       time: 40,
     }
     const assault: BattleReport = { ...empty, contact: 1, contactTime: 4, dealt: 80, taken: 20, assault: 1 }
