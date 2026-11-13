@@ -64,6 +64,7 @@ export function draw(
     paintShips(ctx, state, camera, width, height, size, 0, BLUE)
     paintShips(ctx, state, camera, width, height, size, 1, RED)
   }
+  paintContacts(ctx, state, camera, width, height)
   paintFlashes(ctx, state, camera, width, height, size)
   paintFlagships(ctx, state, camera, width, height)
 
@@ -364,6 +365,34 @@ function slotBox(state: SimState, index: number): { minX: number; maxX: number; 
 function blockSize(zoom: number, count: number): number {
   const unit = count >= 24000 ? 1.5 : count >= 16000 ? 2 : count >= 10000 ? 2.6 : count >= 1000 ? 4 : 9
   return Math.max(1.2, Math.min(13, zoom * unit))
+}
+
+function paintContacts(
+  ctx: CanvasRenderingContext2D,
+  state: SimState,
+  camera: Camera,
+  width: number,
+  height: number,
+): void {
+  const stride = Math.max(1, Math.floor(state.ships.count / 80))
+  ctx.save()
+  for (const side of [0, 1] as const) {
+    const book = state.contacts[side]
+    ctx.fillStyle = side === 0 ? 'rgba(120, 190, 255, 0.85)' : 'rgba(255, 150, 120, 0.85)'
+    for (let i = 0; i < book.at.length; i++) {
+      if ((book.at[i] ?? -1) < 0 || state.ships.alive[i] !== 1) continue
+      const fresh = book.stamp[i] === state.frame || book.stamp[i] + 1 === state.frame
+      if (!fresh && i % stride !== side) continue
+      const at = worldToScreen(book.x[i] ?? 0, book.y[i] ?? 0, camera, width, height)
+      ctx.globalAlpha = fresh ? 0.95 : 0.45
+      ctx.strokeStyle = ctx.fillStyle
+      ctx.lineWidth = fresh ? 3 : 1
+      ctx.beginPath()
+      ctx.arc(at.x, at.y, fresh ? 22 : 9, 0, Math.PI * 2)
+      ctx.stroke()
+    }
+  }
+  ctx.restore()
 }
 
 function paintFlagships(

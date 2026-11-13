@@ -1,5 +1,6 @@
 import { draw, fitCamera, type Camera, type OrderDraft } from './draw.ts'
 import { dispatch, createSim } from './sim.ts'
+import { openTheRange } from './contacts.ts'
 import { DEFAULT_SHIP_COUNT, type Command, type SimState } from './types.ts'
 import { mountHud, syncHud } from './ui.ts'
 import './style.css'
@@ -159,6 +160,22 @@ const api = {
   get formations() { return [sim.fleets[0].formationId, sim.fleets[1].formationId] as const },
   samples: frameSamples,
   command(command: Command) { apply(command) },
+  openRange(gap: number) {
+    openTheRange(sim, gap)
+    camera = fitCamera(sim, viewWidth(), viewHeight())
+    syncHud(root, hud, sim, selected)
+  },
+  picture() {
+    const book = sim.contacts[0]
+    let fresh = 0
+    let stale = 0
+    for (let i = 0; i < book.at.length; i++) {
+      if ((book.at[i] ?? -1) < 0 || sim.ships.alive[i] !== 1) continue
+      if (book.stamp[i] === sim.frame || book.stamp[i] + 1 === sim.frame) fresh += 1
+      else stale += 1
+    }
+    return { fresh, stale, time: sim.time }
+  },
 }
 window.__battle = api
 
@@ -346,6 +363,8 @@ declare global {
       formations: readonly [string, string]
       samples: { frame: number; sim: number; draw: number }[]
       command(command: Command): void
+      openRange(gap: number): void
+      picture(): { fresh: number; stale: number; time: number }
     }
   }
 }
