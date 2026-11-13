@@ -1,5 +1,6 @@
 import { CLASS_MODS } from './balance.ts'
 import type { CommanderId, Division, SideId, SimState } from './types.ts'
+import { sideSearching } from './search.ts'
 
 /**
  * Firepower density outranks holding the starting formation once a fleet is large.
@@ -370,6 +371,6 @@ function applyFleet(state: SimState, side: SideId, dt: number): void {
 /** Reshape large fleets. Small fleets, including the win-rate suite, are unchanged. */
 export function applyDensity(state: SimState, dt: number): void {
   if (state.maneuver !== 'shaped' || state.fleets.length > 2) return
-  if ((state.alive[0] ?? 0) >= DENSITY.minShips) applyFleet(state, 0, dt)
-  if ((state.alive[1] ?? 0) >= DENSITY.minShips) applyFleet(state, 1, dt)
+  if ((state.alive[0] ?? 0) >= DENSITY.minShips && !sideSearching(state, 0)) applyFleet(state, 0, dt)
+  if ((state.alive[1] ?? 0) >= DENSITY.minShips && !sideSearching(state, 1)) applyFleet(state, 1, dt)
 }

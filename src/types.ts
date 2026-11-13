@@ -382,6 +382,14 @@ export interface ArmorHits {
   rear: [number, number]
 }
 
+/** Last place this side saw each enemy hull. `at` is -1 until the first sighting. */
+export interface ContactBook {
+  x: Float32Array
+  y: Float32Array
+  at: Float32Array
+  stamp: Int32Array
+}
+
 export interface SimState {
   shipCount: number
   /** Null keeps the original one-fleet-per-side battle. */
@@ -405,6 +413,8 @@ export interface SimState {
   ram: number
   /** Ships destroyed by a hull collision, per side. */
   collisionDeaths: [number, number]
+  /** Shared sightings. Index 0 is what blue knows, index 1 is what red knows. */
+  contacts: [ContactBook, ContactBook]
   /** Of that damage, the share landed by destroyers. */
   destroyerDealt: [number, number]
   commandAt: number
