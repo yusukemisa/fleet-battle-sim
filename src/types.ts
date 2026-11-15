@@ -192,6 +192,11 @@ export interface Fleet {
   prey: number
   /** Which side of the enemy the fleet committed to. */
   bias: number
+  /**
+   * Set only by a study policy. Absent means the rule density choice.
+   * Not read by the shipped commanders.
+   */
+  studyShape?: 'pincer' | 'spindle' | 'contract'
   /** Lateral half-extent at deployment. Friendly fleets stay this far apart. */
   reach: number
   /** Ship index of the fleet flagship, or -1 while command is disrupted. */

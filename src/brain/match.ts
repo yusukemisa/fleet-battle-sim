@@ -3,7 +3,7 @@ import { bearingShare, breakthrough, encirclement, flagThreat } from '../density
 import { createSim, dispatch } from '../sim.ts'
 import type { CommanderId, FormationId, SimState } from '../types.ts'
 import type { BattleReport } from './fitness.ts'
-import { clearFleetPolicies, useFleetPolicy, type PolicyWeights } from './policy.ts'
+import { clearFleetPolicies, useFleetPolicy, useStudyDecider, type PolicyWeights } from './policy.ts'
 
 const ASSAULT = new Set(['charge', 'breakthrough', 'rear'])
 
@@ -17,6 +17,8 @@ export interface MatchSetup {
   /** The fleet whose damage, contact, and survival the report describes. */
   focus: 0 | 1
   timeout?: number
+  /** Defaults to the 100-ship training battle. */
+  shipCount?: 100 | 1000
 }
 
 function hits(state: SimState, side: 0 | 1): { total: number; exposed: number } {
@@ -75,7 +77,7 @@ export function playMatch(setup: MatchSetup): BattleReport {
   const weights = setup.weights ?? [undefined, undefined]
   if (weights[0]) useFleetPolicy(0, weights[0])
   if (weights[1]) useFleetPolicy(1, weights[1])
-  let state = createSim({ shipCount: 100, commanders: setup.commanders, formations: setup.formations })
+  let state = createSim({ shipCount: setup.shipCount ?? 100, commanders: setup.commanders, formations: setup.formations })
   state.rng = setup.seed | 0
   state = dispatch(state, { type: 'set-fleet-brain', fleet: 0, brain: setup.brains[0] })
   state = dispatch(state, { type: 'set-fleet-brain', fleet: 1, brain: setup.brains[1] })
@@ -146,5 +148,6 @@ export function playMatch(setup: MatchSetup): BattleReport {
     }
   } finally {
     clearFleetPolicies()
+    useStudyDecider(null)
   }
 }

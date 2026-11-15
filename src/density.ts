@@ -295,7 +295,7 @@ function applyFleet(state: SimState, side: SideId, dt: number): void {
   }
   const enveloped = left >= 2 && right >= 2 && enemySpan > ownSpan * 0.9
   const plan = committedShape(state, side, chooseShape(fleet.commanderId, wider, enveloped, thin), basis)
-  const shape = plan.shape
+  const shape = fleet.studyShape ?? plan.shape
   const axis = plan.basis
   const strongest = own.reduce((best, div) => (div.alive > best.alive ? div : best), own[0]!)
   if (shape === 'spindle') {
