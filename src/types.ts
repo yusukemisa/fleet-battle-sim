@@ -256,6 +256,11 @@ export interface Division {
   broadsideOk: boolean
   /** Breakout or reform: turning away is the point. */
   yielding: boolean
+  /**
+   * A flagship was just lost and an enemy division is inside gun range.
+   * Keep the bow on that threat instead of chasing a new slot or a flank.
+   */
+  holdBow: boolean
   /** Envelop or seize: this division may use its own speed. */
   sprint: boolean
   /** 守将 light divisions stay on a shallow flank instead of running to the rear. */

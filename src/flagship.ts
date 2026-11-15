@@ -328,10 +328,15 @@ export function huntExposedFlagship(state: SimState, fleet: Fleet): void {
   }
 }
 
-/** The battleship division that carries the fleet flagship holds the line. */
+/** The battleship division that carries the fleet flagship holds the line, including the gap before a successor. */
 export function guardOwnFlagship(state: SimState, fleet: Fleet): void {
-  if (fleet.flagship < 0 || fleet.formationId === 'houen') return
-  const division = state.divisions[state.ships.division[fleet.flagship] ?? 0]
+  if (fleet.formationId === 'houen') return
+  let division = fleet.flagship >= 0 ? state.divisions[state.ships.division[fleet.flagship] ?? 0] : undefined
+  if ((!division || division.fleet !== fleet.index) && fleet.flagAt > 0 && state.time < fleet.flagAt) {
+    division = state.divisions.find(
+      (candidate) => candidate.fleet === fleet.index && candidate.classId === 'battleship' && candidate.flagship < 0 && candidate.flagAt > state.time,
+    )
+  }
   if (!division || division.fleet !== fleet.index || division.classId !== 'battleship') return
   if (fleet.maneuver === 'breakout' || fleet.maneuver === 'reform') {
     division.standoff = false

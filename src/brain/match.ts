@@ -1,5 +1,5 @@
 import { MANEUVER } from '../balance.ts'
-import { bearingShare, breakthrough, encirclement, flagThreat } from '../density.ts'
+import { bearingShare, breakthrough, encirclement, flagSafety, flagThreat } from '../density.ts'
 import { createSim, dispatch } from '../sim.ts'
 import type { CommanderId, FormationId, SimState } from '../types.ts'
 import type { BattleReport } from './fitness.ts'
@@ -93,6 +93,7 @@ export function playMatch(setup: MatchSetup): BattleReport {
   let encircle = 0
   let pierced = 0
   let flags = 0
+  let safety = 0
   let samples = 0
   let steps = 0
   try {
@@ -111,6 +112,7 @@ export function playMatch(setup: MatchSetup): BattleReport {
         encircle += encirclement(state, focus)
         pierced = Math.max(pierced, breakthrough(state, focus))
         flags = Math.max(flags, flagThreat(state, focus))
+        safety += flagSafety(state, focus)
         samples += 1
       }
     }
@@ -143,6 +145,7 @@ export function playMatch(setup: MatchSetup): BattleReport {
       encircle: samples === 0 ? 0 : encircle / samples,
       breakthrough: pierced,
       flagThreat: flags,
+      flagSafety: samples === 0 ? 0 : safety / samples,
     }
   } finally {
     clearFleetPolicies()

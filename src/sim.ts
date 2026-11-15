@@ -835,6 +835,7 @@ function makeDivision(side: SideId, slot: DivisionSlot, fleet: number = side): D
     guardY: 0,
     broadsideOk: false,
     yielding: false,
+    holdBow: false,
     sprint: false,
     screen: false,
     alive: 0,
@@ -1158,6 +1159,7 @@ function step(state: SimState, dt: number): void {
   refreshCentroids(state)
   updateContacts(state)
   noteSearch(state)
+  markHoldBow(state)
   driveAi(state)
   if (state.time >= state.commandAt) {
     issueOrders(state)
@@ -1254,6 +1256,7 @@ function step(state: SimState, dt: number): void {
     const every = state.maneuver === 'shaped' ? RANKS.shapedInterval : RANKS.interval
     state.rankAt = state.time + every
   }
+  seatFlagships(state)
   if (state.fallingN > 0) {
     cacheBows(state)
     refreshCover(state)
@@ -1301,6 +1304,55 @@ function refreshCentroids(state: SimState): void {
         fleet.meanY = y / weight
       }
     }
+  }
+}
+
+function markHoldBow(state: SimState): void {
+  for (const division of state.divisions) {
+    const fleet = state.fleets[division.fleet]
+    const down =
+      (division.flagship < 0 && division.flagAt > 0 && state.time < division.flagAt) ||
+      (fleet != null && fleet.flagship < 0 && fleet.flagAt > 0 && state.time < fleet.flagAt)
+    if (!down || division.alive === 0) {
+      division.holdBow = false
+      continue
+    }
+    let near = Infinity
+    for (const other of state.divisions) {
+      if (other.side === division.side || other.alive === 0) continue
+      const dist = Math.hypot(other.ax - division.ax, other.ay - division.ay)
+      if (dist < near) near = dist
+    }
+    division.holdBow = near < 1100 && (fleet?.ships ?? 0) >= 400
+  }
+}
+
+function seatFlagships(state: SimState): void {
+  const ships = state.ships
+  const rear = new Int32Array(state.divisions.length).fill(-1)
+  const rearY = new Float64Array(state.divisions.length)
+  rearY.fill(Infinity)
+  for (let i = 0; i < ships.count; i++) {
+    if (ships.alive[i] !== 1 || ships.falling[i] === 1) continue
+    const division = ships.division[i] ?? 0
+    const y = ships.slotY[i] ?? 0
+    if (y < (rearY[division] ?? Infinity)) {
+      rearY[division] = y
+      rear[division] = i
+    }
+  }
+  for (let index = 0; index < state.divisions.length; index++) {
+    const division = state.divisions[index]
+    const flag = division?.flagship ?? -1
+    const back = rear[index] ?? -1
+    if (!division || division.roster < 40 || flag < 0 || back < 0 || back === flag || ships.alive[flag] !== 1) continue
+    if (ships.falling[flag] === 1 || ships.falling[back] === 1 || ships.division[flag] !== index) continue
+    const sx = ships.slotX[flag] ?? 0
+    const sy = ships.slotY[flag] ?? 0
+    ships.slotX[flag] = ships.slotX[back] ?? 0
+    ships.slotY[flag] = ships.slotY[back] ?? 0
+    ships.slotX[back] = sx
+    ships.slotY[back] = sy
   }
 }
 
@@ -1436,6 +1488,12 @@ function moveShips(state: SimState, dt: number): void {
     const caution = avoidMag > 0.04
     if (avoidMag > 0.2) desired = Math.atan2(ayv, axv)
     else if (caution) desired += wrapAngle(Math.atan2(ayv, axv) - desired) * 0.8
+    if (division.holdBow && avoidMag <= 0.2) {
+      const enemy = ships.side[i] === 1 ? 0 : 1
+      const tx = division.guard > 0 ? division.guardX : (state.centroidX[enemy] ?? x)
+      const ty = division.guard > 0 ? division.guardY : (state.centroidY[enemy] ?? y)
+      desired = Math.atan2(ty - y, tx - x)
+    }
     const prevHeading = ships.heading[i] ?? desired
     let prevCos = ships.headingCos[i] ?? 0
     let prevSin = ships.headingSin[i] ?? 0
@@ -1487,6 +1545,7 @@ function moveShips(state: SimState, dt: number): void {
       const cap = leaving ? 22 : far ? 26 : 18
       speed = speed < 0 ? -Math.min(-speed, cap) : Math.min(speed, cap)
     }
+    if (division.holdBow && falling && speed > 8) speed = 8
     if (motionSearch[divisionIndex] === 1) {
       // Scouts and the creeping body stay under the collision closing speed
       // even when a small division would otherwise sprint at class speed.

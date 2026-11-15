@@ -107,6 +107,43 @@ function steer(div: Division, gx: number, gy: number, faceX: number, faceY: numb
   div.ry = -div.fx
 }
 
+function fleetFlagDivision(state: SimState, side: SideId): Division | undefined {
+  const fleet = state.fleets[side]
+  const at = fleet?.flagship ?? -1
+  if (!fleet || at < 0 || state.ships.alive[at] !== 1) return undefined
+  const division = state.divisions[state.ships.division[at] ?? -1]
+  if (!division || division.fleet !== fleet.index) return undefined
+  return division
+}
+
+/** One destroyer steps between the flagship and the nearest enemy once that enemy is close. */
+function screenFlag(state: SimState, side: SideId, axis: Frame, flag: Division | undefined, dt: number): void {
+  if (!flag) return
+  let threat: Division | undefined
+  let best = Infinity
+  for (const div of state.divisions) {
+    if (div.side === side || div.alive === 0) continue
+    const dist = hypot(div.ax - flag.ax, div.ay - flag.ay)
+    if (dist < best) {
+      best = dist
+      threat = div
+    }
+  }
+  if (!threat || best > 1400) return
+  let escort: Division | undefined
+  let escortDist = Infinity
+  for (const div of state.divisions) {
+    if (div.side !== side || div.alive === 0 || div.classId !== 'destroyer' || div === flag) continue
+    const dist = hypot(div.ax - flag.ax, div.ay - flag.ay)
+    if (dist < escortDist) {
+      escortDist = dist
+      escort = div
+    }
+  }
+  if (!escort) return
+  steer(escort, flag.ax + axis.fx * 220, flag.ay + axis.fy * 220, threat.ax, threat.ay, 16, dt)
+}
+
 /** 1 when the enemy fleet flagship is inside our longest bow range. */
 export function flagThreat(state: SimState, side: SideId): number {
   const enemySide: SideId = side === 0 ? 1 : 0
@@ -119,6 +156,28 @@ export function flagThreat(state: SimState, side: SideId): number {
     if (hypot(div.ax - x, div.ay - y) < 980) return 1
   }
   return 0
+}
+
+/** 1 when our fleet flagship sits behind our centre and outside the enemy's bow. */
+export function flagSafety(state: SimState, side: SideId): number {
+  const fleet = state.fleets[side]
+  const flag = fleet?.flagship ?? -1
+  if (!fleet || flag < 0 || state.ships.alive[flag] !== 1) return 0
+  const enemy: SideId = side === 0 ? 1 : 0
+  const ox = state.centroidX[side] ?? 0
+  const oy = state.centroidY[side] ?? 0
+  const ex = state.centroidX[enemy] ?? 0
+  const ey = state.centroidY[enemy] ?? 0
+  const basis = frame(ox, oy, ex, ey)
+  const along = ((state.ships.x[flag] ?? 0) - ox) * basis.fx + ((state.ships.y[flag] ?? 0) - oy) * basis.fy
+  const depth = along >= 0 ? 0 : Math.min(1, -along / 280)
+  let nearest = Infinity
+  for (const div of living(state, enemy)) {
+    const dist = hypot(div.ax - (state.ships.x[flag] ?? 0), div.ay - (state.ships.y[flag] ?? 0))
+    if (dist < nearest) nearest = dist
+  }
+  const clear = nearest >= 980 ? 1 : Math.max(0, nearest / 980)
+  return 0.5 * depth + 0.5 * clear
 }
 
 function living(state: SimState, side: SideId): Division[] {
@@ -298,10 +357,18 @@ function applyFleet(state: SimState, side: SideId, dt: number): void {
   const shape = plan.shape
   const axis = plan.basis
   const strongest = own.reduce((best, div) => (div.alive > best.alive ? div : best), own[0]!)
+  const flag = fleetFlagDivision(state, side)
   if (shape === 'spindle') {
     const target = weakest(enemy, enemyX, enemyY, basis)
     if (!target) return
     const ordered = [...own].sort((a, b) => hypot(a.ax - target.ax, a.ay - target.ay) - hypot(b.ax - target.ax, b.ay - target.ay))
+    if (flag) {
+      const at = ordered.indexOf(flag)
+      if (at >= 0) {
+        ordered.splice(at, 1)
+        ordered.push(flag)
+      }
+    }
     ordered.forEach((div, index) => {
       if (div.alive < div.roster * 0.15 && div !== strongest) {
         steer(div, strongest.ax, strongest.ay, enemyX, enemyY, cruiseSpeed(nearestGap(div, enemy)), dt)
@@ -331,6 +398,7 @@ function applyFleet(state: SimState, side: SideId, dt: number): void {
       const paced = toGoal > 800 ? 30 : toGoal > 280 ? 18 : 12
       steer(div, gx, gy, target.ax, target.ay, paced, dt)
     })
+    screenFlag(state, side, axis, flag, dt)
     return
   }
   if (shape === 'contract') {
@@ -343,6 +411,7 @@ function applyFleet(state: SimState, side: SideId, dt: number): void {
       const along = forward(div, ownX, ownY, basis)
       steer(div, ownX + basis.fx * (along + 30) + basis.lx * across, ownY + basis.fy * (along + 30) + basis.ly * across, enemyX, enemyY, DENSITY.cruise, dt)
     }
+    screenFlag(state, side, axis, flag, dt)
     return
   }
   for (const div of own) {
@@ -353,7 +422,7 @@ function applyFleet(state: SimState, side: SideId, dt: number): void {
     const now = (div.ax - ownX) * axis.lx + (div.ay - ownY) * axis.ly
     const target = sameSideTarget(div, enemy, axis, ownX, ownY)
     const arm = Math.abs(div.slot - 2)
-    const standoff = arm >= 2 ? 420 : arm === 1 ? 520 : 680
+    const standoff = (arm >= 2 ? 420 : arm === 1 ? 520 : 680) + (div === flag ? 260 : 0)
     const curl = now * (arm === 0 ? 0 : 0.22)
     const paced = cruiseSpeed(nearestGap(div, enemy))
     steer(
@@ -366,6 +435,7 @@ function applyFleet(state: SimState, side: SideId, dt: number): void {
       dt,
     )
   }
+  screenFlag(state, side, axis, flag, dt)
 }
 
 /** Reshape large fleets. Small fleets, including the win-rate suite, are unchanged. */

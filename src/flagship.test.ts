@@ -154,7 +154,76 @@ describe('flagships', () => {
     expect(own?.standoff).toBe(true)
     expect(own?.tacticId).not.toBe('charge')
   })
+
+  it('keeps bows on the enemy after the fleet flagship is lost in range', () => {
+    let state = createSim({ shipCount: 1000, commanders: ['balanced', 'cunning'], brains: ['rule', 'rule'] })
+    state = dispatch(state, { type: 'set-speed', speed: 4 })
+    state = dispatch(state, { type: 'start' })
+    while (state.phase.kind === 'running' && state.time < 36) {
+      state = dispatch(state, { type: 'tick', dt: 0.05 })
+    }
+    const flag = state.fleets[0]?.flagship ?? -1
+    const division = state.ships.division[flag] ?? 0
+    let behind = 0
+    let others = 0
+    for (let i = 0; i < state.ships.count; i++) {
+      if (i === flag || state.ships.alive[i] !== 1 || state.ships.division[i] !== division || state.ships.falling[i] === 1) continue
+      others += 1
+      if ((state.ships.slotY[i] ?? 0) >= (state.ships.slotY[flag] ?? 0)) behind += 1
+    }
+    expect(behind).toBeGreaterThan(others * 0.5)
+    const start = new Map<number, number>()
+    for (let i = 0; i < state.ships.count; i++) {
+      if (state.ships.alive[i] === 1 && state.ships.side[i] === 0) start.set(i, state.ships.heading[i] ?? 0)
+    }
+    state.ships.hp[flag] = 0
+    const t0 = state.time
+    while (state.phase.kind === 'running' && state.time < t0 + 8) {
+      state = dispatch(state, { type: 'tick', dt: 0.05 })
+    }
+    let swing = 0
+    let n = 0
+    let on = 0
+    let inRange = 0
+    for (const [i, before] of start) {
+      if (state.ships.alive[i] !== 1) continue
+      n += 1
+      const after = state.ships.heading[i] ?? 0
+      const turn = Math.abs(Math.atan2(Math.sin(after - before), Math.cos(after - before)))
+      if (turn > 0.7) swing += 1
+      const bow = bowOn(state, i)
+      if (bow !== null) {
+        inRange += 1
+        if (bow > 0.5) on += 1
+      }
+    }
+    expect(n).toBeGreaterThan(100)
+    expect(inRange).toBeGreaterThan(50)
+    expect(on / inRange).toBeGreaterThan(0.9)
+    expect(swing / n).toBeLessThan(0.2)
+  }, 20_000)
 })
+
+function bowOn(state: ReturnType<typeof createSim>, index: number): number | null {
+  const ships = state.ships
+  let best = Infinity
+  let dx = 0
+  let dy = 0
+  for (let j = 0; j < ships.count; j++) {
+    if (ships.alive[j] !== 1 || ships.side[j] === ships.side[index]) continue
+    const x = (ships.x[j] ?? 0) - (ships.x[index] ?? 0)
+    const y = (ships.y[j] ?? 0) - (ships.y[index] ?? 0)
+    const dist = x * x + y * y
+    if (dist < best) {
+      best = dist
+      dx = x
+      dy = y
+    }
+  }
+  if (best > 900 * 900) return null
+  const len = Math.hypot(dx, dy) || 1
+  return Math.cos(ships.heading[index] ?? 0) * (dx / len) + Math.sin(ships.heading[index] ?? 0) * (dy / len)
+}
 
 function divisionMate(state: ReturnType<typeof createSim>, flag: number): number {
   const division = state.ships.division[flag] ?? 0
