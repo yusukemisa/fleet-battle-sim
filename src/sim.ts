@@ -17,6 +17,8 @@ import { DECISION_INTERVAL, decidePolicy, defaultBrain, preferredFormation } fro
 import { observe } from './brain/observe.ts'
 import { stepPlan, updatePlan } from './posture.ts'
 import { applyDensity, DENSITY } from './density.ts'
+import { createContacts, updateContacts } from './contacts.ts'
+import { applySearch, noteSearch, sideCautious, sideSearching } from './search.ts'
 import { TACTICS, stepDivision, tacticById } from './tactics.ts'
 import {
   DEFAULT_COMMANDER,
@@ -751,6 +753,7 @@ function allocate(
     dealt: [0, 0],
     ram: 0,
     collisionDeaths: [0, 0],
+    contacts: [createContacts(count), createContacts(count)],
     destroyerDealt: [0, 0],
     commandAt: 0,
     log: [],
@@ -1153,6 +1156,8 @@ function step(state: SimState, dt: number): void {
   appointFlagships(state)
   refreshCommand(state)
   refreshCentroids(state)
+  updateContacts(state)
+  noteSearch(state)
   driveAi(state)
   if (state.time >= state.commandAt) {
     issueOrders(state)
@@ -1211,7 +1216,7 @@ function step(state: SimState, dt: number): void {
     division.sprint = fleet.maneuver === 'envelop' || fleet.maneuver === 'seize'
     const manual = fleet.commanderId === 'manual'
     const brainMove = !rulesDrive(fleet)
-    if (fleet.ships >= DENSITY.minShips && !manual && state.maneuver === 'shaped') continue
+    if ((fleet.ships >= DENSITY.minShips || sideSearching(state, division.side)) && !manual && state.maneuver === 'shaped') continue
     if (brainMove) holdBrainOrders(state, fleet)
     if (division.ordered && !manual && !brainMove) division.ordered = false
     if (division.ordered && (manual || brainMove)) {
@@ -1241,6 +1246,7 @@ function step(state: SimState, dt: number): void {
     stepDivision(division, ctx, dt, !shaped || fleet.maneuver === 'wheel')
   }
   applyDensity(state, dt)
+  applySearch(state, dt)
   if (state.fleets.length > 2) separateFleets(state)
   holdFronts(state)
   if (state.time >= state.rankAt) {
@@ -1304,18 +1310,21 @@ function classStatsOf(id: (typeof SHIP_CLASS_IDS)[number]): ShipStats {
 
 let motionSpeed = new Float32Array(0)
 let motionHeading = new Float32Array(0)
+let motionSearch = new Uint8Array(0)
 
 function cacheDivisionMotion(state: SimState): void {
   const n = state.divisions.length
   if (motionSpeed.length < n) {
     motionSpeed = new Float32Array(n)
     motionHeading = new Float32Array(n)
+    motionSearch = new Uint8Array(n)
   }
   for (let index = 0; index < n; index++) {
     const division = state.divisions[index]
     if (!division) continue
     motionSpeed[index] = Math.hypot(division.vx, division.vy)
     motionHeading[index] = Math.atan2(division.fy, division.fx)
+    motionSearch[index] = sideCautious(state, division.side) ? 1 : 0
   }
 }
 
@@ -1476,6 +1485,12 @@ function moveShips(state: SimState, dt: number): void {
       // collision closing speed when two ships meet head-on.
       const far = gap > hold + 80
       const cap = leaving ? 22 : far ? 26 : 18
+      speed = speed < 0 ? -Math.min(-speed, cap) : Math.min(speed, cap)
+    }
+    if (motionSearch[divisionIndex] === 1) {
+      // Scouts and the creeping body stay under the collision closing speed
+      // even when a small division would otherwise sprint at class speed.
+      const cap = 22
       speed = speed < 0 ? -Math.min(-speed, cap) : Math.min(speed, cap)
     }
     const stepSpeed = prevSpeed + Math.max(-accel, Math.min(accel, speed - prevSpeed))
