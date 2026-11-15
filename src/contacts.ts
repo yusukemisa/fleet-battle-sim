@@ -76,6 +76,33 @@ export function contactAge(state: SimState, side: SideId): number {
   return state.time - newest
 }
 
+/** One point per enemy division this side has seen and does not see right now. */
+export function lastSeenMarks(state: SimState, side: SideId): { division: number; x: number; y: number }[] {
+  const book = state.contacts[side]
+  const ships = state.ships
+  const frame = state.frame
+  const nDiv = state.divisions.length
+  const sx = new Float64Array(nDiv)
+  const sy = new Float64Array(nDiv)
+  const n = new Uint32Array(nDiv)
+  for (let i = 0; i < book.at.length; i++) {
+    if ((book.at[i] ?? -1) < 0 || ships.alive[i] !== 1) continue
+    const stamp = book.stamp[i] ?? 0
+    if (stamp === frame || stamp + 1 === frame) continue
+    const d = ships.division[i] ?? 0
+    sx[d] = (sx[d] ?? 0) + (book.x[i] ?? 0)
+    sy[d] = (sy[d] ?? 0) + (book.y[i] ?? 0)
+    n[d] = (n[d] ?? 0) + 1
+  }
+  const marks: { division: number; x: number; y: number }[] = []
+  for (let d = 0; d < nDiv; d++) {
+    const count = n[d] ?? 0
+    if (count === 0) continue
+    marks.push({ division: d, x: (sx[d] ?? 0) / count, y: (sy[d] ?? 0) / count })
+  }
+  return marks
+}
+
 /** No enemy hull is inside the shared picture right now. Last-seen marks can still exist. */
 export function sideBlind(state: SimState, side: SideId): boolean {
   const book = state.contacts[side]
