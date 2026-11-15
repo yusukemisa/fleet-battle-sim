@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { SENSOR } from './balance.ts'
-import { contactAge, openTheRange, updateContacts } from './contacts.ts'
+import { contactAge, lastSeenMarks, openTheRange, updateContacts } from './contacts.ts'
 import { createSim, dispatch } from './sim.ts'
 
 describe('shared contacts', () => {
@@ -24,6 +24,9 @@ describe('shared contacts', () => {
     expect(state.contacts[0].stamp[near]).not.toBe(4)
     expect(state.contacts[0].at[near]).toBe(0)
     expect(contactAge(state, 0)).toBe(6)
+    const marks = lastSeenMarks(state, 0)
+    expect(marks).toHaveLength(1)
+    expect(marks[0]?.division).toBe(state.ships.division[near])
   })
 
   it('lets scouts find an unseen enemy sooner than the battleship line', () => {

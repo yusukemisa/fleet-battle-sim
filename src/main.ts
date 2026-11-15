@@ -32,6 +32,7 @@ const context = maybeContext
 let sim: SimState = createSim({ shipCount: DEFAULT_SHIP_COUNT })
 let camera: Camera = { x: 0, y: 0, zoom: 1 }
 let fitted = false
+let showLastSeen = sim.shipCount < 10000
 
 const frameSamples: { frame: number; sim: number; draw: number }[] = []
 let fps = 0
@@ -147,6 +148,13 @@ window.addEventListener('resize', () => {
   camera = fitCamera(sim, viewWidth(), viewHeight())
 })
 
+const lastSeenButton = root.querySelector('#last-seen')
+lastSeenButton?.classList.toggle('on', showLastSeen)
+lastSeenButton?.addEventListener('click', () => {
+  showLastSeen = !showLastSeen
+  lastSeenButton?.classList.toggle('on', showLastSeen)
+})
+
 const api = {
   get fps() { return fps },
   get simMs() { return simMs },
@@ -188,6 +196,10 @@ function apply(command: Command): void {
   const formation = sim.fleets.map((fleet) => fleet.formationId).join()
   sim = dispatch(sim, command)
   const refit = sim.shipCount !== before || sim.fleets.map((fleet) => fleet.formationId).join() !== formation || command.type === 'reset'
+  if (command.type === 'set-ship-count' || command.type === 'reset') {
+    showLastSeen = sim.shipCount < 10000
+    root.querySelector('#last-seen')?.classList.toggle('on', showLastSeen)
+  }
   if (refit) camera = fitCamera(sim, viewWidth(), viewHeight())
   syncHud(root, hud, sim, selected)
 }
@@ -204,7 +216,7 @@ function loop(now: number): void {
     fitted = true
   }
   const drawStart = performance.now()
-  draw(context, sim, camera, viewWidth(), viewHeight(), { selected, draft })
+  draw(context, sim, camera, viewWidth(), viewHeight(), { selected, draft }, { lastSeen: showLastSeen })
   drawMs = performance.now() - drawStart
   frameMs = simMs + drawMs
   sampleAcc += dt

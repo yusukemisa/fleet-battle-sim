@@ -3,6 +3,7 @@ import { divisionCommandRadius, fleetCommandRadius } from './flagship.ts'
 import { orderPoints } from './move.ts'
 import { pathCrossesBow } from './threat.ts'
 import { FORMATIONS } from './formations.ts'
+import { lastSeenMarks } from './contacts.ts'
 import type { SimState } from './types.ts'
 
 export interface Camera {
@@ -35,6 +36,11 @@ export interface OrderOverlay {
 
 const NO_OVERLAY: OrderOverlay = { selected: [], draft: null }
 
+export interface DrawHints {
+  /** Faint last-seen marks. Ships that are still in view are never ringed. */
+  lastSeen?: boolean
+}
+
 export function draw(
   ctx: CanvasRenderingContext2D,
   state: SimState,
@@ -42,6 +48,7 @@ export function draw(
   width: number,
   height: number,
   overlay: OrderOverlay = NO_OVERLAY,
+  hints: DrawHints = {},
 ): void {
   ensureStars(width, height)
   ctx.fillStyle = '#070b14'
@@ -64,7 +71,7 @@ export function draw(
     paintShips(ctx, state, camera, width, height, size, 0, BLUE)
     paintShips(ctx, state, camera, width, height, size, 1, RED)
   }
-  paintContacts(ctx, state, camera, width, height)
+  if (hints.lastSeen) paintContacts(ctx, state, camera, width, height)
   paintFlashes(ctx, state, camera, width, height, size)
   paintFlagships(ctx, state, camera, width, height)
 
@@ -374,21 +381,14 @@ function paintContacts(
   width: number,
   height: number,
 ): void {
-  const stride = Math.max(1, Math.floor(state.ships.count / 80))
   ctx.save()
+  ctx.lineWidth = 1
   for (const side of [0, 1] as const) {
-    const book = state.contacts[side]
-    ctx.fillStyle = side === 0 ? 'rgba(120, 190, 255, 0.85)' : 'rgba(255, 150, 120, 0.85)'
-    for (let i = 0; i < book.at.length; i++) {
-      if ((book.at[i] ?? -1) < 0 || state.ships.alive[i] !== 1) continue
-      const fresh = book.stamp[i] === state.frame || book.stamp[i] + 1 === state.frame
-      if (!fresh && i % stride !== side) continue
-      const at = worldToScreen(book.x[i] ?? 0, book.y[i] ?? 0, camera, width, height)
-      ctx.globalAlpha = fresh ? 0.95 : 0.45
-      ctx.strokeStyle = ctx.fillStyle
-      ctx.lineWidth = fresh ? 3 : 1
+    ctx.strokeStyle = side === 0 ? 'rgba(150, 196, 232, 0.45)' : 'rgba(232, 164, 148, 0.45)'
+    for (const mark of lastSeenMarks(state, side)) {
+      const at = worldToScreen(mark.x, mark.y, camera, width, height)
       ctx.beginPath()
-      ctx.arc(at.x, at.y, fresh ? 22 : 9, 0, Math.PI * 2)
+      ctx.arc(at.x, at.y, 4, 0, Math.PI * 2)
       ctx.stroke()
     }
   }
