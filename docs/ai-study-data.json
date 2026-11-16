@@ -1,0 +1,606 @@
+{
+  "baseline": {
+    "label": "baseline",
+    "win": 0.816,
+    "games": 576,
+    "byFoe": {
+      "fierce": 0.681,
+      "cunning": 0.938,
+      "guard": 0.917,
+      "balanced": 0.729
+    },
+    "seedStd": 0.014,
+    "seconds": 26
+  },
+  "compute": {
+    "current": {
+      "seconds": 144,
+      "curve": [
+        {
+          "gen": 0,
+          "seconds": 6,
+          "mean": 3.649,
+          "probe": 3.833,
+          "curve": {
+            "wins": 3,
+            "games": 8,
+            "win": 0.375
+          },
+          "mode": "current"
+        },
+        {
+          "gen": 1,
+          "seconds": 13,
+          "mean": 3.607,
+          "probe": 4.157
+        },
+        {
+          "gen": 2,
+          "seconds": 18,
+          "mean": 3.729,
+          "probe": 3.898
+        },
+        {
+          "gen": 3,
+          "seconds": 24,
+          "mean": 3.619,
+          "probe": 3.885
+        },
+        {
+          "gen": 4,
+          "seconds": 30,
+          "mean": 3.747,
+          "probe": 4.11
+        },
+        {
+          "gen": 5,
+          "seconds": 36,
+          "mean": 3.695,
+          "probe": 3.397
+        },
+        {
+          "gen": 6,
+          "seconds": 42,
+          "mean": 3.754,
+          "probe": 3.865,
+          "curve": {
+            "wins": 3,
+            "games": 8,
+            "win": 0.375
+          },
+          "mode": "current"
+        },
+        {
+          "gen": 7,
+          "seconds": 48,
+          "mean": 3.585,
+          "probe": 3.544
+        },
+        {
+          "gen": 8,
+          "seconds": 54,
+          "mean": 3.618,
+          "probe": 3.446
+        },
+        {
+          "gen": 9,
+          "seconds": 60,
+          "mean": 3.721,
+          "probe": 4.108
+        },
+        {
+          "gen": 10,
+          "seconds": 66,
+          "mean": 3.741,
+          "probe": 3.427
+        },
+        {
+          "gen": 11,
+          "seconds": 72,
+          "mean": 3.768,
+          "probe": 3.613
+        },
+        {
+          "gen": 12,
+          "seconds": 78,
+          "mean": 3.625,
+          "probe": 3.315,
+          "curve": {
+            "wins": 3,
+            "games": 8,
+            "win": 0.375
+          },
+          "mode": "current"
+        },
+        {
+          "gen": 13,
+          "seconds": 84,
+          "mean": 3.546,
+          "probe": 3.702
+        },
+        {
+          "gen": 14,
+          "seconds": 90,
+          "mean": 3.795,
+          "probe": 4.089
+        },
+        {
+          "gen": 15,
+          "seconds": 96,
+          "mean": 3.643,
+          "probe": 3.525
+        },
+        {
+          "gen": 16,
+          "seconds": 101,
+          "mean": 3.734,
+          "probe": 4.042
+        },
+        {
+          "gen": 17,
+          "seconds": 107,
+          "mean": 3.725,
+          "probe": 4.021
+        },
+        {
+          "gen": 18,
+          "seconds": 113,
+          "mean": 3.71,
+          "probe": 3.993,
+          "curve": {
+            "wins": 3,
+            "games": 8,
+            "win": 0.375
+          },
+          "mode": "current"
+        },
+        {
+          "gen": 19,
+          "seconds": 120,
+          "mean": 3.622,
+          "probe": 3.922
+        },
+        {
+          "gen": 20,
+          "seconds": 126,
+          "mean": 3.632,
+          "probe": 4.133
+        },
+        {
+          "gen": 21,
+          "seconds": 132,
+          "mean": 3.71,
+          "probe": 4.574
+        },
+        {
+          "gen": 22,
+          "seconds": 137,
+          "mean": 3.716,
+          "probe": 3.954
+        },
+        {
+          "gen": 23,
+          "seconds": 143,
+          "mean": 3.912,
+          "probe": 3.557,
+          "curve": {
+            "wins": 2,
+            "games": 8,
+            "win": 0.25
+          },
+          "mode": "current"
+        }
+      ],
+      "held": {
+        "label": "compute-current",
+        "win": 0.814,
+        "games": 576,
+        "byFoe": {
+          "fierce": 0.701,
+          "cunning": 0.854,
+          "guard": 0.938,
+          "balanced": 0.764
+        },
+        "seedStd": 0.016,
+        "seconds": 25
+      }
+    },
+    "wide": {
+      "seconds": 280,
+      "curve": [
+        {
+          "gen": 0,
+          "seconds": 23,
+          "mean": 3.597,
+          "probe": 3.763,
+          "curve": {
+            "wins": 3,
+            "games": 8,
+            "win": 0.375
+          },
+          "mode": "wide"
+        },
+        {
+          "gen": 1,
+          "seconds": 47,
+          "mean": 3.636,
+          "probe": 3.781
+        },
+        {
+          "gen": 2,
+          "seconds": 70,
+          "mean": 3.655,
+          "probe": 3.949
+        },
+        {
+          "gen": 3,
+          "seconds": 93,
+          "mean": 3.646,
+          "probe": 3.93
+        },
+        {
+          "gen": 4,
+          "seconds": 116,
+          "mean": 3.705,
+          "probe": 3.769,
+          "curve": {
+            "wins": 3,
+            "games": 8,
+            "win": 0.375
+          },
+          "mode": "wide"
+        },
+        {
+          "gen": 5,
+          "seconds": 140,
+          "mean": 3.712,
+          "probe": 4.137
+        },
+        {
+          "gen": 6,
+          "seconds": 163,
+          "mean": 3.629,
+          "probe": 4.05
+        },
+        {
+          "gen": 7,
+          "seconds": 187,
+          "mean": 3.662,
+          "probe": 3.982
+        },
+        {
+          "gen": 8,
+          "seconds": 210,
+          "mean": 3.755,
+          "probe": 3.909,
+          "curve": {
+            "wins": 4,
+            "games": 8,
+            "win": 0.5
+          },
+          "mode": "wide"
+        },
+        {
+          "gen": 9,
+          "seconds": 233,
+          "mean": 3.765,
+          "probe": 4.101
+        },
+        {
+          "gen": 10,
+          "seconds": 256,
+          "mean": 3.679,
+          "probe": 3.802
+        },
+        {
+          "gen": 11,
+          "seconds": 280,
+          "mean": 3.703,
+          "probe": 3.862,
+          "curve": {
+            "wins": 4,
+            "games": 8,
+            "win": 0.5
+          },
+          "mode": "wide"
+        }
+      ],
+      "held": {
+        "label": "compute-wide",
+        "win": 0.785,
+        "games": 576,
+        "byFoe": {
+          "fierce": 0.618,
+          "cunning": 0.896,
+          "guard": 0.917,
+          "balanced": 0.708
+        },
+        "seedStd": 0.007,
+        "seconds": 25
+      }
+    }
+  },
+  "diversity": {
+    "seconds": 99,
+    "curve": [
+      {
+        "gen": 0,
+        "seconds": 6,
+        "mean": 3.642,
+        "probe": 3.986,
+        "curve": {
+          "wins": 4,
+          "games": 8,
+          "win": 0.5
+        },
+        "mode": "diverse"
+      },
+      {
+        "gen": 1,
+        "seconds": 13,
+        "mean": 3.607,
+        "probe": 4.515
+      },
+      {
+        "gen": 2,
+        "seconds": 19,
+        "mean": 3.648,
+        "probe": 3.702
+      },
+      {
+        "gen": 3,
+        "seconds": 25,
+        "mean": 3.458,
+        "probe": 3.645
+      },
+      {
+        "gen": 4,
+        "seconds": 31,
+        "mean": 3.622,
+        "probe": 3.863,
+        "curve": {
+          "wins": 3,
+          "games": 8,
+          "win": 0.375
+        },
+        "mode": "diverse"
+      },
+      {
+        "gen": 5,
+        "seconds": 38,
+        "mean": 3.554,
+        "probe": 3.582
+      },
+      {
+        "gen": 6,
+        "seconds": 44,
+        "mean": 3.736,
+        "probe": 3.807
+      },
+      {
+        "gen": 7,
+        "seconds": 50,
+        "mean": 3.688,
+        "probe": 3.993
+      },
+      {
+        "gen": 8,
+        "seconds": 56,
+        "mean": 3.622,
+        "probe": 3.865,
+        "curve": {
+          "wins": 3,
+          "games": 8,
+          "win": 0.375
+        },
+        "mode": "diverse"
+      },
+      {
+        "gen": 9,
+        "seconds": 62,
+        "mean": 3.63,
+        "probe": 4.062
+      },
+      {
+        "gen": 10,
+        "seconds": 68,
+        "mean": 3.635,
+        "probe": 3.915
+      },
+      {
+        "gen": 11,
+        "seconds": 74,
+        "mean": 3.652,
+        "probe": 3.99
+      },
+      {
+        "gen": 12,
+        "seconds": 80,
+        "mean": 3.727,
+        "probe": 3.929,
+        "curve": {
+          "wins": 3,
+          "games": 8,
+          "win": 0.375
+        },
+        "mode": "diverse"
+      },
+      {
+        "gen": 13,
+        "seconds": 87,
+        "mean": 3.652,
+        "probe": 4.014
+      },
+      {
+        "gen": 14,
+        "seconds": 93,
+        "mean": 3.727,
+        "probe": 4.091
+      },
+      {
+        "gen": 15,
+        "seconds": 99,
+        "mean": 3.788,
+        "probe": 3.764,
+        "curve": {
+          "wins": 3,
+          "games": 8,
+          "win": 0.375
+        },
+        "mode": "diverse"
+      }
+    ],
+    "held": {
+      "label": "diversity",
+      "win": 0.771,
+      "games": 576,
+      "byFoe": {
+        "fierce": 0.576,
+        "cunning": 0.882,
+        "guard": 0.931,
+        "balanced": 0.694
+      },
+      "seedStd": 0,
+      "seconds": 25
+    },
+    "seeds": [
+      {
+        "seed": 101,
+        "win": 0.625
+      },
+      {
+        "seed": 102,
+        "win": 0.5
+      },
+      {
+        "seed": 103,
+        "win": 0.75
+      },
+      {
+        "seed": 104,
+        "win": 0.625
+      },
+      {
+        "seed": 105,
+        "win": 0.375
+      },
+      {
+        "seed": 106,
+        "win": 0.375
+      }
+    ],
+    "baselineSeeds": [
+      {
+        "seed": 101,
+        "win": 0.5
+      },
+      {
+        "seed": 102,
+        "win": 0.25
+      },
+      {
+        "seed": 103,
+        "win": 0.5
+      },
+      {
+        "seed": 104,
+        "win": 0.625
+      },
+      {
+        "seed": 105,
+        "win": 0.5
+      },
+      {
+        "seed": 106,
+        "win": 0.625
+      }
+    ]
+  },
+  "control": {
+    "seconds": 169,
+    "curve": [
+      {
+        "gen": 0,
+        "seconds": 25,
+        "mean": 2.7,
+        "probe": 2.608,
+        "curve": {
+          "wins": 8,
+          "games": 8,
+          "win": 1
+        },
+        "mode": "control"
+      },
+      {
+        "gen": 1,
+        "seconds": 55,
+        "mean": 2.759,
+        "probe": 2.81
+      },
+      {
+        "gen": 2,
+        "seconds": 80,
+        "mean": 2.701,
+        "probe": 2.68,
+        "curve": {
+          "wins": 8,
+          "games": 8,
+          "win": 1
+        },
+        "mode": "control"
+      },
+      {
+        "gen": 3,
+        "seconds": 109,
+        "mean": 2.791,
+        "probe": 2.794
+      },
+      {
+        "gen": 4,
+        "seconds": 134,
+        "mean": 2.622,
+        "probe": 2.669,
+        "curve": {
+          "wins": 8,
+          "games": 8,
+          "win": 1
+        },
+        "mode": "control"
+      },
+      {
+        "gen": 5,
+        "seconds": 164,
+        "mean": 2.729,
+        "probe": 2.79,
+        "curve": {
+          "wins": 8,
+          "games": 8,
+          "win": 1
+        },
+        "mode": "control"
+      }
+    ],
+    "held": {
+      "win": 0.569,
+      "games": 144,
+      "byFoe": {
+        "fierce": 0.472,
+        "cunning": 0.5,
+        "guard": 0.694,
+        "balanced": 0.611
+      },
+      "seconds": 100
+    },
+    "baseline1000": {
+      "win": 0.701,
+      "games": 144,
+      "byFoe": {
+        "fierce": 0.667,
+        "cunning": 0.639,
+        "guard": 0.667,
+        "balanced": 0.833
+      },
+      "seconds": 104
+    }
+  }
+}

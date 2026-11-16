@@ -1147,6 +1147,11 @@ function driveAi(state: SimState): void {
       continue
     }
     fleet.orders = decision.orders
+    if (decision.maneuver) {
+      fleet.maneuver = decision.maneuver
+      fleet.maneuverUntil = state.time + 6
+    }
+    if (decision.shape) fleet.studyShape = decision.shape
     fleet.ai.status = 'ready'
     fleet.ai.note = decision.note
     recordDecision(fleet.index, featurize(observation), tacticsFrom(observation, decision.orders))
