@@ -3,7 +3,6 @@ export interface ShipStats {
   hp: number
   damage: number
   range: number
-  acquire: number
   cooldown: number
   hitChance: number
   maxSpeed: number
@@ -87,7 +86,6 @@ export const SHIP_STATS = {
   hp: 54,
   damage: 7,
   range: 900,
-  acquire: 980,
   cooldown: FIRE.cooldown,
   hitChance: 0.86,
   maxSpeed: 60,
@@ -224,9 +222,6 @@ function scaleBattery(base: BatterySpec, mods: ClassMods, bow: boolean): Battery
   }
 }
 
-/** How far a ship can notice an enemy. Wide enough to cover a whole battle, not just gun range. */
-export const SENSOR = 6400
-
 /** Collision and shot-blocking radius. Battleship, cruiser, destroyer. */
 export const HULL_RADIUS = [7.1, 4.2, 2.3] as const
 
@@ -261,7 +256,6 @@ function deriveClass(id: ShipClassId): ShipStats {
     hp: Math.max(1, Math.round(SHIP_STATS.hp * mods.hp)),
     damage: SHIP_STATS.damage,
     range: Math.round(bow.maxRange * mods.bowRange),
-    acquire: SENSOR,
     cooldown: SHIP_STATS.cooldown,
     hitChance: SHIP_STATS.hitChance,
     maxSpeed: SHIP_STATS.maxSpeed * mods.speed,
@@ -417,10 +411,6 @@ export const FIELD = {
 
 export function rangeSq(stats: ShipStats): number {
   return stats.range * stats.range
-}
-
-export function acquireSq(stats: ShipStats): number {
-  return stats.acquire * stats.acquire
 }
 
 /**

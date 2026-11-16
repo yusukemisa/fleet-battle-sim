@@ -1,6 +1,5 @@
 import { draw, fitCamera, type Camera, type OrderDraft } from './draw.ts'
 import { dispatch, createSim } from './sim.ts'
-import { openTheRange } from './contacts.ts'
 import { DEFAULT_SHIP_COUNT, type Command, type SimState } from './types.ts'
 import { mountHud, syncHud } from './ui.ts'
 import './style.css'
@@ -32,7 +31,6 @@ const context = maybeContext
 let sim: SimState = createSim({ shipCount: DEFAULT_SHIP_COUNT })
 let camera: Camera = { x: 0, y: 0, zoom: 1 }
 let fitted = false
-let showLastSeen = sim.shipCount < 10000
 
 const frameSamples: { frame: number; sim: number; draw: number }[] = []
 let fps = 0
@@ -148,13 +146,6 @@ window.addEventListener('resize', () => {
   camera = fitCamera(sim, viewWidth(), viewHeight())
 })
 
-const lastSeenButton = root.querySelector('#last-seen')
-lastSeenButton?.classList.toggle('on', showLastSeen)
-lastSeenButton?.addEventListener('click', () => {
-  showLastSeen = !showLastSeen
-  lastSeenButton?.classList.toggle('on', showLastSeen)
-})
-
 const api = {
   get fps() { return fps },
   get simMs() { return simMs },
@@ -168,22 +159,6 @@ const api = {
   get formations() { return [sim.fleets[0].formationId, sim.fleets[1].formationId] as const },
   samples: frameSamples,
   command(command: Command) { apply(command) },
-  openRange(gap: number) {
-    openTheRange(sim, gap)
-    camera = fitCamera(sim, viewWidth(), viewHeight())
-    syncHud(root, hud, sim, selected)
-  },
-  picture() {
-    const book = sim.contacts[0]
-    let fresh = 0
-    let stale = 0
-    for (let i = 0; i < book.at.length; i++) {
-      if ((book.at[i] ?? -1) < 0 || sim.ships.alive[i] !== 1) continue
-      if (book.stamp[i] === sim.frame || book.stamp[i] + 1 === sim.frame) fresh += 1
-      else stale += 1
-    }
-    return { fresh, stale, time: sim.time }
-  },
 }
 window.__battle = api
 
@@ -196,10 +171,6 @@ function apply(command: Command): void {
   const formation = sim.fleets.map((fleet) => fleet.formationId).join()
   sim = dispatch(sim, command)
   const refit = sim.shipCount !== before || sim.fleets.map((fleet) => fleet.formationId).join() !== formation || command.type === 'reset'
-  if (command.type === 'set-ship-count' || command.type === 'reset') {
-    showLastSeen = sim.shipCount < 10000
-    root.querySelector('#last-seen')?.classList.toggle('on', showLastSeen)
-  }
   if (refit) camera = fitCamera(sim, viewWidth(), viewHeight())
   syncHud(root, hud, sim, selected)
 }
@@ -216,7 +187,7 @@ function loop(now: number): void {
     fitted = true
   }
   const drawStart = performance.now()
-  draw(context, sim, camera, viewWidth(), viewHeight(), { selected, draft }, { lastSeen: showLastSeen })
+  draw(context, sim, camera, viewWidth(), viewHeight(), { selected, draft })
   drawMs = performance.now() - drawStart
   frameMs = simMs + drawMs
   sampleAcc += dt
@@ -375,8 +346,6 @@ declare global {
       formations: readonly [string, string]
       samples: { frame: number; sim: number; draw: number }[]
       command(command: Command): void
-      openRange(gap: number): void
-      picture(): { fresh: number; stale: number; time: number }
     }
   }
 }

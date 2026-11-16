@@ -3,7 +3,6 @@ import { divisionCommandRadius, fleetCommandRadius } from './flagship.ts'
 import { orderPoints } from './move.ts'
 import { pathCrossesBow } from './threat.ts'
 import { FORMATIONS } from './formations.ts'
-import { lastSeenMarks } from './contacts.ts'
 import type { SimState } from './types.ts'
 
 export interface Camera {
@@ -36,11 +35,6 @@ export interface OrderOverlay {
 
 const NO_OVERLAY: OrderOverlay = { selected: [], draft: null }
 
-export interface DrawHints {
-  /** Faint last-seen marks. Ships that are still in view are never ringed. */
-  lastSeen?: boolean
-}
-
 export function draw(
   ctx: CanvasRenderingContext2D,
   state: SimState,
@@ -48,7 +42,6 @@ export function draw(
   width: number,
   height: number,
   overlay: OrderOverlay = NO_OVERLAY,
-  hints: DrawHints = {},
 ): void {
   ensureStars(width, height)
   ctx.fillStyle = '#070b14'
@@ -71,7 +64,6 @@ export function draw(
     paintShips(ctx, state, camera, width, height, size, 0, BLUE)
     paintShips(ctx, state, camera, width, height, size, 1, RED)
   }
-  if (hints.lastSeen) paintContacts(ctx, state, camera, width, height)
   paintFlashes(ctx, state, camera, width, height, size)
   paintFlagships(ctx, state, camera, width, height)
 
@@ -372,27 +364,6 @@ function slotBox(state: SimState, index: number): { minX: number; maxX: number; 
 function blockSize(zoom: number, count: number): number {
   const unit = count >= 24000 ? 1.5 : count >= 16000 ? 2 : count >= 10000 ? 2.6 : count >= 1000 ? 4 : 9
   return Math.max(1.2, Math.min(13, zoom * unit))
-}
-
-function paintContacts(
-  ctx: CanvasRenderingContext2D,
-  state: SimState,
-  camera: Camera,
-  width: number,
-  height: number,
-): void {
-  ctx.save()
-  ctx.lineWidth = 1
-  for (const side of [0, 1] as const) {
-    ctx.strokeStyle = side === 0 ? 'rgba(150, 196, 232, 0.45)' : 'rgba(232, 164, 148, 0.45)'
-    for (const mark of lastSeenMarks(state, side)) {
-      const at = worldToScreen(mark.x, mark.y, camera, width, height)
-      ctx.beginPath()
-      ctx.arc(at.x, at.y, 4, 0, Math.PI * 2)
-      ctx.stroke()
-    }
-  }
-  ctx.restore()
 }
 
 function paintFlagships(
