@@ -23,7 +23,7 @@ function steer(div: Division, mx: number, my: number, speed: number, dt: number)
 }
 
 function face(div: Division, tx: number, ty: number, dt: number): void {
-  const aimed = aimUnderThreat(div, tx, ty)
+  const aimed = div.holdBow ? { x: tx, y: ty } : aimUnderThreat(div, tx, ty)
   faceDirection(div, aimed.x - div.ax, aimed.y - div.ay, dt, 1.5 * CLASS_MODS[div.classId].turn)
 }
 

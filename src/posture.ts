@@ -484,6 +484,7 @@ function chooseCounter(state: SimState, fleet: Fleet, sit: Situation): void {
 }
 
 function setDuty(state: SimState, div: Division, tactic: TacticId): void {
+  if (div.holdBow && tactic !== 'focus' && tactic !== 'hold' && tactic !== div.tacticId) return
   if (div.tacticId === tactic) return
   div.tacticId = tactic
   div.phase = 0

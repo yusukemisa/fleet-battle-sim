@@ -62,6 +62,12 @@ function fast(div: Division): boolean {
   return div.classId === 'destroyer' || div.classId === 'cruiser'
 }
 
+function carriesFleetFlag(state: SimState, div: Division): boolean {
+  const fleet = state.fleets[div.fleet]
+  if (!fleet || fleet.flagship < 0) return false
+  return state.ships.division[fleet.flagship] === state.divisions.indexOf(div)
+}
+
 function steer(div: Division, gx: number, gy: number, faceX: number, faceY: number, speed: number, dt: number): void {
   const dx = gx - div.ax
   const dy = gy - div.ay
@@ -137,7 +143,7 @@ export function applySearch(state: SimState, dt: number): void {
     const aimY = focus && !focus.fresh ? focus.y : oy + fy * 16000
     for (const div of state.divisions) {
       if (div.side !== side || div.alive === 0) continue
-      if (fast(div)) {
+      if (fast(div) && !carriesFleetFlag(state, div)) {
         const lane = (div.slot - 2) * SEARCH.spread + (side === 0 ? 0 : SEARCH.spread * 0.5)
         const along = Math.sin(state.time * 0.35 + div.slot) * 400
         steer(div, aimX + lx * lane + fx * along, aimY + ly * lane + fy * along, aimX, aimY, SEARCH.scout, dt)

@@ -1,6 +1,6 @@
 {
   "personality": "guard",
-  "seconds": 368,
+  "seconds": 422,
   "curve": [
     {
       "gen": 0,
@@ -168,6 +168,90 @@
       "mean": 3.219,
       "best": 3.398,
       "center": 3.394,
+      "mirror": 1
+    },
+    {
+      "gen": 24,
+      "mean": 3.76,
+      "best": 3.955,
+      "center": 3.44,
+      "mirror": 0.5
+    },
+    {
+      "gen": 25,
+      "mean": 3.643,
+      "best": 4.022,
+      "center": 3.553,
+      "mirror": 0.5
+    },
+    {
+      "gen": 26,
+      "mean": 3.59,
+      "best": 3.77,
+      "center": 3.311,
+      "mirror": 0.5
+    },
+    {
+      "gen": 27,
+      "mean": 3.616,
+      "best": 3.866,
+      "center": 3.346,
+      "mirror": 0.5
+    },
+    {
+      "gen": 28,
+      "mean": 3.639,
+      "best": 3.849,
+      "center": 3.574,
+      "mirror": 0.5
+    },
+    {
+      "gen": 29,
+      "mean": 3.673,
+      "best": 3.994,
+      "center": 3.797,
+      "mirror": 1
+    },
+    {
+      "gen": 30,
+      "mean": 3.642,
+      "best": 3.997,
+      "center": 3.704,
+      "mirror": 1
+    },
+    {
+      "gen": 31,
+      "mean": 3.641,
+      "best": 3.951,
+      "center": 3.803,
+      "mirror": 0.5
+    },
+    {
+      "gen": 32,
+      "mean": 3.623,
+      "best": 3.932,
+      "center": 3.749,
+      "mirror": 1
+    },
+    {
+      "gen": 33,
+      "mean": 3.606,
+      "best": 3.948,
+      "center": 3.768,
+      "mirror": 1
+    },
+    {
+      "gen": 34,
+      "mean": 3.531,
+      "best": 3.88,
+      "center": 3.764,
+      "mirror": 1
+    },
+    {
+      "gen": 35,
+      "mean": 3.659,
+      "best": 4.061,
+      "center": 3.657,
       "mirror": 1
     }
   ]

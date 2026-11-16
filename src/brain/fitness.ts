@@ -56,12 +56,14 @@ export const OBJECTIVE = {
     breakthrough: 1.0,
     flank: 0.8,
     flagship: 0.7,
+    /** Own flagship behind the formation and outside the enemy bow. */
+    flagSafety: 0.85,
   },
   emphasis: {
-    fierce: { bearing: 0.6, encirclement: 0.45, breakthrough: 1.5, flank: 0.7, flagship: 1.1 },
-    cunning: { bearing: 1.15, encirclement: 1.35, breakthrough: 1.05, flank: 1.3, flagship: 1.0 },
-    guard: { bearing: 1.1, encirclement: 0.8, breakthrough: 0.35, flank: 0.6, flagship: 0.9 },
-    balanced: { bearing: 1.1, encirclement: 1.25, breakthrough: 1.05, flank: 1.15, flagship: 1.0 },
+    fierce: { bearing: 0.6, encirclement: 0.45, breakthrough: 1.5, flank: 0.7, flagship: 1.1, flagSafety: 0.55 },
+    cunning: { bearing: 1.15, encirclement: 1.35, breakthrough: 1.05, flank: 1.3, flagship: 1.0, flagSafety: 1.0 },
+    guard: { bearing: 1.1, encirclement: 0.8, breakthrough: 0.35, flank: 0.6, flagship: 0.9, flagSafety: 1.4 },
+    balanced: { bearing: 1.1, encirclement: 1.25, breakthrough: 1.05, flank: 1.15, flagship: 1.0, flagSafety: 1.1 },
   },
 } as const
 
@@ -95,7 +97,8 @@ export function scoreObjective(personality: Personality, report: BattleReport, m
     place.encirclement * emphasis.encirclement * (report.encircle ?? 0) +
     place.breakthrough * emphasis.breakthrough * (report.breakthrough ?? 0) +
     place.flank * emphasis.flank * report.flank +
-    place.flagship * emphasis.flagship * (report.flagThreat ?? 0)
+    place.flagship * emphasis.flagship * (report.flagThreat ?? 0) +
+    place.flagSafety * emphasis.flagSafety * (report.flagSafety ?? 0)
   )
 }
 
@@ -148,6 +151,8 @@ export interface BattleReport {
   breakthrough?: number
   /** 1 when an enemy flagship is inside our gun range. */
   flagThreat?: number
+  /** 1 when our flagship is behind our centre and clear of the enemy bow. */
+  flagSafety?: number
 }
 
 export function scoreBattle(personality: Personality, report: BattleReport): number {
