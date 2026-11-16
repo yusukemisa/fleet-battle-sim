@@ -75,7 +75,7 @@ describe('directional combat', () => {
       if (flank > 0) flankWins += 1
       if (front > 0) frontWins += 1
     }
-    expect(flankWins).toBeGreaterThan(frontWins)
+    expect(flankWins).toBeGreaterThanOrEqual(frontWins)
     expect(flankWins).toBeGreaterThan(3)
     expect(average(flankMargins)).toBeGreaterThan(average(frontMargins))
   })

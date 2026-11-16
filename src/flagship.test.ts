@@ -155,6 +155,52 @@ describe('flagships', () => {
     expect(own?.tacticId).not.toBe('charge')
   })
 
+  it('starts on the rear rank and does not sail the flagship back', () => {
+    let state = createSim({ shipCount: 1000, commanders: ['balanced', 'cunning'], brains: ['rule', 'rule'] })
+    for (const fleet of state.fleets) {
+      expect(state.ships.shipClass[fleet.flagship]).toBe(0)
+      expect(rearMost(state, fleet.flagship, fleet.index)).toBe(true)
+    }
+    for (let index = 0; index < state.divisions.length; index++) {
+      const division = state.divisions[index]
+      if (!division || division.roster === 0) continue
+      expect(rearMost(state, division.flagship, division.fleet, index)).toBe(true)
+    }
+    const watched = state.divisions.map((division) => division.flagship)
+    const slots = watched.map((at) => [state.ships.slotX[at] ?? 0, state.ships.slotY[at] ?? 0] as const)
+    const flagDivision = [0, 1].map((side) => state.ships.division[state.fleets[side]?.flagship ?? -1] ?? 0)
+    const gapAt = (side: 0 | 1) => {
+      const flag = state.divisions[flagDivision[side] ?? 0]
+      if (!flag) return 0
+      const others = state.divisions.filter((division) => division.side === side && division !== flag && division.alive > 0)
+      const mean = others.reduce((sum, division) => sum + alongDivision(state, division, side), 0) / Math.max(1, others.length)
+      return alongDivision(state, flag, side) - mean
+    }
+    const startGap = [0, 1].map((side) => gapAt(side as 0 | 1))
+    state = dispatch(state, { type: 'set-speed', speed: 4 })
+    state = dispatch(state, { type: 'start' })
+    let checkedSlots = false
+    while (state.phase.kind === 'running' && state.time < 6) {
+      state = dispatch(state, { type: 'tick', dt: 0.05 })
+      if (!checkedSlots && state.time >= 0.4) {
+        checkedSlots = true
+        for (let index = 0; index < watched.length; index++) {
+          const at = watched[index] ?? -1
+          if (state.ships.alive[at] !== 1) continue
+          const sx = state.ships.slotX[at] ?? 0
+          const sy = state.ships.slotY[at] ?? 0
+          const home = slots[index]
+          expect(Math.hypot(sx - (home?.[0] ?? 0), sy - (home?.[1] ?? 0))).toBeLessThan(1)
+        }
+      }
+    }
+    expect(checkedSlots).toBe(true)
+    for (const side of [0, 1] as const) {
+      const drop = (startGap[side] ?? 0) - gapAt(side)
+      expect(drop).toBeLessThan(90)
+    }
+  })
+
   it('keeps bows on the enemy after the fleet flagship is lost in range', () => {
     let state = createSim({ shipCount: 1000, commanders: ['balanced', 'cunning'], brains: ['rule', 'rule'] })
     state = dispatch(state, { type: 'set-speed', speed: 4 })
@@ -163,15 +209,6 @@ describe('flagships', () => {
       state = dispatch(state, { type: 'tick', dt: 0.05 })
     }
     const flag = state.fleets[0]?.flagship ?? -1
-    const division = state.ships.division[flag] ?? 0
-    let behind = 0
-    let others = 0
-    for (let i = 0; i < state.ships.count; i++) {
-      if (i === flag || state.ships.alive[i] !== 1 || state.ships.division[i] !== division || state.ships.falling[i] === 1) continue
-      others += 1
-      if ((state.ships.slotY[i] ?? 0) >= (state.ships.slotY[flag] ?? 0)) behind += 1
-    }
-    expect(behind).toBeGreaterThan(others * 0.5)
     const start = new Map<number, number>()
     for (let i = 0; i < state.ships.count; i++) {
       if (state.ships.alive[i] === 1 && state.ships.side[i] === 0) start.set(i, state.ships.heading[i] ?? 0)
@@ -203,6 +240,67 @@ describe('flagships', () => {
     expect(swing / n).toBeLessThan(0.2)
   }, 20_000)
 })
+
+function axisOf(state: ReturnType<typeof createSim>, fleetIndex: number): { fx: number; fy: number; ox: number; oy: number } {
+  const fleet = state.fleets[fleetIndex]
+  const enemy = state.fleets[fleet?.enemyFleet ?? 0]
+  if (!fleet || !enemy) throw new Error('missing fleet')
+  const ox = fleet.meanX
+  const oy = fleet.meanY
+  const dx = enemy.meanX - ox
+  const dy = enemy.meanY - oy
+  const len = Math.hypot(dx, dy) || 1
+  return { fx: dx / len, fy: dy / len, ox, oy }
+}
+
+function alongOf(state: ReturnType<typeof createSim>, index: number, axis: { fx: number; fy: number; ox: number; oy: number }): number {
+  const x = (state.ships.x[index] ?? 0) - axis.ox
+  const y = (state.ships.y[index] ?? 0) - axis.oy
+  return x * axis.fx + y * axis.fy
+}
+
+function acrossOf(state: ReturnType<typeof createSim>, index: number, axis: { fx: number; fy: number; ox: number; oy: number }): number {
+  const x = (state.ships.x[index] ?? 0) - axis.ox
+  const y = (state.ships.y[index] ?? 0) - axis.oy
+  return Math.abs(x * -axis.fy + y * axis.fx)
+}
+
+/** True when this ship is on the rearmost rank of its class and nearest the fleet axis. */
+function rearMost(state: ReturnType<typeof createSim>, index: number, fleetIndex: number, division?: number): boolean {
+  const axis = axisOf(state, fleetIndex)
+  const ships = state.ships
+  const rank = ships.shipClass[index] ?? 0
+  let rear = Infinity
+  let bestAcross = Infinity
+  for (let i = 0; i < ships.count; i++) {
+    if (ships.alive[i] !== 1 || (ships.shipClass[i] ?? 0) !== rank) continue
+    if (state.divisions[ships.division[i] ?? -1]?.fleet !== fleetIndex) continue
+    if (division !== undefined && ships.division[i] !== division) continue
+    rear = Math.min(rear, alongOf(state, i, axis))
+  }
+  const mine = alongOf(state, index, axis)
+  if (mine > rear + 14) return false
+  for (let i = 0; i < ships.count; i++) {
+    if (ships.alive[i] !== 1 || (ships.shipClass[i] ?? 0) !== rank) continue
+    if (state.divisions[ships.division[i] ?? -1]?.fleet !== fleetIndex) continue
+    if (division !== undefined && ships.division[i] !== division) continue
+    if (alongOf(state, i, axis) > rear + 14) continue
+    bestAcross = Math.min(bestAcross, acrossOf(state, i, axis))
+  }
+  return acrossOf(state, index, axis) <= bestAcross + 1
+}
+
+function alongDivision(state: ReturnType<typeof createSim>, division: { ax: number; ay: number }, side: 0 | 1): number {
+  const enemy = side === 0 ? 1 : 0
+  const ox = state.centroidX[side] ?? 0
+  const oy = state.centroidY[side] ?? 0
+  const dx = (state.centroidX[enemy] ?? 0) - ox
+  const dy = (state.centroidY[enemy] ?? 0) - oy
+  const len = Math.hypot(dx, dy) || 1
+  const x = division.ax - ox
+  const y = division.ay - oy
+  return x * (dx / len) + y * (dy / len)
+}
 
 function bowOn(state: ReturnType<typeof createSim>, index: number): number | null {
   const ships = state.ships
