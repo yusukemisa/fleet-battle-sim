@@ -1261,7 +1261,6 @@ function step(state: SimState, dt: number): void {
     const every = state.maneuver === 'shaped' ? RANKS.shapedInterval : RANKS.interval
     state.rankAt = state.time + every
   }
-  seatFlagships(state)
   if (state.fallingN > 0) {
     cacheBows(state)
     refreshCover(state)
@@ -1329,35 +1328,6 @@ function markHoldBow(state: SimState): void {
       if (dist < near) near = dist
     }
     division.holdBow = near < 1100 && (fleet?.ships ?? 0) >= 400
-  }
-}
-
-function seatFlagships(state: SimState): void {
-  const ships = state.ships
-  const rear = new Int32Array(state.divisions.length).fill(-1)
-  const rearY = new Float64Array(state.divisions.length)
-  rearY.fill(Infinity)
-  for (let i = 0; i < ships.count; i++) {
-    if (ships.alive[i] !== 1 || ships.falling[i] === 1) continue
-    const division = ships.division[i] ?? 0
-    const y = ships.slotY[i] ?? 0
-    if (y < (rearY[division] ?? Infinity)) {
-      rearY[division] = y
-      rear[division] = i
-    }
-  }
-  for (let index = 0; index < state.divisions.length; index++) {
-    const division = state.divisions[index]
-    const flag = division?.flagship ?? -1
-    const back = rear[index] ?? -1
-    if (!division || division.roster < 40 || flag < 0 || back < 0 || back === flag || ships.alive[flag] !== 1) continue
-    if (ships.falling[flag] === 1 || ships.falling[back] === 1 || ships.division[flag] !== index) continue
-    const sx = ships.slotX[flag] ?? 0
-    const sy = ships.slotY[flag] ?? 0
-    ships.slotX[flag] = ships.slotX[back] ?? 0
-    ships.slotY[flag] = ships.slotY[back] ?? 0
-    ships.slotX[back] = sx
-    ships.slotY[back] = sy
   }
 }
 

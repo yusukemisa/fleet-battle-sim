@@ -349,56 +349,88 @@ export function guardOwnFlagship(state: SimState, fleet: Fleet): void {
   }
 }
 
-function pickDivisionFlag(state: SimState, divisionIndex: number): number {
-  const ships = state.ships
-  const division = state.divisions[divisionIndex]
-  if (!division) return -1
-  let bestBb = -1
-  let bestBbD = Infinity
-  let bestCl = -1
-  let bestClD = Infinity
-  let bestAny = -1
-  let bestAnyD = Infinity
-  for (let i = 0; i < ships.count; i++) {
-    if (ships.alive[i] !== 1 || ships.division[i] !== divisionIndex) continue
-    const dx = (ships.x[i] ?? 0) - division.ax
-    const dy = (ships.y[i] ?? 0) - division.ay
-    const dist = dx * dx + dy * dy
-    const cls = ships.shipClass[i] ?? 0
-    if (cls === 0 && dist < bestBbD) {
-      bestBb = i
-      bestBbD = dist
-    } else if (cls === 1 && dist < bestClD) {
-      bestCl = i
-      bestClD = dist
-    }
-    if (dist < bestAnyD) {
-      bestAny = i
-      bestAnyD = dist
-    }
-  }
-  if (bestBb >= 0) return bestBb
-  if (bestCl >= 0) return bestCl
-  return bestAny
+/** Ships this close along the enemy axis count as the same rank. Pitch is 22. */
+const REAR_ROW = 14
+
+interface Axis {
+  fx: number
+  fy: number
+  ox: number
+  oy: number
 }
 
-function pickFleetFlag(state: SimState, fleet: Fleet): number {
+/** Forward is toward the enemy fleet. Facing is the fallback before an enemy mean exists. */
+function axisFor(state: SimState, fleet: Fleet): Axis {
+  const enemy = state.fleets[fleet.enemyFleet]
+  const ox = fleet.meanX
+  const oy = fleet.meanY
+  if (enemy) {
+    const dx = enemy.meanX - ox
+    const dy = enemy.meanY - oy
+    const len = Math.hypot(dx, dy)
+    if (len > 1) return { fx: dx / len, fy: dy / len, ox, oy }
+  }
+  const len = Math.hypot(fleet.facingX, fleet.facingY) || 1
+  return { fx: fleet.facingX / len, fy: fleet.facingY / len, ox, oy }
+}
+
+function placeOf(state: SimState, index: number, axis: Axis): { along: number; across: number } {
+  const x = (state.ships.x[index] ?? 0) - axis.ox
+  const y = (state.ships.y[index] ?? 0) - axis.oy
+  return { along: x * axis.fx + y * axis.fy, across: x * -axis.fy + y * axis.fx }
+}
+
+function classRank(state: SimState, index: number): number {
+  const cls = state.ships.shipClass[index] ?? 0
+  return cls === 0 ? 0 : cls === 1 ? 1 : 2
+}
+
+/**
+ * Battleship, else cruiser, else any survivor. Within that class, the rearmost
+ * rank, and the ship nearest the fleet axis so the mark stays in the middle of the row.
+ */
+function rearmost(state: SimState, axis: Axis, accept: (index: number) => boolean): number {
   const ships = state.ships
+  let bestClass = 99
+  let rear = Infinity
+  for (let i = 0; i < ships.count; i++) {
+    if (ships.alive[i] !== 1 || !accept(i)) continue
+    const rank = classRank(state, i)
+    if (rank < bestClass) {
+      bestClass = rank
+      rear = placeOf(state, i, axis).along
+    } else if (rank === bestClass) {
+      const along = placeOf(state, i, axis).along
+      if (along < rear) rear = along
+    }
+  }
+  if (bestClass === 99) return -1
   let best = -1
-  let bestScore = -Infinity
-  for (let index = 0; index < state.divisions.length; index++) {
-    const division = state.divisions[index]
-    if (!division || division.fleet !== fleet.index) continue
-    const at = division.flagship
-    if (at < 0 || ships.alive[at] !== 1) continue
-    const cls = ships.shipClass[at] ?? 0
-    const score = (cls === 0 ? 10 : cls === 1 ? 4 : 1) + (2 - Math.abs(division.slot - 2))
-    if (score > bestScore) {
-      bestScore = score
-      best = at
+  let bestAcross = Infinity
+  for (let i = 0; i < ships.count; i++) {
+    if (ships.alive[i] !== 1 || !accept(i) || classRank(state, i) !== bestClass) continue
+    const place = placeOf(state, i, axis)
+    if (place.along > rear + REAR_ROW) continue
+    const across = Math.abs(place.across)
+    if (best < 0 || across < bestAcross - 0.01 || (across <= bestAcross + 0.01 && i < best)) {
+      best = i
+      bestAcross = across
     }
   }
   return best
+}
+
+function pickDivisionFlag(state: SimState, divisionIndex: number): number {
+  const division = state.divisions[divisionIndex]
+  const fleet = division ? state.fleets[division.fleet] : undefined
+  if (!division || !fleet) return -1
+  const axis = axisFor(state, fleet)
+  return rearmost(state, axis, (index) => state.ships.division[index] === divisionIndex)
+}
+
+function pickFleetFlag(state: SimState, fleet: Fleet): number {
+  const axis = axisFor(state, fleet)
+  return rearmost(state, axis, (index) => state.divisions[state.ships.division[index] ?? -1]?.fleet === fleet.index)
 }
 
 function mark(state: SimState, index: number, kind: 1 | 2): void {

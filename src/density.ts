@@ -362,13 +362,6 @@ function applyFleet(state: SimState, side: SideId, dt: number): void {
     const target = weakest(enemy, enemyX, enemyY, basis)
     if (!target) return
     const ordered = [...own].sort((a, b) => hypot(a.ax - target.ax, a.ay - target.ay) - hypot(b.ax - target.ax, b.ay - target.ay))
-    if (flag) {
-      const at = ordered.indexOf(flag)
-      if (at >= 0) {
-        ordered.splice(at, 1)
-        ordered.push(flag)
-      }
-    }
     ordered.forEach((div, index) => {
       if (div.alive < div.roster * 0.15 && div !== strongest) {
         steer(div, strongest.ax, strongest.ay, enemyX, enemyY, cruiseSpeed(nearestGap(div, enemy)), dt)
@@ -422,7 +415,7 @@ function applyFleet(state: SimState, side: SideId, dt: number): void {
     const now = (div.ax - ownX) * axis.lx + (div.ay - ownY) * axis.ly
     const target = sameSideTarget(div, enemy, axis, ownX, ownY)
     const arm = Math.abs(div.slot - 2)
-    const standoff = (arm >= 2 ? 420 : arm === 1 ? 520 : 680) + (div === flag ? 260 : 0)
+    const standoff = arm >= 2 ? 420 : arm === 1 ? 520 : 680
     const curl = now * (arm === 0 ? 0 : 0.22)
     const paced = cruiseSpeed(nearestGap(div, enemy))
     steer(
