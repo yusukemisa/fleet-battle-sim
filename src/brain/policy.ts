@@ -52,6 +52,17 @@ export interface PolicyWeights {
 
 const fleetOverride: Array<PolicyWeights | undefined> = []
 let globalOverride: PolicyWeights | undefined
+let studyDecider: ((observation: Observation) => BrainDecision | null) | null = null
+let studyFleets: Set<number> | null = null
+
+/** A study can answer for selected fleets. Other fleets keep the shipped policy. */
+export function useStudyDecider(
+  decider: ((observation: Observation) => BrainDecision | null) | null,
+  fleets?: readonly number[],
+): void {
+  studyDecider = decider
+  studyFleets = decider && fleets ? new Set(fleets) : null
+}
 
 export function loadPolicy(raw: unknown): PolicyWeights | null {
   if (!raw || typeof raw !== 'object') return null
@@ -171,6 +182,10 @@ function nearestEnemy(observation: Observation, division: DivisionView): number 
 
 /** One discrete tactic per division, from the weights of this fleet's commander. */
 export function decidePolicy(observation: Observation): BrainDecision | null {
+  if (studyDecider && (studyFleets === null || studyFleets.has(observation.fleet))) {
+    const custom = studyDecider(observation)
+    if (custom) return custom
+  }
   const weights = currentPolicy(observation.own.commanderId, observation.fleet)
   if (!weights || weights.input !== INPUT_SIZE || weights.w1.length !== INPUT_SIZE * weights.hidden) return null
   const logits = forward(weights, featurize(observation))

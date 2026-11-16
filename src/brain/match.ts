@@ -3,7 +3,9 @@ import { bearingShare, breakthrough, encirclement, flagSafety, flagThreat } from
 import { createSim, dispatch } from '../sim.ts'
 import type { CommanderId, FormationId, SimState } from '../types.ts'
 import type { BattleReport } from './fitness.ts'
-import { clearFleetPolicies, useFleetPolicy, type PolicyWeights } from './policy.ts'
+import type { Observation } from './observe.ts'
+import type { BrainDecision } from './orders.ts'
+import { clearFleetPolicies, useFleetPolicy, useStudyDecider, type PolicyWeights } from './policy.ts'
 
 const ASSAULT = new Set(['charge', 'breakthrough', 'rear'])
 
@@ -17,6 +19,13 @@ export interface MatchSetup {
   /** The fleet whose damage, contact, and survival the report describes. */
   focus: 0 | 1
   timeout?: number
+  /** Defaults to the 100-ship training battle. */
+  shipCount?: 100 | 1000 | 10000
+  /** Optional study policy for the listed fleets. Other fleets keep their installed weights. */
+  study?: {
+    decider: (observation: Observation) => BrainDecision | null
+    fleets: readonly number[]
+  }
 }
 
 function hits(state: SimState, side: 0 | 1): { total: number; exposed: number } {
@@ -75,7 +84,8 @@ export function playMatch(setup: MatchSetup): BattleReport {
   const weights = setup.weights ?? [undefined, undefined]
   if (weights[0]) useFleetPolicy(0, weights[0])
   if (weights[1]) useFleetPolicy(1, weights[1])
-  let state = createSim({ shipCount: 100, commanders: setup.commanders, formations: setup.formations })
+  if (setup.study) useStudyDecider(setup.study.decider, setup.study.fleets)
+  let state = createSim({ shipCount: setup.shipCount ?? 100, commanders: setup.commanders, formations: setup.formations })
   state.rng = setup.seed | 0
   state = dispatch(state, { type: 'set-fleet-brain', fleet: 0, brain: setup.brains[0] })
   state = dispatch(state, { type: 'set-fleet-brain', fleet: 1, brain: setup.brains[1] })
@@ -149,5 +159,6 @@ export function playMatch(setup: MatchSetup): BattleReport {
     }
   } finally {
     clearFleetPolicies()
+    useStudyDecider(null)
   }
 }

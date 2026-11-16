@@ -6,6 +6,9 @@ const WORLD = 20000
 export interface BrainDecision {
   orders: BrainOrder[]
   note: string
+  /** Study policies only. The shipped policy leaves these unset. */
+  maneuver?: 'press' | 'seize' | 'envelop' | 'wheel' | 'breakout' | 'refuse' | 'reform'
+  shape?: 'pincer' | 'spindle' | 'contract'
 }
 
 function finite(value: unknown): number | null {
