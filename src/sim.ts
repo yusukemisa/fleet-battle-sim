@@ -1,4 +1,4 @@
-import { acquireSq, BLAST, CLASS_STATS, DEFAULT_LINE, FIELD, FLEET_STANDOFF, fleetLine, GUNNERY, hullHp, hullRadius, RANKS, SHIP_CLASS_IDS, SHIP_STATS, SIM_TIME_SCALE, SLOT_PITCH, STRAY, SWEEP, stepYawInto, volleyGap, volleyPhase, type ShipClassId, type ShipStats } from './balance.ts'
+import { BLAST, CLASS_STATS, DEFAULT_LINE, FIELD, FLEET_STANDOFF, fleetLine, GUNNERY, hullHp, hullRadius, RANKS, SHIP_CLASS_IDS, SHIP_STATS, SIM_TIME_SCALE, SLOT_PITCH, STRAY, SWEEP, stepYawInto, volleyGap, volleyPhase, type ShipClassId, type ShipStats } from './balance.ts'
 import { anchorFleets, assignTargets, fitGroups, fleetIndex, FLEET_NAMES as FLEET_TITLES, separateFleets } from './fleets.ts'
 import { armorZone, inArc, inBattery, inFiringArc, wrapAngle } from './combat.ts'
 import { chooseTactic, COMMANDERS, employClass, type BattleFacts, type Bearing } from './commanders.ts'
@@ -17,8 +17,6 @@ import { DECISION_INTERVAL, decidePolicy, defaultBrain, preferredFormation } fro
 import { observe } from './brain/observe.ts'
 import { stepPlan, updatePlan } from './posture.ts'
 import { applyDensity, DENSITY } from './density.ts'
-import { createContacts, updateContacts } from './contacts.ts'
-import { applySearch, noteSearch, sideCautious, sideSearching } from './search.ts'
 import { TACTICS, stepDivision, tacticById } from './tactics.ts'
 import {
   DEFAULT_COMMANDER,
@@ -753,7 +751,6 @@ function allocate(
     dealt: [0, 0],
     ram: 0,
     collisionDeaths: [0, 0],
-    contacts: [createContacts(count), createContacts(count)],
     destroyerDealt: [0, 0],
     commandAt: 0,
     log: [],
@@ -1162,8 +1159,6 @@ function step(state: SimState, dt: number): void {
   appointFlagships(state)
   refreshCommand(state)
   refreshCentroids(state)
-  updateContacts(state)
-  noteSearch(state)
   markHoldBow(state)
   driveAi(state)
   if (state.time >= state.commandAt) {
@@ -1223,7 +1218,7 @@ function step(state: SimState, dt: number): void {
     division.sprint = fleet.maneuver === 'envelop' || fleet.maneuver === 'seize'
     const manual = fleet.commanderId === 'manual'
     const brainMove = !rulesDrive(fleet)
-    if ((fleet.ships >= DENSITY.minShips || sideSearching(state, division.side)) && !manual && state.maneuver === 'shaped') continue
+    if (fleet.ships >= DENSITY.minShips && !manual && state.maneuver === 'shaped') continue
     if (brainMove) holdBrainOrders(state, fleet)
     if (division.ordered && !manual && !brainMove) division.ordered = false
     if (division.ordered && (manual || brainMove)) {
@@ -1253,7 +1248,6 @@ function step(state: SimState, dt: number): void {
     stepDivision(division, ctx, dt, !shaped || fleet.maneuver === 'wheel')
   }
   applyDensity(state, dt)
-  applySearch(state, dt)
   if (state.fleets.length > 2) separateFleets(state)
   holdFronts(state)
   if (state.time >= state.rankAt) {
@@ -1367,21 +1361,18 @@ function classStatsOf(id: (typeof SHIP_CLASS_IDS)[number]): ShipStats {
 
 let motionSpeed = new Float32Array(0)
 let motionHeading = new Float32Array(0)
-let motionSearch = new Uint8Array(0)
 
 function cacheDivisionMotion(state: SimState): void {
   const n = state.divisions.length
   if (motionSpeed.length < n) {
     motionSpeed = new Float32Array(n)
     motionHeading = new Float32Array(n)
-    motionSearch = new Uint8Array(n)
   }
   for (let index = 0; index < n; index++) {
     const division = state.divisions[index]
     if (!division) continue
     motionSpeed[index] = Math.hypot(division.vx, division.vy)
     motionHeading[index] = Math.atan2(division.fy, division.fx)
-    motionSearch[index] = sideCautious(state, division.side) ? 1 : 0
   }
 }
 
@@ -1551,12 +1542,6 @@ function moveShips(state: SimState, dt: number): void {
       speed = speed < 0 ? -Math.min(-speed, cap) : Math.min(speed, cap)
     }
     if (division.holdBow && falling && speed > 8) speed = 8
-    if (motionSearch[divisionIndex] === 1) {
-      // Scouts and the creeping body stay under the collision closing speed
-      // even when a small division would otherwise sprint at class speed.
-      const cap = 22
-      speed = speed < 0 ? -Math.min(-speed, cap) : Math.min(speed, cap)
-    }
     const stepSpeed = prevSpeed + Math.max(-accel, Math.min(accel, speed - prevSpeed))
     speed = stepSpeed
     ships.vx[i] = hx * speed
@@ -1741,7 +1726,6 @@ function acquire(state: SimState, index: number): void {
   const side = ships.side[index] === 1 ? 1 : 0
   const half = state.shipCount / 2
   const origin = side === 0 ? half : 0
-  const reach = acquireSq(CLASS_STATS[ships.shipClass[index] ?? 0] ?? state.stats)
   const step = Math.max(1, Math.floor(half / FIELD.sampleStep))
   let best = -1
   let bestScore = Infinity
@@ -1751,7 +1735,6 @@ function acquire(state: SimState, index: number): void {
     const dx = ships.x[other]! - sx
     const dy = ships.y[other]! - sy
     const d2 = dx * dx + dy * dy
-    if (d2 > reach) continue
     const arc = (CLASS_STATS[ships.shipClass[index] ?? 0] ?? state.stats).arc
     if (!inFiringArc(ships.heading[index] ?? 0, sx, sy, ships.x[other]!, ships.y[other]!, arc)) continue
     let score = d2

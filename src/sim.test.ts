@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { SIM_TIME_SCALE } from './balance.ts'
+import { INPUT_SIZE, featurize } from './brain/features.ts'
+import { observe } from './brain/observe.ts'
 import { createSim, dispatch } from './sim.ts'
 import { parseFormationId, parseShipCount, parseTacticId } from './parse.ts'
 
@@ -88,6 +90,63 @@ describe('battle', () => {
   })
 })
 
+describe('visibility', () => {
+  it('shows every distant enemy division to the policy features at its true position', () => {
+    const state = createSim({ shipCount: 100, commanders: ['balanced', 'cunning'], brains: ['rule', 'rule'] })
+    pushApart(state, 20000)
+    const observation = observe(state, 0)
+    const features = featurize(observation)
+    expect(features.length).toBe(INPUT_SIZE)
+    for (let slot = 0; slot < 5; slot++) {
+      const enemy = observation.divisions.find((division) => division.fleet === observation.enemy.index && division.slot === slot)
+      expect(enemy).toBeTruthy()
+      expect((enemy?.x ?? 0) - observation.own.x).toBeGreaterThan(15000)
+      const at = 5 * 11 + slot * 11
+      expect(features[at] ?? 0).toBeGreaterThan(0)
+      expect(features[at + 2] ?? 0).toBeCloseTo(((enemy?.x ?? 0) - observation.own.x) / 1500, 1)
+    }
+    expect(features[INPUT_SIZE - 3] ?? 0).toBeGreaterThan(8)
+  })
+
+  it('aims the legacy guns at an enemy beyond the old sensor distance', () => {
+    let state = createSim({
+      shipCount: 100,
+      commanders: ['manual', 'manual'],
+      brains: ['rule', 'rule'],
+      gunnery: 'legacy',
+    })
+    pushApart(state, 8000)
+    state = dispatch(state, { type: 'start' })
+    state = dispatch(state, { type: 'tick', dt: 0.05 })
+    let aimed = 0
+    const ships = state.ships
+    for (let i = 0; i < ships.count; i++) {
+      const target = ships.target[i] ?? -1
+      if (target < 0 || ships.alive[target] !== 1 || ships.side[target] === ships.side[i]) continue
+      const dist = Math.hypot((ships.x[target] ?? 0) - (ships.x[i] ?? 0), (ships.y[target] ?? 0) - (ships.y[i] ?? 0))
+      // 6400 was the removed sensor range. A lock past it is the true hull.
+      if (dist > 6400) aimed += 1
+    }
+    expect(aimed).toBeGreaterThan(0)
+  })
+
+  it('closes on the true position instead of fanning out to search', () => {
+    let state = createSim({ shipCount: 100, commanders: ['balanced', 'balanced'], brains: ['rule', 'rule'] })
+    pushApart(state, 20000)
+    const before = Math.hypot(state.centroidX[0] - state.centroidX[1], state.centroidY[0] - state.centroidY[1])
+    const spreadBefore = lateralSpread(state, 0)
+    state = dispatch(state, { type: 'set-speed', speed: 4 })
+    state = dispatch(state, { type: 'start' })
+    while (state.phase.kind === 'running' && state.time < 12) {
+      state = dispatch(state, { type: 'tick', dt: 0.05 })
+    }
+    const after = Math.hypot(state.centroidX[0] - state.centroidX[1], state.centroidY[0] - state.centroidY[1])
+    expect(after).toBeLessThan(before - 500)
+    expect(lateralSpread(state, 0)).toBeLessThan(spreadBefore + 800)
+    expect(state.collisionDeaths[0] + state.collisionDeaths[1]).toBe(0)
+  })
+})
+
 describe('parse', () => {
   it('accepts only the ship counts, formations, and tactics on the controls', () => {
     expect(parseShipCount('100')).toBe(100)
@@ -102,6 +161,44 @@ describe('parse', () => {
     expect(parseTacticId('retreat')).toBeNull()
   })
 })
+
+function pushApart(state: ReturnType<typeof createSim>, gap: number): void {
+  const ships = state.ships
+  let max0 = -Infinity
+  let min1 = Infinity
+  for (let i = 0; i < ships.count; i++) {
+    if (ships.alive[i] !== 1) continue
+    const x = ships.x[i] ?? 0
+    if (ships.side[i] === 1) min1 = Math.min(min1, x)
+    else max0 = Math.max(max0, x)
+  }
+  const extra = gap - (min1 - max0)
+  if (!(extra > 0)) return
+  const shift = extra / 2
+  for (let i = 0; i < ships.count; i++) {
+    if (ships.alive[i] !== 1) continue
+    ships.x[i] = (ships.x[i] ?? 0) + (ships.side[i] === 1 ? shift : -shift)
+  }
+  for (const division of state.divisions) division.ax += division.side === 1 ? shift : -shift
+  for (const fleet of state.fleets) {
+    const sign = fleet.side === 1 ? 1 : -1
+    fleet.centerX += sign * shift
+    fleet.meanX += sign * shift
+  }
+  state.centroidX[0] -= shift
+  state.centroidX[1] += shift
+}
+
+function lateralSpread(state: ReturnType<typeof createSim>, side: 0 | 1): number {
+  let minY = Infinity
+  let maxY = -Infinity
+  for (const division of state.divisions) {
+    if (division.side !== side || division.alive === 0) continue
+    minY = Math.min(minY, division.ay)
+    maxY = Math.max(maxY, division.ay)
+  }
+  return maxY - minY
+}
 
 function meanY(state: ReturnType<typeof createSim>, side: 0 | 1, slot: number): number {
   const ships = state.ships

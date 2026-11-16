@@ -55,7 +55,6 @@ export function mountHud(
       </div>
       <button id="reset" type="button">初期配置</button>
       <button id="fit" type="button">全体</button>
-      <button id="last-seen" type="button" title="視界から外れた敵分艦隊の最後の位置。見えている艦には付けません。1万隻以上では初めから消え、このボタンで出せます。">残像</button>
       <span id="clock">00:00</span>
       <span id="fps"></span>
     </header>

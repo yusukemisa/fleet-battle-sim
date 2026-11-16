@@ -121,7 +121,8 @@ function extraFeatures(observation) {
   let seen = 0
   for (const division of enemy) {
     enemyAlive += division.alive
-    if (Math.hypot(division.x - observation.own.x, division.y - observation.own.y) < 6400) seen += 1
+    // Every enemy division is visible. This slot stays so the wider net's input width does not change.
+    seen += 1
   }
   for (const division of own) ownAlive += division.alive
   return [
