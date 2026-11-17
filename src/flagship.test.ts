@@ -237,7 +237,8 @@ describe('flagships', () => {
     expect(n).toBeGreaterThan(100)
     expect(inRange).toBeGreaterThan(50)
     expect(on / inRange).toBeGreaterThan(0.9)
-    expect(swing / n).toBeLessThan(0.2)
+    // The held hammer slides the line, so more ships turn than under the older movement.
+    expect(swing / n).toBeLessThan(0.35)
   }, 20_000)
 })
 

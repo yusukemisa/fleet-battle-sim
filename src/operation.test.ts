@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { createSim, dispatch } from './sim.ts'
-import { parseTacticVariant, resetTacticVariants, setTacticVariant } from './operation.ts'
+import { parseTacticVariant, resetTacticVariants, setTacticVariant, tacticVariants } from './operation.ts'
 
 afterEach(() => {
   resetTacticVariants()
@@ -17,6 +17,11 @@ describe('tactic variants', () => {
     expect(parseTacticVariant('r5')).toBe('table')
     expect(parseTacticVariant('main')).toBe('main')
     expect(parseTacticVariant('nope')).toBeNull()
+  })
+
+  it('opens on the held hammer', () => {
+    resetTacticVariants()
+    expect(tacticVariants()).toEqual(['r7b', 'r7b'])
   })
 
   it('parses the round-8 unit ids', () => {

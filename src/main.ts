@@ -1,5 +1,5 @@
 import { draw, fitCamera, type Camera, type OrderDraft } from './draw.ts'
-import { setTacticVariant, tacticVariants } from './operation.ts'
+import { setTacticVariant, tacticVariants, variantKeepsBrain } from './operation.ts'
 import { battleSearch, parseBattleQuery } from './query.ts'
 import { dispatch, createSim } from './sim.ts'
 import { DEFAULT_SHIP_COUNT, type Command, type SimState } from './types.ts'
@@ -23,7 +23,7 @@ const hud = mountHud(
   () => sim.phase.kind,
   (index, shift) => toggleSelect(index, shift),
   (side, variant) => {
-    if (variant === 'main') apply({ type: 'set-commander', side, commanderId: sim.fleets[side].commanderId })
+    if (variantKeepsBrain(variant)) apply({ type: 'set-commander', side, commanderId: sim.fleets[side].commanderId })
     else apply({ type: 'set-fleet-brain', fleet: side, brain: 'rule' })
   },
   (seed) => {
@@ -190,8 +190,8 @@ function readQuery(): void {
   if (query.blue) setTacticVariant(0, query.blue)
   if (query.red) setTacticVariant(1, query.red)
   const chosen = tacticVariants()
-  if (chosen[0] !== 'main') apply({ type: 'set-fleet-brain', fleet: 0, brain: 'rule' })
-  if (chosen[1] !== 'main') apply({ type: 'set-fleet-brain', fleet: 1, brain: 'rule' })
+  if (!variantKeepsBrain(chosen[0])) apply({ type: 'set-fleet-brain', fleet: 0, brain: 'rule' })
+  if (!variantKeepsBrain(chosen[1])) apply({ type: 'set-fleet-brain', fleet: 1, brain: 'rule' })
   if (query.brainBlue) apply({ type: 'set-fleet-brain', fleet: 0, brain: query.brainBlue })
   if (query.brainRed) apply({ type: 'set-fleet-brain', fleet: 1, brain: query.brainRed })
   if (query.seed !== null) {
@@ -229,7 +229,7 @@ function apply(command: Command): void {
   const formation = sim.fleets.map((fleet) => fleet.formationId).join()
   sim = dispatch(sim, command)
   if (sim.phase.kind === 'setup') sim.rng = pinnedSeed ?? openRng
-  if (command.type === 'set-commander' && tacticVariants()[command.side] !== 'main') {
+  if (command.type === 'set-commander' && !variantKeepsBrain(tacticVariants()[command.side])) {
     sim = dispatch(sim, { type: 'set-fleet-brain', fleet: command.side, brain: 'rule' })
   }
   const refit = sim.shipCount !== before || sim.fleets.map((fleet) => fleet.formationId).join() !== formation || command.type === 'reset'

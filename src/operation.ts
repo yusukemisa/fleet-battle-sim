@@ -2,15 +2,23 @@ import { CLASS_MODS } from './balance.ts'
 import type { CommanderId, Division, SideId, SimState } from './types.ts'
 
 /**
- * Optional anvil-and-hammer overlay. `main` leaves the shipped movement alone.
- * The other ids are the fixed round-5 table and the three round-7 trials.
+ * Anvil-and-hammer overlay. The opening behaviour keeps hammer wings on the
+ * anvil's depth. `main` is the older movement, kept for comparison.
  * One fleet against one fleet, and only a side with at least 400 ships.
  */
 export const TACTIC_VARIANTS = ['main', 'table', 'r7a', 'r7b', 'r7c', 'u8a', 'u8b', 'u8c', 'u8d'] as const
 export type TacticVariant = (typeof TACTIC_VARIANTS)[number]
 
+/** What a fresh battle does before anyone picks a variant. */
+export const DEFAULT_VARIANT: TacticVariant = 'r7b'
+
 export const VARIANT_CHOICES: readonly { id: TacticVariant; label: string; title: string }[] = [
-  { id: 'main', label: '今の動き', title: '上書きしません。開いたときの艦隊のままです。' },
+  {
+    id: 'r7b',
+    label: '槌は列に残す',
+    title: '開いたときの動きです。翼は金床と同じ深さから前へ出ません。',
+  },
+  { id: 'main', label: '以前の動き', title: '上書きする前の艦隊です。比べるときに使います。' },
   {
     id: 'table',
     label: '第5回の表',
@@ -20,11 +28,6 @@ export const VARIANT_CHOICES: readonly { id: TacticVariant; label: string; title
     id: 'r7a',
     label: '猛将は戻らない',
     title: '第5回の表のまま。猛将だけ、一度離した隊には戻りません。',
-  },
-  {
-    id: 'r7b',
-    label: '槌は列に残す',
-    title: '第5回の表の角度で横へ滑ります。翼は金床の深さから前へ出ません。',
   },
   {
     id: 'r7c',
@@ -88,7 +91,7 @@ const ALIAS: Record<string, TacticVariant> = {
   u8d: 'u8d',
 }
 
-let variants: [TacticVariant, TacticVariant] = ['main', 'main']
+let variants: [TacticVariant, TacticVariant] = [DEFAULT_VARIANT, DEFAULT_VARIANT]
 
 export function tacticVariants(): readonly [TacticVariant, TacticVariant] {
   return variants
@@ -99,7 +102,12 @@ export function setTacticVariant(side: SideId, variant: TacticVariant): void {
 }
 
 export function resetTacticVariants(): void {
-  variants = ['main', 'main']
+  variants = [DEFAULT_VARIANT, DEFAULT_VARIANT]
+}
+
+/** Older movement and the opening hammer keep the commander's own brain. */
+export function variantKeepsBrain(variant: TacticVariant): boolean {
+  return variant === 'main' || variant === DEFAULT_VARIANT
 }
 
 export function parseTacticVariant(value: string): TacticVariant | null {
