@@ -1,6 +1,7 @@
 import { CLASS_MODS, FLEET_SHIP_MAX, FLEET_SHIP_MIN, FLEET_SHIP_PRESETS, FLEET_SHIP_STEP, MAX_SHIPS, SHIP_CLASS_IDS } from './balance.ts'
 import { COMMANDERS } from './commanders.ts'
 import { FORMATIONS } from './formations.ts'
+import { VARIANT_CHOICES, setTacticVariant, tacticVariants, type TacticVariant } from './operation.ts'
 import { parseClassId, parseCommanderId, parseFleetShips, parseFormationId, parseShipCount, parseSpeed, parseTacticId } from './parse.ts'
 import { TACTICS } from './tactics.ts'
 import {
@@ -18,6 +19,8 @@ export interface Hud {
   fleetCount: [HTMLSelectElement, HTMLSelectElement]
   formation: [HTMLSelectElement, HTMLSelectElement]
   commander: [HTMLSelectElement, HTMLSelectElement]
+  variant: [HTMLSelectElement, HTMLSelectElement]
+  seed: HTMLInputElement
   orderKey: string
   division: HTMLSelectElement[]
   shipClass: HTMLSelectElement[]
@@ -34,6 +37,8 @@ export function mountHud(
   onFit: () => void,
   phaseKind: () => SimState['phase']['kind'],
   onSelectDivision: (index: number, shift: boolean) => void = () => {},
+  onVariant: (side: 0 | 1, variant: TacticVariant) => void = () => {},
+  onSeed: (seed: number | null) => void = () => {},
 ): Hud {
   parent.innerHTML = `
     <header id="bar">
@@ -42,10 +47,13 @@ export function mountHud(
       <span id="battle-size"></span>
       <label class="side blue">青軍 <select id="form-0"></select></label>
       <label class="side blue">指揮官 <select id="cmd-0"></select></label>
+      <label class="side blue">戦術 <select id="variant-0" title="1対1で、片側400隻以上のときだけ上書きします"></select></label>
       <label class="side blue">艦隊 <select id="fleets-0"></select></label>
       <label class="side red">赤軍 <select id="form-1"></select></label>
       <label class="side red">指揮官 <select id="cmd-1"></select></label>
+      <label class="side red">戦術 <select id="variant-1" title="1対1で、片側400隻以上のときだけ上書きします"></select></label>
       <label class="side red">艦隊 <select id="fleets-1"></select></label>
+      <label>種子 <input id="seed" inputmode="numeric" title="空欄は初期の乱数。数字は開戦前の乱数そのものです" /></label>
       <button id="start" type="button">開戦</button>
       <button id="pause" type="button">停止</button>
       <div class="speeds" role="group" aria-label="速度">
@@ -61,7 +69,7 @@ export function mountHud(
     <ol id="log"></ol>
     <details id="orders">
       <summary title="手動の隊名をクリックして選び、地図を押してドラッグすると移動を命じます">分艦隊の艦種と戦術</summary>
-      <p class="ai-settings">猛将・守将・常勝は最初から AI、智将はルールです。DT は手元の Decision Transformer で、初期値にはしません。常勝は開戦時に相手の陣形へ合わせて自陣を選びます。切り替えはその艦隊だけを変え、指揮官を変えると初期値に戻ります。重みがないときはルールで代行します。</p>
+      <p class="ai-settings">猛将・守将・常勝は最初から AI、智将はルールです。戦術で「今の動き」以外を選ぶと、その軍はルールになり、開戦時に陣形を置き換えません。DT は手元の Decision Transformer で、初期値にはしません。常勝は開戦時に相手の陣形へ合わせて自陣を選びます。切り替えはその艦隊だけを変え、指揮官を変えると初期値に戻ります。重みがないときはルールで代行します。</p>
       <div class="order-grid">
         <section data-side="0"></section>
         <section data-side="1"></section>
@@ -129,6 +137,40 @@ export function mountHud(
   const commander1 = commanderList[1]
   if (!commander0 || !commander1) throw new Error('commander')
   const commander: [HTMLSelectElement, HTMLSelectElement] = [commander0, commander1]
+
+  const variantList = [0, 1].map((side) => {
+    const select = required(parent, `#variant-${side}`, HTMLSelectElement)
+    for (const choice of VARIANT_CHOICES) {
+      const option = document.createElement('option')
+      option.value = choice.id
+      option.textContent = choice.label
+      option.title = choice.title
+      select.append(option)
+    }
+    select.title = VARIANT_CHOICES.map((choice) => `${choice.label}: ${choice.title}`).join('\n')
+    select.addEventListener('change', () => {
+      const variant = VARIANT_CHOICES.find((choice) => choice.id === select.value)?.id
+      if (!variant || (side !== 0 && side !== 1)) return
+      setTacticVariant(side, variant)
+      onVariant(side, variant)
+    })
+    return select
+  })
+  const variant0 = variantList[0]
+  const variant1 = variantList[1]
+  if (!variant0 || !variant1) throw new Error('variant')
+  const variant: [HTMLSelectElement, HTMLSelectElement] = [variant0, variant1]
+
+  const seed = required(parent, '#seed', HTMLInputElement)
+  seed.addEventListener('change', () => {
+    const text = seed.value.trim()
+    if (text === '') {
+      onSeed(null)
+      return
+    }
+    const parsed = Number(text)
+    if (Number.isInteger(parsed) && parsed >= 0 && parsed <= 0x7fffffff) onSeed(parsed)
+  })
 
   const fleetCountList = [0, 1].map((side) => {
     const select = required(parent, `#fleets-${side}`, HTMLSelectElement)
@@ -298,6 +340,8 @@ export function mountHud(
     battleSize: required(parent, '#battle-size', HTMLElement),
     formation,
     commander,
+    variant,
+    seed,
     fleetCount,
     orderKey: '',
     division,
@@ -354,6 +398,12 @@ export function syncHud(parent: HTMLElement, hud: Hud, state: SimState, picked: 
     const id = state.fleets[side]?.commanderId
     if (id && select.value !== id) select.value = id
   })
+  const chosen = tacticVariants()
+  hud.variant.forEach((select, side) => {
+    const id = chosen[side]
+    if (id && select.value !== id) select.value = id
+  })
+  hud.seed.disabled = !setup
   hud.log.replaceChildren()
   for (const line of state.log) {
     const item = document.createElement('li')

@@ -3,6 +3,7 @@ import { divisionCommandRadius, fleetCommandRadius } from './flagship.ts'
 import { orderPoints } from './move.ts'
 import { pathCrossesBow } from './threat.ts'
 import { FORMATIONS } from './formations.ts'
+import { operationMarks } from './operation.ts'
 import type { SimState } from './types.ts'
 
 export interface Camera {
@@ -66,6 +67,7 @@ export function draw(
   }
   paintFlashes(ctx, state, camera, width, height, size)
   paintFlagships(ctx, state, camera, width, height)
+  paintPlan(ctx, state, camera, width, height)
 
   strokeBeams(ctx, state, camera, width, height)
   strokeBooms(ctx, state, camera, width, height)
@@ -413,6 +415,36 @@ function paintFlagships(
       ctx.arc(atScreen.x, atScreen.y, 5, 0, Math.PI * 2)
       ctx.stroke()
     }
+  }
+  ctx.restore()
+}
+
+function paintPlan(ctx: CanvasRenderingContext2D, state: SimState, camera: Camera, width: number, height: number): void {
+  const plan = operationMarks(state)
+  if (!plan) return
+  ctx.save()
+  ctx.lineWidth = 1.25
+  ctx.font = '14px sans-serif'
+  ctx.textAlign = 'center'
+  for (const mark of plan.marks) {
+    const from = worldToScreen(mark.x, mark.y, camera, width, height)
+    if (mark.text === '槌') {
+      const to = worldToScreen(mark.gx, mark.gy, camera, width, height)
+      ctx.strokeStyle = mark.side === 0 ? 'rgba(143, 196, 234, 0.85)' : 'rgba(242, 178, 168, 0.85)'
+      ctx.beginPath()
+      ctx.moveTo(from.x, from.y)
+      ctx.lineTo(to.x, to.y)
+      ctx.stroke()
+    }
+    ctx.fillStyle = mark.side === 0 ? 'rgba(214, 232, 248, 0.95)' : 'rgba(255, 214, 206, 0.95)'
+    ctx.fillText(mark.text, from.x, from.y - 18)
+  }
+  for (const target of plan.targets) {
+    const at = worldToScreen(target.x, target.y, camera, width, height)
+    ctx.strokeStyle = target.side === 0 ? 'rgba(143, 196, 234, 0.9)' : 'rgba(242, 178, 168, 0.9)'
+    ctx.beginPath()
+    ctx.arc(at.x, at.y, 16, 0, Math.PI * 2)
+    ctx.stroke()
   }
   ctx.restore()
 }

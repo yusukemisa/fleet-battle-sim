@@ -55,6 +55,8 @@ label, button, select {
 
 label { font-size: 12px; }
 
+#seed { width: 4.5em; }
+
 select, button {
   background: rgba(12, 16, 26, 0.9);
   border: 1px solid rgba(186, 198, 214, 0.35);

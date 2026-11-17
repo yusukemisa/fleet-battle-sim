@@ -1,4 +1,6 @@
 import { draw, fitCamera, type Camera, type OrderDraft } from './draw.ts'
+import { setTacticVariant, tacticVariants } from './operation.ts'
+import { battleSearch, parseBattleQuery } from './query.ts'
 import { dispatch, createSim } from './sim.ts'
 import { DEFAULT_SHIP_COUNT, type Command, type SimState } from './types.ts'
 import { mountHud, syncHud } from './ui.ts'
@@ -8,6 +10,10 @@ const found = document.querySelector('#app')
 if (!(found instanceof HTMLElement)) throw new Error('missing app')
 const root = found
 
+let sim: SimState = createSim({ shipCount: DEFAULT_SHIP_COUNT })
+const openRng = sim.rng
+let pinnedSeed: number | null = null
+
 const hud = mountHud(
   root,
   (command) => apply(command),
@@ -16,6 +22,15 @@ const hud = mountHud(
   },
   () => sim.phase.kind,
   (index, shift) => toggleSelect(index, shift),
+  (side, variant) => {
+    if (variant === 'main') apply({ type: 'set-commander', side, commanderId: sim.fleets[side].commanderId })
+    else apply({ type: 'set-fleet-brain', fleet: side, brain: 'rule' })
+  },
+  (seed) => {
+    pinnedSeed = seed
+    if (sim.phase.kind === 'setup') sim.rng = seed ?? openRng
+    writeQuery()
+  },
 )
 
 const canvas = document.createElement('canvas')
@@ -28,7 +43,6 @@ if (!maybeContext) {
 }
 const context = maybeContext
 
-let sim: SimState = createSim({ shipCount: DEFAULT_SHIP_COUNT })
 let camera: Camera = { x: 0, y: 0, zoom: 1 }
 let fitted = false
 
@@ -163,16 +177,65 @@ const api = {
 window.__battle = api
 
 resize()
-syncHud(root, hud, sim)
+readQuery()
 requestAnimationFrame(loop)
+
+function readQuery(): void {
+  const query = parseBattleQuery(new URLSearchParams(window.location.search))
+  if (query.ships !== null) apply({ type: 'set-ship-count', count: query.ships })
+  if (query.formBlue) apply({ type: 'set-formation', side: 0, formationId: query.formBlue })
+  if (query.formRed) apply({ type: 'set-formation', side: 1, formationId: query.formRed })
+  if (query.cmdBlue) apply({ type: 'set-commander', side: 0, commanderId: query.cmdBlue })
+  if (query.cmdRed) apply({ type: 'set-commander', side: 1, commanderId: query.cmdRed })
+  if (query.blue) setTacticVariant(0, query.blue)
+  if (query.red) setTacticVariant(1, query.red)
+  const chosen = tacticVariants()
+  if (chosen[0] !== 'main') apply({ type: 'set-fleet-brain', fleet: 0, brain: 'rule' })
+  if (chosen[1] !== 'main') apply({ type: 'set-fleet-brain', fleet: 1, brain: 'rule' })
+  if (query.brainBlue) apply({ type: 'set-fleet-brain', fleet: 0, brain: query.brainBlue })
+  if (query.brainRed) apply({ type: 'set-fleet-brain', fleet: 1, brain: query.brainRed })
+  if (query.seed !== null) {
+    pinnedSeed = query.seed
+    hud.seed.value = String(query.seed)
+    if (sim.phase.kind === 'setup') sim.rng = query.seed
+  }
+  if (query.speed) apply({ type: 'set-speed', speed: query.speed })
+  syncHud(root, hud, sim)
+  writeQuery()
+}
+
+function writeQuery(): void {
+  const speed = sim.phase.kind === 'finished' ? 1 : sim.phase.speed
+  const next = battleSearch({
+    blue: tacticVariants()[0],
+    red: tacticVariants()[1],
+    cmdBlue: sim.fleets[0].commanderId,
+    cmdRed: sim.fleets[1].commanderId,
+    ships: sim.shipCount,
+    seed: pinnedSeed,
+    formBlue: sim.fleets[0].formationId,
+    formRed: sim.fleets[1].formationId,
+    speed,
+    brainBlue: sim.fleets[0].brain,
+    brainRed: sim.fleets[1].brain,
+  })
+  const path = `${window.location.pathname}${next}`
+  const current = `${window.location.pathname}${window.location.search}`
+  if (path !== current) window.history.replaceState(null, '', path)
+}
 
 function apply(command: Command): void {
   const before = sim.shipCount
   const formation = sim.fleets.map((fleet) => fleet.formationId).join()
   sim = dispatch(sim, command)
+  if (sim.phase.kind === 'setup') sim.rng = pinnedSeed ?? openRng
+  if (command.type === 'set-commander' && tacticVariants()[command.side] !== 'main') {
+    sim = dispatch(sim, { type: 'set-fleet-brain', fleet: command.side, brain: 'rule' })
+  }
   const refit = sim.shipCount !== before || sim.fleets.map((fleet) => fleet.formationId).join() !== formation || command.type === 'reset'
   if (refit) camera = fitCamera(sim, viewWidth(), viewHeight())
   syncHud(root, hud, sim, selected)
+  writeQuery()
 }
 
 function loop(now: number): void {
