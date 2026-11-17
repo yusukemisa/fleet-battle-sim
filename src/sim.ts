@@ -17,6 +17,7 @@ import { DECISION_INTERVAL, decidePolicy, defaultBrain, preferredFormation } fro
 import { observe } from './brain/observe.ts'
 import { stepPlan, updatePlan } from './posture.ts'
 import { applyDensity, DENSITY } from './density.ts'
+import { applyOperation } from './operation.ts'
 import { TACTICS, stepDivision, tacticById } from './tactics.ts'
 import {
   DEFAULT_COMMANDER,
@@ -1248,6 +1249,7 @@ function step(state: SimState, dt: number): void {
     stepDivision(division, ctx, dt, !shaped || fleet.maneuver === 'wheel')
   }
   applyDensity(state, dt)
+  applyOperation(state, dt)
   if (state.fleets.length > 2) separateFleets(state)
   holdFronts(state)
   if (state.time >= state.rankAt) {
