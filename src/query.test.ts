@@ -17,7 +17,7 @@ describe('battle query', () => {
 
   it('round-trips a non-default setup', () => {
     const search = battleSearch({
-      blue: 'r7b',
+      blue: 'u8a',
       red: 'table',
       cmdBlue: 'guard',
       cmdRed: 'cunning',
@@ -30,7 +30,7 @@ describe('battle query', () => {
       brainRed: 'rule',
     })
     const query = parseBattleQuery(new URLSearchParams(search.slice(1)))
-    expect(query.blue).toBe('r7b')
+    expect(query.blue).toBe('u8a')
     expect(query.red).toBe('table')
     expect(query.cmdBlue).toBe('guard')
     expect(query.cmdRed).toBe('cunning')
@@ -45,5 +45,23 @@ describe('battle query', () => {
     expect(query.cmdRed).toBe('fierce')
     expect(query.brainRed).toBe('rule')
     expect(query.brainBlue).toBeNull()
+  })
+
+  it('omits the opening hammer and writes the older movement', () => {
+    const search = battleSearch({
+      blue: 'r7b',
+      red: 'main',
+      cmdBlue: 'balanced',
+      cmdRed: 'cunning',
+      ships: 1000,
+      seed: null,
+      formBlue: 'oujin',
+      formRed: 'oujin',
+      speed: 1,
+      brainBlue: 'ai',
+      brainRed: 'rule',
+    })
+    expect(search.includes('blue=')).toBe(false)
+    expect(search.includes('red=main')).toBe(true)
   })
 })

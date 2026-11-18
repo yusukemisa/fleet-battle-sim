@@ -1,7 +1,7 @@
 import { defaultBrain } from './brain/policy.ts'
 import { COMMANDERS } from './commanders.ts'
 import { FORMATIONS } from './formations.ts'
-import { parseTacticVariant, type TacticVariant } from './operation.ts'
+import { DEFAULT_VARIANT, parseTacticVariant, type TacticVariant } from './operation.ts'
 import { parseShipCount, parseSpeed } from './parse.ts'
 import {
   COMMANDER_IDS,
@@ -59,8 +59,8 @@ export function battleSearch(input: {
   brainRed: BrainMode
 }): string {
   const params = new URLSearchParams()
-  if (input.blue !== 'main') params.set('blue', input.blue)
-  if (input.red !== 'main') params.set('red', input.red)
+  if (input.blue !== DEFAULT_VARIANT) params.set('blue', input.blue)
+  if (input.red !== DEFAULT_VARIANT) params.set('red', input.red)
   if (input.cmdBlue !== 'balanced') params.set('cmdBlue', COMMANDERS[input.cmdBlue].name)
   if (input.cmdRed !== 'balanced') params.set('cmdRed', COMMANDERS[input.cmdRed].name)
   if (input.ships !== 1000) {
@@ -71,8 +71,10 @@ export function battleSearch(input: {
   if (input.formBlue !== 'oujin') params.set('formBlue', input.formBlue)
   if (input.formRed !== 'oujin') params.set('formRed', input.formRed)
   if (input.speed !== 1) params.set('speed', String(input.speed))
-  if (input.blue === 'main' && input.brainBlue !== defaultBrain(input.cmdBlue)) params.set('brainBlue', input.brainBlue)
-  if (input.red === 'main' && input.brainRed !== defaultBrain(input.cmdRed)) params.set('brainRed', input.brainRed)
+  const keepsBlue = input.blue === 'main' || input.blue === DEFAULT_VARIANT
+  const keepsRed = input.red === 'main' || input.red === DEFAULT_VARIANT
+  if (keepsBlue && input.brainBlue !== defaultBrain(input.cmdBlue)) params.set('brainBlue', input.brainBlue)
+  if (keepsRed && input.brainRed !== defaultBrain(input.cmdRed)) params.set('brainRed', input.brainRed)
   const text = params.toString()
   return text ? `?${text}` : ''
 }

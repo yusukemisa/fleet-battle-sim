@@ -69,7 +69,7 @@ export function mountHud(
     <ol id="log"></ol>
     <details id="orders">
       <summary title="手動の隊名をクリックして選び、地図を押してドラッグすると移動を命じます">分艦隊の艦種と戦術</summary>
-      <p class="ai-settings">猛将・守将・常勝は最初から AI、智将はルールです。戦術で「今の動き」以外を選ぶと、その軍はルールになり、開戦時に陣形を置き換えません。DT は手元の Decision Transformer で、初期値にはしません。常勝は開戦時に相手の陣形へ合わせて自陣を選びます。切り替えはその艦隊だけを変え、指揮官を変えると初期値に戻ります。重みがないときはルールで代行します。</p>
+      <p class="ai-settings">猛将・守将・常勝は最初から AI、智将はルールです。開いたときは槌を列に残します。以前の動きを選ぶと、上書きする前の艦隊に戻ります。それ以外の戦術を選ぶと、その軍はルールになり、開戦時に陣形を置き換えません。DT は手元の Decision Transformer で、初期値にはしません。常勝は開戦時に相手の陣形へ合わせて自陣を選びます。切り替えはその艦隊だけを変え、指揮官を変えると初期値に戻ります。重みがないときはルールで代行します。</p>
       <div class="order-grid">
         <section data-side="0"></section>
         <section data-side="1"></section>

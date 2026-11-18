@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { createSim, dispatch } from './sim.ts'
-import { operationMarks, parseTacticVariant, resetTacticVariants, setTacticVariant } from './operation.ts'
+import { parseTacticVariant, resetTacticVariants, setTacticVariant, tacticVariants } from './operation.ts'
 
 afterEach(() => {
   resetTacticVariants()
@@ -19,27 +19,45 @@ describe('tactic variants', () => {
     expect(parseTacticVariant('nope')).toBeNull()
   })
 
-  it('leaves a battle unmarked until a side opts in', () => {
+  it('opens on the held hammer', () => {
+    resetTacticVariants()
+    expect(tacticVariants()).toEqual(['r7b', 'r7b'])
+  })
+
+  it('parses the round-8 unit ids', () => {
+    expect(parseTacticVariant('u8a')).toBe('u8a')
+    expect(parseTacticVariant('u8d')).toBe('u8d')
+  })
+
+  it('does not mark the anvil or the hammer', () => {
+    setTacticVariant(0, 'r7b')
     let state = createSim({ shipCount: 1000, commanders: ['balanced', 'cunning'], brains: ['rule', 'rule'] })
     state.rng = 3
     state = dispatch(state, { type: 'set-speed', speed: 4 })
     state = dispatch(state, { type: 'start' })
-    for (let i = 0; i < 20; i++) state = dispatch(state, { type: 'tick', dt: 0.05 })
-    expect(operationMarks(state)).toBeNull()
+    state = dispatch(state, { type: 'tick', dt: 0.05 })
+    expect(state.divisions.some((division) => division.side === 0 && division.focus)).toBe(true)
   })
 
-  it('labels the anvil and hammer once the fixed table is on', () => {
-    setTacticVariant(0, 'table')
-    let state = createSim({ shipCount: 1000, commanders: ['fierce', 'cunning'], brains: ['rule', 'rule'] })
+  it('seats a division into lines of ten', () => {
+    setTacticVariant(0, 'u8a')
+    let state = createSim({ shipCount: 1000, commanders: ['balanced', 'cunning'], brains: ['rule', 'rule'] })
     state.rng = 3
     state = dispatch(state, { type: 'set-speed', speed: 4 })
     state = dispatch(state, { type: 'start' })
     state = dispatch(state, { type: 'tick', dt: 0.05 })
-    const plan = operationMarks(state)
-    expect(plan).not.toBeNull()
-    const words = plan?.marks.map((mark) => mark.text) ?? []
-    expect(words).toContain('金床')
-    expect(words).toContain('槌')
-    expect(plan?.marks.every((mark) => mark.side === 0)).toBe(true)
+    const division = state.divisions.findIndex((item) => item.side === 0 && item.slot === 2)
+    const slots: number[] = []
+    for (let i = 0; i < state.ships.count; i++) {
+      if (state.ships.alive[i] !== 1 || state.ships.division[i] !== division) continue
+      slots.push(state.ships.slotX[i] ?? 0)
+    }
+    slots.sort((a, b) => a - b)
+    const gaps = new Set<number>()
+    for (let i = 1; i < slots.length; i++) {
+      const gap = Math.round((slots[i] ?? 0) - (slots[i - 1] ?? 0))
+      if (gap > 0 && gap < 80) gaps.add(gap)
+    }
+    expect(gaps.has(36)).toBe(true)
   })
 })
