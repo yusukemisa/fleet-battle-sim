@@ -30,6 +30,9 @@ describe('tactic variants', () => {
     expect(parseTacticVariant('u9a')).toBe('u9a')
     expect(parseTacticVariant('u9b')).toBe('u9b')
     expect(parseTacticVariant('u9c')).toBe('u9c')
+    expect(parseTacticVariant('u10a')).toBe('u10a')
+    expect(parseTacticVariant('u10b')).toBe('u10b')
+    expect(parseTacticVariant('u10c')).toBe('u10c')
   })
 
   it('does not mark the anvil or the hammer', () => {
@@ -102,5 +105,28 @@ describe('tactic variants', () => {
       }
       expect(off).toBeLessThan(1)
     }
+  })
+
+  it('keeps a battleship unit clear of the next hull and the next rank', () => {
+    setTacticVariant(0, 'u10b')
+    const state = createSim({ shipCount: 1000, commanders: ['balanced', 'cunning'], brains: ['rule', 'rule'] })
+    const division = state.divisions.findIndex((item) => item.side === 0 && item.slot === 2)
+    const seats: { x: number; y: number }[] = []
+    for (let i = 0; i < state.ships.count; i++) {
+      if (state.ships.alive[i] !== 1 || state.ships.division[i] !== division) continue
+      seats.push({ x: state.ships.slotX[i] ?? 0, y: state.ships.slotY[i] ?? 0 })
+    }
+    seats.sort((a, b) => b.y - a.y || a.x - b.x)
+    const front = seats.filter((seat) => Math.abs(seat.y - (seats[0]?.y ?? 0)) < 1)
+    expect(front.length).toBe(10)
+    for (let i = 1; i < front.length; i++) {
+      const prev = front[i - 1]
+      const seat = front[i]
+      if (!prev || !seat) continue
+      expect(seat.x - prev.x).toBeGreaterThanOrEqual(14.2 + 10 - 0.01)
+    }
+    const next = seats.find((seat) => (seats[0]?.y ?? 0) - seat.y > 1)
+    expect(next).toBeTruthy()
+    expect((seats[0]?.y ?? 0) - (next?.y ?? 0)).toBeGreaterThan(7.1 * 5.5)
   })
 })
