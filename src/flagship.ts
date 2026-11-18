@@ -13,8 +13,8 @@ export const FLAGSHIP = {
   /** Floor for a division circle. Also the radius at or below `divisionPivot` ships. */
   divisionRadius: 300,
   /**
-   * Command circles grow with sqrt(ships) after this many hulls, so a 10,000-ship
-   * side covers about the central half of a wide line while 100 and 1,000 stay put.
+   * Command circles grow with sqrt(ships) after this many hulls. A 10,000-ship
+   * side is a shallow line, so the circle covers its middle rather than the wings.
    */
   fleetPivot: 3600,
   divisionPivot: 120,

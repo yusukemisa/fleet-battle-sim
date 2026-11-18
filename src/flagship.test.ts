@@ -113,8 +113,9 @@ describe('flagships', () => {
       if (dx * dx + dy * dy <= radius * radius) inside += 1
     }
     const share = inside / alive
-    expect(share).toBeGreaterThan(0.3)
-    expect(share).toBeLessThan(0.5)
+    // The circle is unchanged. A 10,000-ship side is now a shallow line, so the same circle covers its middle, not half the line.
+    expect(share).toBeGreaterThan(0.08)
+    expect(share).toBeLessThan(0.2)
     for (const division of state.divisions) {
       if (division.side !== 0 || division.roster === 0) continue
       const at = division.flagship
@@ -131,7 +132,9 @@ describe('flagships', () => {
         const dy = (ships.y[i] ?? 0) - y
         if (dx * dx + dy * dy <= reach * reach) hit += 1
       }
-      expect(hit / n).toBeGreaterThan(0.9)
+      // Each block is a shallow line wider than this circle. The circle still covers its middle.
+      expect(hit / n).toBeGreaterThan(0.25)
+      expect(hit / n).toBeLessThan(0.75)
     }
   })
 

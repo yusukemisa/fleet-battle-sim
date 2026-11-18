@@ -30,6 +30,8 @@ export interface CombatScratch {
   splash: Int32Array
   /** Explosions already resolved this step. */
   blasts: number
+  /** Hull overlaps seen since the battle was created. */
+  overlaps: number
   exposed: Uint8Array
   cosArc: number
   cosBow: number
@@ -73,6 +75,7 @@ export function createScratch(count: number, cell: number): CombatScratch {
     bearing: new Float32Array(count).fill(99),
     splash: new Int32Array(count),
     blasts: 0,
+    overlaps: 0,
     exposed: new Uint8Array(count),
     cosArc: 1,
     cosBow: 1,

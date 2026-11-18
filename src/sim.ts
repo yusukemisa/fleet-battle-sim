@@ -17,7 +17,7 @@ import { DECISION_INTERVAL, decidePolicy, defaultBrain, preferredFormation } fro
 import { observe } from './brain/observe.ts'
 import { stepPlan, updatePlan } from './posture.ts'
 import { applyDensity, DENSITY } from './density.ts'
-import { applyOperation, holdUnitStations, seatUnits } from './operation.ts'
+import { applyOperation } from './operation.ts'
 import { TACTICS, stepDivision, tacticById } from './tactics.ts'
 import {
   DEFAULT_COMMANDER,
@@ -394,7 +394,6 @@ function deployGrouped(state: SimState): void {
   state.alive[1] = alive[1]
   refreshCentroids(state)
   appointFlagships(state)
-  seatUnits(state)
 }
 
 function reflowAnchors(state: SimState): void {
@@ -918,7 +917,6 @@ function deploy(state: SimState): void {
   state.alive[1] = half
   refreshCentroids(state)
   appointFlagships(state)
-  seatUnits(state)
 }
 
 function placeSide(state: SimState, side: SideId, half: number): void {
@@ -1265,13 +1263,11 @@ function step(state: SimState, dt: number): void {
     const every = state.maneuver === 'shaped' ? RANKS.shapedInterval : RANKS.interval
     state.rankAt = state.time + every
   }
-  seatUnits(state)
   if (state.fallingN > 0) {
     cacheBows(state)
     refreshCover(state)
   }
   moveShips(state, dt)
-  holdUnitStations(state, dt)
   fight(state, dt)
   fadeEffects(state, dt)
   state.time += dt
@@ -1532,6 +1528,7 @@ function moveShips(state: SimState, dt: number): void {
       const cap = leaving ? 22 : far ? 26 : 18
       speed = speed < 0 ? -Math.min(-speed, cap) : Math.min(speed, cap)
     }
+    if ((brakes[i] ?? 0) > 0.45 && (fleet?.ships ?? 0) >= 4000) speed = speed < 0 ? Math.max(speed, -8) : Math.min(speed, 10)
     if (division.holdBow && falling && speed > 8) speed = 8
     const stepSpeed = prevSpeed + Math.max(-accel, Math.min(accel, speed - prevSpeed))
     speed = stepSpeed
