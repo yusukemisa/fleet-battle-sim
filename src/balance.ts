@@ -394,6 +394,17 @@ export const FLEET_PAD = 160
 /** A fleet's nose stays at least this far from the center line. */
 export const FLEET_STANDOFF = 240
 
+/**
+ * Nose-to-nose water. Gun range, plus room for a wider line to finish its swing,
+ * plus a little more when several fleets share a side.
+ */
+export function openingGap(halfY: number, fleetsOnSide: number): number {
+  const bow = 900
+  const swing = Math.min(360, Math.max(0, halfY) * 0.2)
+  const company = 100 * Math.max(0, fleetsOnSide - 1)
+  return bow + FLEET_STANDOFF + swing + company
+}
+
 export const FIELD = {
   fleetCenter: 580,
   beamLife: 0.16,

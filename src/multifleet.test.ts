@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { FLEET_SHIP_MAX, FLEET_SHIP_MIN, FLEET_SHIP_STEP, FLEET_SEPARATION, MAX_SHIPS } from './balance.ts'
+import { FLEET_SHIP_MAX, FLEET_SHIP_MIN, FLEET_SHIP_STEP, FLEET_SEPARATION, MAX_SHIPS, openingGap } from './balance.ts'
 import { fitGroups, snapFleetShips } from './fleets.ts'
 import { parseFleetShips } from './parse.ts'
 import { createSim, dispatch } from './sim.ts'
@@ -15,6 +15,32 @@ const three: FleetSetup[] = [
 ]
 
 describe('multiple fleets', () => {
+  it('gives a larger fleet more water before the guns', () => {
+    expect(openingGap(0, 1)).toBe(1140)
+    expect(openingGap(400, 1)).toBe(1220)
+    expect(openingGap(5000, 1)).toBe(1500)
+    expect(openingGap(400, 3)).toBe(openingGap(400, 1) + 200)
+    const gap = (count: 100 | 1000 | 10000) => {
+      const state = createSim({ shipCount: count, formations: ['oujin', 'oujin'] })
+      let blue = -Infinity
+      let red = Infinity
+      for (let i = 0; i < state.ships.count; i++) {
+        if (state.ships.alive[i] !== 1) continue
+        const x = state.ships.x[i] ?? 0
+        if (state.ships.side[i] === 0) blue = Math.max(blue, x)
+        else red = Math.min(red, x)
+      }
+      return red - blue
+    }
+    const small = gap(100)
+    const mid = gap(1000)
+    const large = gap(10000)
+    expect(small).toBeGreaterThan(900)
+    expect(mid).toBeGreaterThan(small)
+    expect(large).toBeGreaterThan(1100)
+    expect(large).toBeGreaterThan(mid)
+  })
+
   it('keeps a one-fleet battle on the original two fleets', () => {
     const state = createSim({ shipCount: 100 })
     expect(state.fleets).toHaveLength(2)
