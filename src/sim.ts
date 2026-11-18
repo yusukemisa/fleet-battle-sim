@@ -1,4 +1,4 @@
-import { BLAST, CLASS_STATS, DEFAULT_LINE, FIELD, FLEET_STANDOFF, fleetLine, GUNNERY, hullHp, hullRadius, RANKS, SHIP_CLASS_IDS, SHIP_STATS, SIM_TIME_SCALE, SLOT_PITCH, STRAY, SWEEP, stepYawInto, volleyGap, volleyPhase, type ShipClassId, type ShipStats } from './balance.ts'
+import { BLAST, CLASS_STATS, DEFAULT_LINE, FIELD, fleetLine, GUNNERY, hullHp, hullRadius, openingGap, RANKS, SHIP_CLASS_IDS, SHIP_STATS, SIM_TIME_SCALE, SLOT_PITCH, STRAY, SWEEP, stepYawInto, volleyGap, volleyPhase, type ShipClassId, type ShipStats } from './balance.ts'
 import { anchorFleets, assignTargets, fitGroups, fleetIndex, FLEET_NAMES as FLEET_TITLES, separateFleets } from './fleets.ts'
 import { armorZone, inArc, inBattery, inFiringArc, wrapAngle } from './combat.ts'
 import { chooseTactic, COMMANDERS, employClass, type BattleFacts, type Bearing } from './commanders.ts'
@@ -392,6 +392,7 @@ function deployGrouped(state: SimState): void {
   state.alive[1] = alive[1]
   refreshCentroids(state)
   appointFlagships(state)
+  seatUnits(state)
 }
 
 function reflowAnchors(state: SimState): void {
@@ -912,6 +913,7 @@ function deploy(state: SimState): void {
   state.alive[1] = half
   refreshCentroids(state)
   appointFlagships(state)
+  seatUnits(state)
 }
 
 function placeSide(state: SimState, side: SideId, half: number): void {
@@ -924,7 +926,7 @@ function placeSide(state: SimState, side: SideId, half: number): void {
     forward = Math.max(forward, layout.y[i] ?? 0)
     halfY = Math.max(halfY, Math.abs(layout.x[i] ?? 0))
   }
-  const magnitude = Math.max(FIELD.fleetCenter, forward + FLEET_STANDOFF)
+  const magnitude = forward + openingGap(halfY, 1) / 2
   const centerX = side === 0 ? -magnitude : magnitude
   const fleet = state.fleets[side]
   if (fleet) {

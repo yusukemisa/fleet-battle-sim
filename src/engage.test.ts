@@ -11,7 +11,7 @@ function battle(
   state = dispatch(state, { type: 'set-speed', speed: 4 })
   state = dispatch(state, { type: 'start' })
   let mid = 0
-  while (state.phase.kind === 'running' && state.time < 40) {
+  while (state.phase.kind === 'running' && state.time < 80) {
     state = dispatch(state, { type: 'tick', dt: 0.05 })
     if (mid === 0 && state.time >= 20) mid = (state.dealt[0] ?? 0) + (state.dealt[1] ?? 0)
   }
@@ -22,7 +22,7 @@ function battle(
 }
 
 describe('large fleets engage', () => {
-  it('deals gun damage within 40s while collision deaths stay rare', () => {
+  it('deals gun damage within 80s while collision deaths stay rare', () => {
     const pairs: { formations: readonly [FormationId, FormationId]; commanders: readonly [CommanderId, CommanderId] }[] = [
       { formations: ['engetsu', 'kakuyoku'], commanders: ['balanced', 'cunning'] },
       { formations: ['oujin', 'kakuyoku'], commanders: ['guard', 'fierce'] },

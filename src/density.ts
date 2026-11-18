@@ -325,6 +325,16 @@ function committedShape(state: SimState, side: SideId, next: DensityShape, basis
   }
   return { shape: row.shape[side], basis: row.basis[side] }
 }
+function inGunRange(state: SimState, division: Division): boolean {
+  for (const other of state.divisions) {
+    if (other.side === division.side || other.alive <= 0) continue
+    const dx = other.ax - division.ax
+    const dy = other.ay - division.ay
+    if (dx * dx + dy * dy <= 900 * 900) return true
+  }
+  return false
+}
+
 function applyFleet(state: SimState, side: SideId, dt: number): void {
   const fleet = state.fleets[side]
   if (!fleet || fleet.commanderId === 'manual' || fleet.ships < DENSITY.minShips) return
@@ -363,7 +373,7 @@ function applyFleet(state: SimState, side: SideId, dt: number): void {
     if (!target) return
     const ordered = [...own].sort((a, b) => hypot(a.ax - target.ax, a.ay - target.ay) - hypot(b.ax - target.ax, b.ay - target.ay))
     ordered.forEach((div, index) => {
-      if (divisionUnderFire(state.divisions.indexOf(div))) return
+      if (divisionUnderFire(state.divisions.indexOf(div)) || !inGunRange(state, div)) return
       if (div.alive < div.roster * 0.15 && div !== strongest) {
         steer(div, strongest.ax, strongest.ay, enemyX, enemyY, cruiseSpeed(nearestGap(div, enemy)), dt)
         return
@@ -397,7 +407,7 @@ function applyFleet(state: SimState, side: SideId, dt: number): void {
   }
   if (shape === 'contract') {
     for (const div of own) {
-      if (divisionUnderFire(state.divisions.indexOf(div))) continue
+      if (divisionUnderFire(state.divisions.indexOf(div)) || !inGunRange(state, div)) continue
       if (div.alive < div.roster * 0.15 && div !== strongest) {
         steer(div, strongest.ax, strongest.ay, enemyX, enemyY, DENSITY.cruise, dt)
         continue
@@ -410,7 +420,7 @@ function applyFleet(state: SimState, side: SideId, dt: number): void {
     return
   }
   for (const div of own) {
-    if (divisionUnderFire(state.divisions.indexOf(div))) continue
+    if (divisionUnderFire(state.divisions.indexOf(div)) || !inGunRange(state, div)) continue
     if (div.alive < div.roster * 0.15 && div !== strongest) {
       steer(div, strongest.ax, strongest.ay, enemyX, enemyY, DENSITY.cruise, dt)
       continue

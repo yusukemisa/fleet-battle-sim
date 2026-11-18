@@ -157,7 +157,19 @@ function hypot(x: number, y: number): number {
   return Math.hypot(x, y)
 }
 
-function steer(div: Division, gx: number, gy: number, faceX: number, faceY: number, speed: number, dt: number): void {
+function enemyInRange(state: SimState, division: Division): boolean {
+  const bow = 900
+  const reach = bow * bow
+  for (const other of state.divisions) {
+    if (other.side === division.side || other.alive <= 0) continue
+    const dx = other.ax - division.ax
+    const dy = other.ay - division.ay
+    if (dx * dx + dy * dy <= reach) return true
+  }
+  return false
+}
+
+function steer(div: Division, gx: number, gy: number, faceX: number, faceY: number, speed: number, dt: number, gentle = false): void {
   const dx = gx - div.ax
   const dy = gy - div.ay
   const len = hypot(dx, dy) || 1
@@ -175,7 +187,7 @@ function steer(div: Division, gx: number, gy: number, faceX: number, faceY: numb
   if (fl < 1e-4) return
   fx /= fl
   fy /= fl
-  const turn = 1 - Math.exp(-2 * dt)
+  const turn = 1 - Math.exp((gentle ? -0.35 : -2) * dt)
   div.fx += (fx - div.fx) * turn
   div.fy += (fy - div.fy) * turn
   const norm = hypot(div.fx, div.fy) || 1
@@ -347,7 +359,7 @@ export function applyOperation(state: SimState, dt: number): void {
         }
       }
       const goal = place(target, axis, depth, lateral)
-      steer(division, goal.x, goal.y, target.ax, target.ay, (angle > 0 ? 20 : 14) * (style?.pace ?? 1), dt)
+      steer(division, goal.x, goal.y, target.ax, target.ay, (angle > 0 ? 20 : 14) * (style?.pace ?? 1), dt, !enemyInRange(state, division))
       division.hunt = targetId
       division.focus = true
       division.focusX = target.ax
@@ -497,7 +509,7 @@ function seatDivision(
     return
   }
   if (style.alongRanks) {
-    layoutRanks(division, members, style, placed, ships)
+    layoutRanks(division, members, style, placed, ships, enemyInRange(state, division))
     if (style.shareAim) aimGroups(state, division, members, unitOf, ships)
     return
   }
@@ -508,7 +520,8 @@ function seatDivision(
   for (let i = 0; i < members.length; i++) {
     const ship = members[i]
     if (ship === undefined) continue
-    if (shipUnderFire(ship) && ships.falling[ship] !== 1) continue
+    const waiting = placed[ship] !== 0 && (!enemyInRange(state, division) || (shipUnderFire(ship) && ships.falling[ship] !== 1))
+    if (waiting) continue
     const col = i % grid.across
     const row = Math.floor(i / grid.across)
     const idealX = (col - (grid.across - 1) / 2) * style.ship
@@ -562,6 +575,7 @@ function layoutRanks(
   style: UnitStyle,
   placed: Uint8Array,
   ships: SimState['ships'],
+  inRange: boolean,
 ): void {
   const ordered = members.slice().sort((a, b) => (ships.slotY[a] ?? 0) - (ships.slotY[b] ?? 0) || (ships.slotX[a] ?? 0) - (ships.slotX[b] ?? 0) || a - b)
   const rows: number[][] = []
@@ -591,7 +605,8 @@ function layoutRanks(
     for (let i = 0; i < group.length; i++) {
       const ship = group[i]
       if (ship === undefined) continue
-      if (shipUnderFire(ship) && ships.falling[ship] !== 1) continue
+      const waiting = placed[ship] !== 0 && (!inRange || (shipUnderFire(ship) && ships.falling[ship] !== 1))
+      if (waiting) continue
       const idealX = meanX + (i - (group.length - 1) / 2) * style.ship
       if (fresh) {
         ships.slotX[ship] = idealX
@@ -669,7 +684,6 @@ export function holdUnitStations(state: SimState, dt: number): void {
   const pace = 90 * dt
   for (let i = 0; i < ships.count; i++) {
     if (ships.alive[i] !== 1) continue
-    if (shipUnderFire(i) && ships.falling[i] !== 1) continue
     const side: SideId = ships.side[i] === 1 ? 1 : 0
     if (!UNIT_STYLE[variants[side]]) continue
     const division = state.divisions[ships.division[i] ?? 0]
