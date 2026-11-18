@@ -16,7 +16,7 @@ async function battle(
     state = dispatch(state, { type: 'tick', dt: 0.05 })
     ticks += 1
     // A blocked loop longer than Vitest's 60s RPC window fails the run after the assertion passes.
-    if (ticks % 100 === 0) await new Promise((resolve) => setImmediate(resolve))
+    if (ticks % 100 === 0) await new Promise((resolve) => setTimeout(resolve, 0))
     if (mid === 0 && state.time >= 20) mid = (state.dealt[0] ?? 0) + (state.dealt[1] ?? 0)
   }
   const dealt = (state.dealt[0] ?? 0) + (state.dealt[1] ?? 0)
