@@ -17,7 +17,7 @@ import { DECISION_INTERVAL, decidePolicy, defaultBrain, preferredFormation } fro
 import { observe } from './brain/observe.ts'
 import { stepPlan, updatePlan } from './posture.ts'
 import { applyDensity, DENSITY } from './density.ts'
-import { applyOperation, holdUnitStations, seatUnits } from './operation.ts'
+import { applyOperation } from './operation.ts'
 import { TACTICS, stepDivision, tacticById } from './tactics.ts'
 import {
   DEFAULT_COMMANDER,
@@ -394,7 +394,6 @@ function deployGrouped(state: SimState): void {
   state.alive[1] = alive[1]
   refreshCentroids(state)
   appointFlagships(state)
-  seatUnits(state)
 }
 
 function reflowAnchors(state: SimState): void {
@@ -918,7 +917,6 @@ function deploy(state: SimState): void {
   state.alive[1] = half
   refreshCentroids(state)
   appointFlagships(state)
-  seatUnits(state)
 }
 
 function placeSide(state: SimState, side: SideId, half: number): void {
@@ -1265,13 +1263,11 @@ function step(state: SimState, dt: number): void {
     const every = state.maneuver === 'shaped' ? RANKS.shapedInterval : RANKS.interval
     state.rankAt = state.time + every
   }
-  seatUnits(state)
   if (state.fallingN > 0) {
     cacheBows(state)
     refreshCover(state)
   }
   moveShips(state, dt)
-  holdUnitStations(state, dt)
   fight(state, dt)
   fadeEffects(state, dt)
   state.time += dt

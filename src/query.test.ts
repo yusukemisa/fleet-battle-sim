@@ -17,7 +17,7 @@ describe('battle query', () => {
 
   it('round-trips a non-default setup', () => {
     const search = battleSearch({
-      blue: 'u8a',
+      blue: 'r7a',
       red: 'table',
       cmdBlue: 'guard',
       cmdRed: 'cunning',
@@ -30,7 +30,7 @@ describe('battle query', () => {
       brainRed: 'rule',
     })
     const query = parseBattleQuery(new URLSearchParams(search.slice(1)))
-    expect(query.blue).toBe('u8a')
+    expect(query.blue).toBe('r7a')
     expect(query.red).toBe('table')
     expect(query.cmdBlue).toBe('guard')
     expect(query.cmdRed).toBe('cunning')
