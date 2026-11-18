@@ -197,6 +197,32 @@ function steer(div: Division, gx: number, gy: number, faceX: number, faceY: numb
   div.ry = -div.fx
 }
 
+/** Outside gun range, keep the approach slower than the lateral dress. */
+export function limitApproach(state: SimState, div: Division): void {
+  if (enemyInRange(state, div)) return
+  let nx = 0
+  let ny = 0
+  let best = Infinity
+  for (const other of state.divisions) {
+    if (other.side === div.side || other.alive <= 0) continue
+    const dx = other.ax - div.ax
+    const dy = other.ay - div.ay
+    const dist = hypot(dx, dy)
+    if (dist < best && dist > 1) {
+      best = dist
+      nx = dx / dist
+      ny = dy / dist
+    }
+  }
+  if (best === Infinity) return
+  const closing = div.vx * nx + div.vy * ny
+  const cap = 10
+  if (closing > cap) {
+    div.vx -= (closing - cap) * nx
+    div.vy -= (closing - cap) * ny
+  }
+}
+
 function personaOf(id: CommanderId | string, variant: TacticVariant): Persona {
   const base = PERSONA[id] ?? PERSONA.balanced
   if (!base) return PERSONA.balanced as Persona
@@ -360,6 +386,7 @@ export function applyOperation(state: SimState, dt: number): void {
       }
       const goal = place(target, axis, depth, lateral)
       steer(division, goal.x, goal.y, target.ax, target.ay, (angle > 0 ? 20 : 14) * (style?.pace ?? 1), dt, !enemyInRange(state, division))
+      if (style) limitApproach(state, division)
       division.hunt = targetId
       division.focus = true
       division.focusX = target.ax

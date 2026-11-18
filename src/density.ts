@@ -74,7 +74,7 @@ function spanOf(list: readonly Division[], ox: number, oy: number, basis: Frame)
   return max - min
 }
 
-function steer(div: Division, gx: number, gy: number, faceX: number, faceY: number, speed: number, dt: number): void {
+function steer(div: Division, gx: number, gy: number, faceX: number, faceY: number, speed: number, dt: number, gentle = false): void {
   const dx = gx - div.ax
   const dy = gy - div.ay
   const len = hypot(dx, dy)
@@ -97,7 +97,8 @@ function steer(div: Division, gx: number, gy: number, faceX: number, faceY: numb
   if (fl < 1e-4) return
   fx /= fl
   fy /= fl
-  const turn = 1 - Math.exp(-2.2 * CLASS_MODS[div.classId].turn * dt)
+  const rate = gentle ? 0.35 : 2.2 * CLASS_MODS[div.classId].turn
+  const turn = 1 - Math.exp(-rate * dt)
   div.fx += (fx - div.fx) * turn
   div.fy += (fy - div.fy) * turn
   const norm = hypot(div.fx, div.fy) || 1
@@ -141,7 +142,7 @@ function screenFlag(state: SimState, side: SideId, axis: Frame, flag: Division |
     }
   }
   if (!escort) return
-  steer(escort, flag.ax + axis.fx * 220, flag.ay + axis.fy * 220, threat.ax, threat.ay, 16, dt)
+  steer(escort, flag.ax + axis.fx * 220, flag.ay + axis.fy * 220, threat.ax, threat.ay, 16, dt, !inGunRange(state, escort))
 }
 
 /** 1 when the enemy fleet flagship is inside our longest bow range. */
@@ -373,9 +374,9 @@ function applyFleet(state: SimState, side: SideId, dt: number): void {
     if (!target) return
     const ordered = [...own].sort((a, b) => hypot(a.ax - target.ax, a.ay - target.ay) - hypot(b.ax - target.ax, b.ay - target.ay))
     ordered.forEach((div, index) => {
-      if (divisionUnderFire(state.divisions.indexOf(div)) || !inGunRange(state, div)) return
+      if (divisionUnderFire(state.divisions.indexOf(div))) return
       if (div.alive < div.roster * 0.15 && div !== strongest) {
-        steer(div, strongest.ax, strongest.ay, enemyX, enemyY, cruiseSpeed(nearestGap(div, enemy)), dt)
+        steer(div, strongest.ax, strongest.ay, enemyX, enemyY, cruiseSpeed(nearestGap(div, enemy)), dt, !inGunRange(state, div))
         return
       }
       const past = (div.ax - target.ax) * axis.fx + (div.ay - target.ay) * axis.fy > 90
@@ -391,6 +392,7 @@ function applyFleet(state: SimState, side: SideId, dt: number): void {
           target.ay,
           DENSITY.fan,
           dt,
+          !inGunRange(state, div),
         )
         return
       }
@@ -400,29 +402,29 @@ function applyFleet(state: SimState, side: SideId, dt: number): void {
       const gy = target.ay - axis.fy * back + axis.ly * nudge
       const toGoal = hypot(div.ax - gx, div.ay - gy)
       const paced = toGoal > 800 ? 30 : toGoal > 280 ? 18 : 12
-      steer(div, gx, gy, target.ax, target.ay, paced, dt)
+      steer(div, gx, gy, target.ax, target.ay, paced, dt, !inGunRange(state, div))
     })
     screenFlag(state, side, axis, flag, dt)
     return
   }
   if (shape === 'contract') {
     for (const div of own) {
-      if (divisionUnderFire(state.divisions.indexOf(div)) || !inGunRange(state, div)) continue
+      if (divisionUnderFire(state.divisions.indexOf(div))) continue
       if (div.alive < div.roster * 0.15 && div !== strongest) {
-        steer(div, strongest.ax, strongest.ay, enemyX, enemyY, DENSITY.cruise, dt)
+        steer(div, strongest.ax, strongest.ay, enemyX, enemyY, DENSITY.cruise, dt, !inGunRange(state, div))
         continue
       }
       const across = lateral(div, ownX, ownY, basis) * 0.62
       const along = forward(div, ownX, ownY, basis)
-      steer(div, ownX + basis.fx * (along + 30) + basis.lx * across, ownY + basis.fy * (along + 30) + basis.ly * across, enemyX, enemyY, DENSITY.cruise, dt)
+      steer(div, ownX + basis.fx * (along + 30) + basis.lx * across, ownY + basis.fy * (along + 30) + basis.ly * across, enemyX, enemyY, DENSITY.cruise, dt, !inGunRange(state, div))
     }
     screenFlag(state, side, axis, flag, dt)
     return
   }
   for (const div of own) {
-    if (divisionUnderFire(state.divisions.indexOf(div)) || !inGunRange(state, div)) continue
+    if (divisionUnderFire(state.divisions.indexOf(div))) continue
     if (div.alive < div.roster * 0.15 && div !== strongest) {
-      steer(div, strongest.ax, strongest.ay, enemyX, enemyY, DENSITY.cruise, dt)
+      steer(div, strongest.ax, strongest.ay, enemyX, enemyY, DENSITY.cruise, dt, !inGunRange(state, div))
       continue
     }
     const now = (div.ax - ownX) * axis.lx + (div.ay - ownY) * axis.ly
@@ -439,6 +441,7 @@ function applyFleet(state: SimState, side: SideId, dt: number): void {
       target.ay,
       paced,
       dt,
+      !inGunRange(state, div),
     )
   }
   screenFlag(state, side, axis, flag, dt)
