@@ -467,8 +467,8 @@ export const STRAY = {
  */
 export const BLAST = {
   reach: 5.5,
-  power: 0.4,
-  cap: 6,
+  power: 1.8,
+  cap: 16,
   /** Explosions resolved per step, so a cascade cannot walk the whole fleet. */
   max: 36,
 } as const
@@ -479,13 +479,16 @@ export const BLAST = {
  * When the heavier mass is at least `massRatio` times the lighter, only the lighter
  * dies. Battleship against cruiser is 2.9, so both die. Cruiser against destroyer is
  * 3.3, and battleship against destroyer is 9.5, so only the destroyer dies.
- * A brush slower than `closing` is pushed apart and both live.
- * The step resolves at most `maxPairs` lethal collisions. Later overlaps are only pushed apart.
+ * Any overlap also grinds both hulls. Damage per second is
+ * `grind * depth * (creep + relative speed) * otherMass`, so a heavier hull
+ * hurts more and a slow overlap still adds up. `closing` remains the speed
+ * that destroys on impact, by the mass rule above.
  */
 export const COLLISION = {
   closing: 64,
   massRatio: 3,
-  maxPairs: 48,
+  grind: 0.04,
+  creep: 8,
 } as const
 
 /** How often a division reorders wounded ships behind healthy ones. */

@@ -415,6 +415,8 @@ export interface SimState {
   ram: number
   /** Ships destroyed by a hull collision, per side. */
   collisionDeaths: [number, number]
+  /** Ships sunk by a neighbor's explosion, per side. */
+  blastDeaths: [number, number]
   /** Of that damage, the share landed by destroyers. */
   destroyerDealt: [number, number]
   commandAt: number

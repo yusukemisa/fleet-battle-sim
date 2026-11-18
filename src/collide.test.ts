@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { HULL_RADIUS, hullRadius } from './balance.ts'
+import { BLAST, HULL_RADIUS, hullRadius } from './balance.ts'
 import { separateShips } from './collide.ts'
+import { shipMark } from './draw.ts'
 import { shotBlocked } from './gunnery.ts'
 import { createSim, dispatch } from './sim.ts'
 import { fillSpatialHash } from './spatial.ts'
@@ -31,7 +32,7 @@ describe('hulls', () => {
     expect(gap).toBeGreaterThan(HULL_RADIUS[0] + HULL_RADIUS[2] - 0.2)
   })
 
-  it('destroys only the lighter hull in a ram, both hulls of equal weight, and ignores a brush', () => {
+  it('damages both hulls in a slow overlap, and a repeated overlap can sink the lighter one', () => {
     const state = createSim({ shipCount: 100, commanders: ['manual', 'manual'] })
     const ships = state.ships
     ships.alive.fill(0)
@@ -51,8 +52,38 @@ describe('hulls', () => {
     ships.vy[1] = 0
     separateShips(state)
     expect(state.collisionDeaths[0] + state.collisionDeaths[1]).toBe(0)
-    expect(ships.hp[0]).toBe(54)
-    expect(ships.hp[1]).toBe(18)
+    expect(ships.hp[0] ?? 0).toBeLessThan(54)
+    expect(ships.hp[1] ?? 0).toBeLessThan(18)
+    expect(ships.hp[1] ?? 0).toBeGreaterThan(0)
+    expect(54 - (ships.hp[0] ?? 0)).toBeLessThan(18 - (ships.hp[1] ?? 0))
+    let sunk = false
+    for (let step = 0; step < 30; step++) {
+      ships.x[0] = 0
+      ships.y[0] = 0
+      ships.x[1] = 4
+      ships.y[1] = 0
+      ships.vx[0] = 0
+      ships.vx[1] = 0
+      separateShips(state)
+      if ((ships.hp[1] ?? 0) <= 0) {
+        sunk = true
+        break
+      }
+    }
+    expect(sunk).toBe(true)
+    expect(state.collisionDeaths[0] + state.collisionDeaths[1]).toBe(1)
+  })
+
+  it('destroys only the lighter hull in a fast ram, and both hulls of equal weight', () => {
+    const state = createSim({ shipCount: 100, commanders: ['manual', 'manual'] })
+    const ships = state.ships
+    ships.alive.fill(0)
+    ships.alive[0] = 1
+    ships.alive[1] = 1
+    ships.shipClass[0] = 0
+    ships.shipClass[1] = 2
+    ships.hp[0] = 54
+    ships.hp[1] = 18
     ships.x[0] = 0
     ships.y[0] = 0
     ships.x[1] = 4
@@ -60,7 +91,8 @@ describe('hulls', () => {
     ships.vx[0] = 40
     ships.vx[1] = -40
     separateShips(state)
-    expect(ships.hp[0]).toBe(54)
+    expect(ships.hp[0] ?? 0).toBeLessThan(54)
+    expect(ships.hp[0] ?? 0).toBeGreaterThan(0)
     expect(ships.hp[1]).toBe(0)
     expect(state.collisionDeaths.reduce((sum, value) => sum + value, 0)).toBe(1)
     ships.alive[2] = 1
@@ -80,7 +112,7 @@ describe('hulls', () => {
     expect(ships.hp[3]).toBe(0)
   })
 
-  it('caps how many lethal collisions one step will resolve', () => {
+  it('damages every overlapping pair in one step', () => {
     const state = createSim({ shipCount: 1000, commanders: ['manual', 'manual'] })
     const ships = state.ships
     ships.alive.fill(0)
@@ -102,11 +134,71 @@ describe('hulls', () => {
     }
     separateShips(state)
     const dead = state.collisionDeaths[0] + state.collisionDeaths[1]
-    expect(dead).toBeLessThanOrEqual(48 * 2)
-    expect(dead).toBeGreaterThan(0)
+    expect(dead).toBe(160)
+  })
+
+  it('lets a sinking hull wound a friend, and stops the chain at the step limit', () => {
+    const state = createSim({ shipCount: 100, commanders: ['manual', 'manual'] })
+    const ships = state.ships
+    ships.alive.fill(0)
+    ships.alive[0] = 1
+    ships.alive[1] = 1
+    ships.side[0] = 0
+    ships.side[1] = 0
+    ships.shipClass[0] = 0
+    ships.shipClass[1] = 2
+    ships.hp[0] = 0
+    ships.hp[1] = 18
+    ships.x[0] = 0
+    ships.y[0] = 0
+    ships.x[1] = 16
+    ships.y[1] = 0
+    ships.division[0] = 0
+    ships.division[1] = 0
+    const anchor = state.divisions[0]
+    if (!anchor) throw new Error('division')
+    anchor.ax = 0
+    anchor.ay = 0
+    let running = dispatch(state, { type: 'set-speed', speed: 1 })
+    running = dispatch(running, { type: 'start' })
+    running = dispatch(running, { type: 'tick', dt: 0.05 })
+    expect(running.ships.alive[0]).toBe(0)
+    expect(running.ships.hp[1] ?? 0).toBeLessThan(18)
+
+    const chain = createSim({ shipCount: 1000, commanders: ['manual', 'manual'] })
+    const packed = chain.ships
+    packed.alive.fill(0)
+    const line = chain.divisions[0]
+    if (!line) throw new Error('division')
+    line.ax = 0
+    line.ay = 0
+    for (let i = 0; i < 400; i++) {
+      packed.alive[i] = 1
+      packed.side[i] = 0
+      packed.shipClass[i] = 2
+      packed.division[i] = 0
+      packed.hp[i] = 1
+      packed.x[i] = i * 3
+      packed.y[i] = 0
+      packed.slotX[i] = 0
+      packed.slotY[i] = i * 3
+    }
+    packed.hp[0] = 0
+    let stepped = dispatch(chain, { type: 'set-speed', speed: 1 })
+    stepped = dispatch(stepped, { type: 'start' })
+    stepped = dispatch(stepped, { type: 'tick', dt: 0.05 })
+    expect(stepped.scratch.blasts).toBe(BLAST.max)
     let spared = 0
-    for (let i = 0; i < 160; i++) if ((ships.hp[i] ?? 0) > 0) spared += 1
+    for (let i = 0; i < 400; i++) if ((stepped.ships.hp[i] ?? 0) > 0) spared += 1
     expect(spared).toBeGreaterThan(0)
+  })
+
+  it('draws a hull about as long as its collision diameter', () => {
+    const mark = shipMark(1, HULL_RADIUS[0], 1.7, 1.55)
+    expect(mark.halfLen * 2).toBeCloseTo(HULL_RADIUS[0] * 2, 5)
+    expect(mark.hullW).toBeLessThan(mark.halfLen * 2)
+    const far = shipMark(0.01, HULL_RADIUS[0], 1.7, 1.55)
+    expect(far.halfLen * 2).toBeGreaterThan(HULL_RADIUS[0] * 2 * 0.01)
   })
 
   it('does not fire through a hull sitting on the line', () => {

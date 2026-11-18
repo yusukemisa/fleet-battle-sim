@@ -352,6 +352,8 @@ function deployGrouped(state: SimState): void {
   state.ram = 0
   state.collisionDeaths[0] = 0
   state.collisionDeaths[1] = 0
+  state.blastDeaths[0] = 0
+  state.blastDeaths[1] = 0
   state.destroyerDealt[0] = 0
   state.destroyerDealt[1] = 0
   state.tally.shots = 0
@@ -753,6 +755,7 @@ function allocate(
     dealt: [0, 0],
     ram: 0,
     collisionDeaths: [0, 0],
+    blastDeaths: [0, 0],
     destroyerDealt: [0, 0],
     commandAt: 0,
     log: [],
@@ -871,6 +874,8 @@ function deploy(state: SimState): void {
   state.ram = 0
   state.collisionDeaths[0] = 0
   state.collisionDeaths[1] = 0
+  state.blastDeaths[0] = 0
+  state.blastDeaths[1] = 0
   state.destroyerDealt[0] = 0
   state.destroyerDealt[1] = 0
   const tally = state.tally
@@ -2015,7 +2020,11 @@ export function explode(state: SimState, index: number): void {
     const before = ships.hp[ship] ?? 0
     ships.hp[ship] = before - blow
     ships.flash[ship] = 1
-    if ((ships.hp[ship] ?? 0) <= 0) destroy(state, ship)
+    if ((ships.hp[ship] ?? 0) <= 0) {
+      const side: SideId = ships.side[ship] === 1 ? 1 : 0
+      state.blastDeaths[side] += 1
+      destroy(state, ship)
+    }
   }
 }
 

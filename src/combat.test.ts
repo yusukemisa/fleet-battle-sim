@@ -196,8 +196,8 @@ function station(state: SimState, side: SideId, originX: number, originY: number
     const at = offset + i
     const col = i % 10
     const row = Math.floor(i / 10)
-    ships.x[at] = originX + rx * (col - 4.5) * 8 + fx * (row - 2) * 8
-    ships.y[at] = originY + ry * (col - 4.5) * 8 + fy * (row - 2) * 8
+    ships.x[at] = originX + rx * (col - 4.5) * 22 + fx * (row - 2) * 22
+    ships.y[at] = originY + ry * (col - 4.5) * 22 + fy * (row - 2) * 22
     ships.heading[at] = heading
     ships.vx[at] = 0
     ships.vy[at] = 0

@@ -1,4 +1,4 @@
-import { CLASS_MODS, FIELD, SHIP_CLASS_IDS, classMods } from './balance.ts'
+import { CLASS_MODS, FIELD, SHIP_CLASS_IDS, classMods, hullRadius } from './balance.ts'
 import { divisionCommandRadius, fleetCommandRadius } from './flagship.ts'
 import { orderPoints } from './move.ts'
 import { coverTint, pathCrossesBow, shipUnderFire } from './threat.ts'
@@ -53,19 +53,18 @@ export function draw(
   }
   ctx.globalAlpha = 1
 
-  const size = blockSize(camera.zoom, state.ships.count)
   if (state.fleets.length > 2) {
     for (const fleet of state.fleets) {
       if (fleet.ships <= 0) continue
       const shade = (fleet.side === 0 ? BLUE_SHADES : RED_SHADES)[fleet.ordinal] ?? BLUE
-      paintFleet(ctx, state, camera, width, height, size, fleet.index, shade)
+      paintFleet(ctx, state, camera, width, height, fleet.index, shade)
     }
   } else {
-    paintShips(ctx, state, camera, width, height, size, 0, BLUE)
-    paintShips(ctx, state, camera, width, height, size, 1, RED)
+    paintShips(ctx, state, camera, width, height, 0, BLUE)
+    paintShips(ctx, state, camera, width, height, 1, RED)
   }
-  paintFlashes(ctx, state, camera, width, height, size)
-  if (coverTint()) paintCover(ctx, state, camera, width, height, size)
+  paintFlashes(ctx, state, camera, width, height)
+  if (coverTint()) paintCover(ctx, state, camera, width, height, blockSize(camera.zoom, state.ships.count))
   paintFlagships(ctx, state, camera, width, height)
 
   strokeBeams(ctx, state, camera, width, height)
@@ -126,7 +125,6 @@ function paintFleet(
   camera: Camera,
   width: number,
   height: number,
-  size: number,
   fleetIndex: number,
   color: string,
 ): void {
@@ -135,8 +133,9 @@ function paintFleet(
   ctx.lineCap = 'butt'
   for (let klass = 0; klass < SHIP_CLASS_IDS.length; klass++) {
     const mods = classMods(klass)
-    const hullW = Math.max(0.5, size * 0.7 * mods.girth)
-    const halfLen = Math.max(hullW * 0.9, size * 0.9 * mods.length)
+    const mark = shipMark(camera.zoom, hullRadius(klass), mods.girth, mods.length)
+    const hullW = mark.hullW
+    const halfLen = mark.halfLen
     ctx.lineWidth = hullW
     ctx.beginPath()
     const bow = new Path2D()
@@ -168,7 +167,6 @@ function paintShips(
   camera: Camera,
   width: number,
   height: number,
-  size: number,
   side: 0 | 1,
   color: string,
 ): void {
@@ -177,8 +175,9 @@ function paintShips(
   ctx.lineCap = 'butt'
   for (let klass = 0; klass < SHIP_CLASS_IDS.length; klass++) {
     const mods = classMods(klass)
-    const hullW = Math.max(0.5, size * 0.7 * mods.girth)
-    const halfLen = Math.max(hullW * 0.9, size * 0.9 * mods.length)
+    const mark = shipMark(camera.zoom, hullRadius(klass), mods.girth, mods.length)
+    const hullW = mark.hullW
+    const halfLen = mark.halfLen
     ctx.lineWidth = hullW
     ctx.beginPath()
     const bow = new Path2D()
@@ -209,13 +208,12 @@ function paintFlashes(
   camera: Camera,
   width: number,
   height: number,
-  size: number,
 ): void {
   const ships = state.ships
   const stride = ships.count >= 10000 ? 3 : ships.count >= 4000 ? 2 : 1
   const cap = ships.count >= 10000 ? 500 : 1600
   ctx.strokeStyle = 'rgba(244, 241, 223, 0.5)'
-  ctx.lineWidth = Math.max(0.5, size * 0.28)
+  ctx.lineWidth = Math.max(0.4, camera.zoom * 1.6)
   ctx.beginPath()
   let drawn = 0
   for (let i = state.frame % stride; i < ships.count; i += stride) {
@@ -226,7 +224,7 @@ function paintFlashes(
     const heading = ships.heading[i] ?? 0
     const hx = Math.cos(heading)
     const hy = -Math.sin(heading)
-    const mark = Math.max(1.2, size * 0.45)
+    const mark = Math.max(0.6, hullRadius(ships.shipClass[i] ?? 0) * camera.zoom)
     ctx.moveTo(p.x - hx * mark, p.y - hy * mark)
     ctx.lineTo(p.x + hx * mark, p.y + hy * mark)
   }
@@ -390,6 +388,19 @@ function slotBox(state: SimState, index: number): { minX: number; maxX: number; 
 function blockSize(zoom: number, count: number): number {
   const unit = count >= 24000 ? 1.5 : count >= 16000 ? 2 : count >= 10000 ? 2.6 : count >= 1000 ? 4 : 9
   return Math.max(1.2, Math.min(13, zoom * unit))
+}
+
+/**
+ * Length of the drawn hull, in pixels, matches the collision diameter.
+ * Under about one pixel the mark stays a short stroke so a zoomed-out fleet
+ * is still visible, and those dots are a little fatter than the real hulls.
+ */
+export function shipMark(zoom: number, radius: number, girth: number, length: number): { hullW: number; halfLen: number } {
+  const drawnLength = Math.max(0.8, radius * 2 * zoom)
+  const body = 1.8 * length
+  const beam = 0.7 * girth
+  const hullW = drawnLength * (beam / body)
+  return { hullW: Math.max(0.35, hullW), halfLen: drawnLength / 2 }
 }
 
 function paintFlagships(

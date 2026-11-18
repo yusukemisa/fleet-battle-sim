@@ -191,8 +191,8 @@ function aheadThreat(vx: number, vy: number, rx: number, ry: number, dist: numbe
   return ahead > 0.55
 }
 
-/** Push overlapping hulls apart. A closing overlap destroys one or both ships. */
-export function separateShips(state: SimState, _dt = 0.1): void {
+/** Push overlapping hulls apart. Every overlap damages both ships. A fast close still kills. */
+export function separateShips(state: SimState, dt = 0.1): void {
   const ships = state.ships
   const hash = state.scratch.collide
   const count = ships.count
@@ -204,7 +204,6 @@ export function separateShips(state: SimState, _dt = 0.1): void {
   const vxs = ships.vx
   const vys = ships.vy
   fillSpatialHash(hash, xs, ys, alive, count)
-  let pairs = 0
   for (let i = 0; i < count; i++) {
     if (alive[i] === 0 || (hp[i] ?? 0) <= 0) continue
     const ri = HULL_RADIUS[klass[i] ?? 0] ?? HULL_RADIUS[1]
@@ -229,18 +228,22 @@ export function separateShips(state: SimState, _dt = 0.1): void {
       const nx = dx / dist
       const ny = dy / dist
       const closing = ((vxs[i] ?? 0) - (vxs[j] ?? 0)) * nx + ((vys[i] ?? 0) - (vys[j] ?? 0)) * ny
-      if (closing > COLLISION.closing && pairs < COLLISION.maxPairs) {
-        pairs += 1
-        const heavy = massOf(klass[i] ?? 0)
-        const light = massOf(klass[j] ?? 0)
-        if (heavy >= light * COLLISION.massRatio) kill(state, j)
-        else if (light >= heavy * COLLISION.massRatio) kill(state, i)
+      const massI = massOf(klass[i] ?? 0)
+      const massJ = massOf(klass[j] ?? 0)
+      if (closing > COLLISION.closing) {
+        if (massI >= massJ * COLLISION.massRatio) kill(state, j)
+        else if (massJ >= massI * COLLISION.massRatio) kill(state, i)
         else {
           kill(state, i)
           kill(state, j)
         }
       }
       const overlap = min - dist
+      const rel = Math.hypot((vxs[i] ?? 0) - (vxs[j] ?? 0), (vys[i] ?? 0) - (vys[j] ?? 0))
+      const depth = Math.min(1, overlap / min)
+      const blow = COLLISION.grind * depth * (COLLISION.creep + rel) * dt
+      scrape(state, i, blow * massJ)
+      scrape(state, j, blow * massI)
       const shareI = rj / (ri + rj)
       const shareJ = ri / (ri + rj)
       x -= nx * overlap * shareI
@@ -252,5 +255,22 @@ export function separateShips(state: SimState, _dt = 0.1): void {
       xs[j] = (xs[j] ?? 0) + nx * overlap * shareJ
       ys[j] = (ys[j] ?? 0) + ny * overlap * shareJ
     }
+  }
+}
+
+function scrape(state: SimState, index: number, amount: number): void {
+  if (amount <= 0) return
+  const ships = state.ships
+  if (ships.alive[index] !== 1) return
+  const before = ships.hp[index] ?? 0
+  if (before <= 0) return
+  const dealt = Math.min(before, amount)
+  ships.hp[index] = before - dealt
+  ships.flash[index] = 1
+  state.ram += dealt
+  if ((ships.hp[index] ?? 0) <= 0) {
+    ships.hp[index] = 0
+    const side = ships.side[index] === 1 ? 1 : 0
+    state.collisionDeaths[side] += 1
   }
 }
