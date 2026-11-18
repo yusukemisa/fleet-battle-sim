@@ -1,4 +1,5 @@
-import { CLASS_MODS, CLASS_STATS, classIndex, SHIP_STATS } from './balance.ts'
+import { BLAST, CLASS_MODS, CLASS_STATS, classIndex, hullRadius, SHIP_STATS } from './balance.ts'
+import { collectNear } from './spatial.ts'
 import { shipUnderFire } from './threat.ts'
 import type { CommanderId, Division, SideId, SimState } from './types.ts'
 
@@ -7,7 +8,7 @@ import type { CommanderId, Division, SideId, SimState } from './types.ts'
  * anvil's depth. `main` is the older movement, kept for comparison.
  * One fleet against one fleet, and only a side with at least 400 ships.
  */
-export const TACTIC_VARIANTS = ['main', 'table', 'r7a', 'r7b', 'r7c', 'u8a', 'u8b', 'u8c', 'u8d', 'u9a', 'u9b', 'u9c'] as const
+export const TACTIC_VARIANTS = ['main', 'table', 'r7a', 'r7b', 'r7c', 'u8a', 'u8b', 'u8c', 'u8d', 'u9a', 'u9b', 'u9c', 'u10a', 'u10b', 'u10c'] as const
 export type TacticVariant = (typeof TACTIC_VARIANTS)[number]
 
 /** What a fresh battle does before anyone picks a variant. */
@@ -70,6 +71,21 @@ export const VARIANT_CHOICES: readonly { id: TacticVariant; label: string; title
     label: '列を揃えて同じ的',
     title: '開戦の列を横に揃え、10隻が同じ敵を狙います。隊は槌の間隔のまま進み、開戦時に隊列を組み直しません。',
   },
+  {
+    id: 'u10a',
+    label: '10隻、接触を避ける',
+    title: '10隻の横隊です。隣の艦とは船体と、曲がって止まる分だけ空けます。開戦の並びのまま、その後は席を動かしません。',
+  },
+  {
+    id: 'u10b',
+    label: '10隻、爆風を止める',
+    title: '同じ横隊です。10隻の列と列のあいだは、戦艦の爆発が届かないだけ空けます。隊が重なるときは横へ開きます。',
+  },
+  {
+    id: 'u10c',
+    label: '10隻、砲下は直進',
+    title: '爆風の隙間は同じです。敵の砲の下では席を横に追わず、針路のまま進むか止まります。味方の船体には踏み込みません。',
+  },
 ]
 
 interface Persona {
@@ -108,6 +124,9 @@ const ALIAS: Record<string, TacticVariant> = {
   u9a: 'u9a',
   u9b: 'u9b',
   u9c: 'u9c',
+  u10a: 'u10a',
+  u10b: 'u10b',
+  u10c: 'u10c',
 }
 
 let variants: [TacticVariant, TacticVariant] = [DEFAULT_VARIANT, DEFAULT_VARIANT]
@@ -140,6 +159,9 @@ interface Book {
   unitOf: Int16Array | null
   seq: Int16Array | null
   placed: Uint8Array | null
+  /** Lateral floor so a cleared line is not pulled back into the next division. */
+  span: Float32Array | null
+  fitted: [boolean, boolean]
 }
 
 const books = new WeakMap<SimState, Book>()
@@ -147,7 +169,7 @@ const books = new WeakMap<SimState, Book>()
 function bookOf(state: SimState): Book {
   let book = books.get(state)
   if (!book) {
-    book = { pin: [-1, -1], cue: [-1, -1], seen: [[], []], unitOf: null, seq: null, placed: null }
+    book = { pin: [-1, -1], cue: [-1, -1], seen: [[], []], unitOf: null, seq: null, placed: null, span: null, fitted: [false, false] }
     books.set(state, book)
   }
   return book
@@ -284,6 +306,23 @@ function frameOf(anvil: Division, target: Division, wing: Division | undefined):
   return { fx, fy, lx, ly }
 }
 
+function lateralFrom(
+  state: SimState,
+  division: Division,
+  anvil: Division,
+  axis: { lx: number; ly: number },
+  hammer: number,
+  style: UnitStyle | undefined,
+): number {
+  if (!style?.fit) return hammer
+  const book = bookOf(state)
+  const span = book.span
+  const index = state.divisions.indexOf(division)
+  const floor = span && index >= 0 ? (span[index] ?? 0) : 0
+  const sign = hammer !== 0 ? Math.sign(hammer) : Math.sign((division.ax - anvil.ax) * axis.lx + (division.ay - anvil.ay) * axis.ly) || 1
+  return sign * Math.max(Math.abs(hammer), floor)
+}
+
 function place(target: Division, axis: { fx: number; fy: number; lx: number; ly: number }, depth: number, lateral: number): { x: number; y: number } {
   return {
     x: target.ax - axis.fx * depth + axis.lx * lateral,
@@ -384,7 +423,7 @@ export function applyOperation(state: SimState, dt: number): void {
           depth = holdsRank(variant) ? hold : hold - span * Math.sin(rad)
         }
       }
-      const goal = place(target, axis, depth, lateral)
+      const goal = place(target, axis, depth, lateralFrom(state, division, anvil, axis, lateral, style))
       steer(division, goal.x, goal.y, target.ax, target.ay, (angle > 0 ? 20 : 14) * (style?.pace ?? 1), dt, !enemyInRange(state, division))
       if (style) limitApproach(state, division)
       division.hunt = targetId
@@ -424,6 +463,14 @@ interface UnitStyle {
   freeze: boolean
   /** Keep division goals on the hammer line (380 / 740) instead of the block width. */
   line: boolean
+  /** `class` spaces hulls by radius plus the turn-and-stop room. `blast` also separates each rank by an explosion. */
+  clear?: 'class' | 'blast'
+  /** Under fire, follow the bow instead of sliding toward a seat. */
+  straight?: boolean
+  /** Do not step a ship into a friendly hull while it returns to its seat. */
+  yield?: boolean
+  /** Remember a wider lateral gap when the cleared ranks would otherwise meet. */
+  fit?: boolean
 }
 
 const UNIT_STYLE: Partial<Record<TacticVariant, UnitStyle>> = {
@@ -434,6 +481,9 @@ const UNIT_STYLE: Partial<Record<TacticVariant, UnitStyle>> = {
   u9a: { ship: 32, rank: 72, file: 48, files: 2, merge: false, shareAim: true, close: 0, spread: 1, crescent: 0, centerAspect: 4, pace: 1, keepCenter: false, alongRanks: false, freeze: true, line: true },
   u9b: { ship: 36, rank: 72, file: 48, files: 2, merge: false, shareAim: true, close: 0, spread: 1, crescent: 0, centerAspect: 4, pace: 1, keepCenter: false, alongRanks: false, freeze: false, line: true },
   u9c: { ship: 32, rank: 72, file: 48, files: 2, merge: false, shareAim: true, close: 0, spread: 1, crescent: 0, centerAspect: 4, pace: 1, keepCenter: false, alongRanks: true, freeze: false, line: true },
+  u10a: { ship: 24, rank: 40, file: 48, files: 1, merge: false, shareAim: true, close: 0, spread: 1, crescent: 0, centerAspect: 4, pace: 1, keepCenter: false, alongRanks: false, freeze: true, line: true, clear: 'class', yield: true, fit: true },
+  u10b: { ship: 24, rank: 42, file: 48, files: 1, merge: false, shareAim: true, close: 0, spread: 1, crescent: 0, centerAspect: 4, pace: 1, keepCenter: false, alongRanks: false, freeze: true, line: true, clear: 'blast', yield: true, fit: true },
+  u10c: { ship: 24, rank: 42, file: 48, files: 1, merge: false, shareAim: true, close: 0, spread: 1, crescent: 0, centerAspect: 4, pace: 1, keepCenter: false, alongRanks: false, freeze: true, line: true, clear: 'blast', straight: true, yield: true, fit: true },
 }
 
 export function wideGrid(count: number, aspect = 4): { across: number; depth: number } {
@@ -478,6 +528,10 @@ export function seatUnits(state: SimState): void {
       if (!division || division.side !== side || division.alive <= 0) continue
       seatDivision(state, division, index, style, unitOf, seq, placed)
     }
+    if (style.fit && !bookOf(state).fitted[side]) {
+      rememberSpan(state, side)
+      bookOf(state).fitted[side] = true
+    }
   }
 }
 
@@ -497,6 +551,11 @@ function seatDivision(
     members.push(i)
   }
   if (members.length === 0) return
+  if (style.clear) {
+    openClear(division, members, style, unitOf, seq, placed, ships)
+    if (style.shareAim) aimGroups(state, division, members, unitOf, ships)
+    return
+  }
   if (style.keepCenter && division.slot === 2) return
   const fresh = members.filter((ship) => (seq[ship] ?? -1) < 0)
   fresh.sort((a, b) => (ships.slotX[a] ?? 0) - (ships.slotX[b] ?? 0) || (ships.slotY[a] ?? 0) - (ships.slotY[b] ?? 0) || a - b)
@@ -584,6 +643,144 @@ function seatDivision(
       }
       aimUnit(state, division, list, sx / list.length, sy / list.length)
     }
+  }
+}
+
+function stopRoom(radius: number): number {
+  if (radius >= 7) return 10
+  if (radius >= 4) return 6
+  return 4
+}
+
+function pairPitch(classA: number, classB: number, blast: boolean): number {
+  const left = hullRadius(classA)
+  const right = hullRadius(classB)
+  const touch = left + right + Math.max(stopRoom(left), stopRoom(right))
+  if (!blast) return touch
+  return Math.max(touch, Math.max(left, right) * BLAST.reach + 2)
+}
+
+function heaviest(ships: SimState['ships'], list: readonly number[]): number {
+  let best = 0
+  let radius = 0
+  for (const ship of list) {
+    const klass = ships.shipClass[ship] ?? 0
+    const size = hullRadius(klass)
+    if (size > radius) {
+      radius = size
+      best = klass
+    }
+  }
+  return best
+}
+
+function openClear(
+  division: Division,
+  members: number[],
+  style: UnitStyle,
+  unitOf: Int16Array,
+  seq: Int16Array,
+  placed: Uint8Array,
+  ships: SimState['ships'],
+): void {
+  if (members.every((ship) => placed[ship] !== 0)) {
+    for (const ship of members) {
+      ships.slotX[ship] = ships.homeX[ship] ?? 0
+      if (ships.falling[ship] !== 1) ships.slotY[ship] = ships.homeY[ship] ?? 0
+    }
+    return
+  }
+  const ordered = members.slice().sort((a, b) => (ships.homeY[b] ?? 0) - (ships.homeY[a] ?? 0) || (ships.homeX[a] ?? 0) - (ships.homeX[b] ?? 0) || a - b)
+  const units: number[][] = []
+  for (let i = 0; i < ordered.length; i += 10) units.push(ordered.slice(i, i + 10))
+  const blast = style.clear === 'blast'
+  const seats: { ship: number; x: number; y: number }[] = []
+  let depth = 0
+  for (let row = 0; row < units.length; row++) {
+    const unit = units[row]
+    if (!unit || unit.length === 0) continue
+    const along: number[] = [0]
+    for (let col = 1; col < unit.length; col++) {
+      const prev = unit[col - 1]
+      const ship = unit[col]
+      if (prev === undefined || ship === undefined) continue
+      along.push((along[col - 1] ?? 0) + pairPitch(ships.shipClass[prev] ?? 0, ships.shipClass[ship] ?? 0, false))
+    }
+    const mid = ((along[0] ?? 0) + (along[unit.length - 1] ?? 0)) / 2
+    for (let col = 0; col < unit.length; col++) {
+      const ship = unit[col]
+      if (ship === undefined) continue
+      seats.push({ ship, x: (along[col] ?? 0) - mid, y: depth })
+    }
+    const next = units[row + 1]
+    if (next && next.length > 0) depth -= pairPitch(heaviest(ships, unit), heaviest(ships, next), blast)
+  }
+  let meanY = 0
+  for (const seat of seats) meanY += seat.y
+  meanY /= Math.max(1, seats.length)
+  let nextSeq = 0
+  for (let row = 0; row < units.length; row++) {
+    const unit = units[row]
+    if (!unit) continue
+    for (const ship of unit) {
+      unitOf[ship] = row
+      seq[ship] = nextSeq
+      nextSeq += 1
+    }
+  }
+  for (const seat of seats) {
+    ships.slotX[seat.ship] = seat.x
+    ships.slotY[seat.ship] = seat.y - meanY
+    ships.homeX[seat.ship] = seat.x
+    ships.homeY[seat.ship] = seat.y - meanY
+    placed[seat.ship] = 1
+    snapShip(division, ships, seat.ship)
+  }
+}
+
+function rememberSpan(state: SimState, side: SideId): void {
+  const own = state.divisions.filter((division) => division.side === side && division.alive > 0)
+  if (own.length === 0) return
+  const anvil = own.find((division) => division.slot === 2) ?? own[0]
+  if (!anvil) return
+  const lateralOf = (division: Division) => division.ax * anvil.rx + division.ay * anvil.ry
+  const halfOf = (division: Division) => {
+    const index = state.divisions.indexOf(division)
+    let half = hullRadius(classIndex(division.classId))
+    const ships = state.ships
+    for (let i = 0; i < ships.count; i++) {
+      if (ships.alive[i] !== 1 || ships.division[i] !== index) continue
+      half = Math.max(half, Math.abs(ships.slotX[i] ?? 0) + hullRadius(ships.shipClass[i] ?? 0))
+    }
+    return half
+  }
+  const ordered = own.slice().sort((a, b) => lateralOf(a) - lateralOf(b))
+  const seam = (left: Division, right: Division) => pairPitch(classIndex(left.classId), classIndex(right.classId), true)
+  for (let i = 1; i < ordered.length; i++) {
+    const prev = ordered[i - 1]
+    const cur = ordered[i]
+    if (!prev || !cur) continue
+    const need = halfOf(prev) + halfOf(cur) + seam(prev, cur) - (lateralOf(cur) - lateralOf(prev))
+    if (need <= 0) continue
+    for (let j = i; j < ordered.length; j++) {
+      const division = ordered[j]
+      if (!division) continue
+      division.ax += anvil.rx * need
+      division.ay += anvil.ry * need
+      const index = state.divisions.indexOf(division)
+      const ships = state.ships
+      for (let ship = 0; ship < ships.count; ship++) {
+        if (ships.alive[ship] !== 1 || ships.division[ship] !== index) continue
+        snapShip(division, ships, ship)
+      }
+    }
+  }
+  const book = bookOf(state)
+  if (!book.span || book.span.length < state.divisions.length) book.span = new Float32Array(state.divisions.length)
+  for (const division of own) {
+    const index = state.divisions.indexOf(division)
+    if (index < 0 || !book.span) continue
+    book.span[index] = Math.abs(lateralOf(division) - lateralOf(anvil))
   }
 }
 
@@ -712,19 +909,54 @@ export function holdUnitStations(state: SimState, dt: number): void {
   for (let i = 0; i < ships.count; i++) {
     if (ships.alive[i] !== 1) continue
     const side: SideId = ships.side[i] === 1 ? 1 : 0
-    if (!UNIT_STYLE[variants[side]]) continue
+    const style = UNIT_STYLE[variants[side]]
+    if (!style) continue
     const division = state.divisions[ships.division[i] ?? 0]
     if (!division) continue
-    const tx = division.ax + division.rx * (ships.slotX[i] ?? 0) + division.fx * (ships.slotY[i] ?? 0)
-    const ty = division.ay + division.ry * (ships.slotX[i] ?? 0) + division.fy * (ships.slotY[i] ?? 0)
-    const dx = tx - (ships.x[i] ?? 0)
-    const dy = ty - (ships.y[i] ?? 0)
+    let dx = division.ax + division.rx * (ships.slotX[i] ?? 0) + division.fx * (ships.slotY[i] ?? 0) - (ships.x[i] ?? 0)
+    let dy = division.ay + division.ry * (ships.slotX[i] ?? 0) + division.fy * (ships.slotY[i] ?? 0) - (ships.y[i] ?? 0)
+    if (style.straight && shipUnderFire(i)) {
+      const hx = Math.cos(ships.heading[i] ?? 0)
+      const hy = Math.sin(ships.heading[i] ?? 0)
+      const along = dx * hx + dy * hy
+      if (along <= 0.5) continue
+      dx = hx * along
+      dy = hy * along
+    }
     const dist = Math.hypot(dx, dy)
     if (dist < 0.5) continue
-    const step = Math.min(pace, dist)
+    let step = Math.min(pace, dist)
+    if (style.yield) step = clearStep(state, i, dx, dy, step)
+    if (step <= 0) continue
     ships.x[i] = (ships.x[i] ?? 0) + (dx / dist) * step
     ships.y[i] = (ships.y[i] ?? 0) + (dy / dist) * step
   }
+}
+
+function clearStep(state: SimState, ship: number, dx: number, dy: number, step: number): number {
+  const ships = state.ships
+  const x = ships.x[ship] ?? 0
+  const y = ships.y[ship] ?? 0
+  const dist = Math.hypot(dx, dy) || 1
+  const nx = dx / dist
+  const ny = dy / dist
+  const radius = hullRadius(ships.shipClass[ship] ?? 0)
+  const found = collectNear(state.scratch.collide, x, y, radius + 7.1 + step + 2, ships.x, ships.y)
+  let allow = step
+  for (let k = 0; k < found; k++) {
+    const other = state.scratch.collide.found[k] ?? -1
+    if (other < 0 || other === ship || ships.alive[other] !== 1 || ships.side[other] !== ships.side[ship]) continue
+    const gap = radius + hullRadius(ships.shipClass[other] ?? 0) + 1.5
+    const ox = (ships.x[other] ?? 0) - x
+    const oy = (ships.y[other] ?? 0) - y
+    const along = ox * nx + oy * ny
+    if (along <= 0) continue
+    const latSq = ox * ox + oy * oy - along * along
+    if (latSq >= gap * gap) continue
+    const clear = Math.sqrt(Math.max(0, gap * gap - latSq))
+    allow = Math.min(allow, Math.max(0, along - clear))
+  }
+  return allow
 }
 
 let aimPool: number[] = []
