@@ -7,7 +7,7 @@ import { batteryCooldown, blastDamage, cacheBows, cacheSpread, crossfireScale, e
 import { refreshCover, rotateRanks } from './ranks.ts'
 import { collectInto, collectNear, createScratch, fillSpatialHash } from './spatial.ts'
 import { orderPoints, stepMoveOrder } from './move.ts'
-import { assessDivision, threatenedHeading } from './threat.ts'
+import { assessDivision, markUnderFire, shipUnderFire, threatenedHeading } from './threat.ts'
 import { avoidanceVectors, separateShips, steerClear } from './collide.ts'
 import { appointFlagships, commandMods, commandRates, noteFlagshipLoss, refreshCommand } from './flagship.ts'
 import { BACK_OFF, GUN_HOLD, holdFronts, holdVectors } from './standoff.ts'
@@ -1248,6 +1248,7 @@ function step(state: SimState, dt: number): void {
     division.shaped = false
     stepDivision(division, ctx, dt, !shaped || fleet.maneuver === 'wheel')
   }
+  markUnderFire(state)
   applyDensity(state, dt)
   applyOperation(state, dt)
   if (state.fleets.length > 2) separateFleets(state)
@@ -1459,6 +1460,15 @@ function moveShips(state: SimState, dt: number): void {
     if (avoidMag > 0.2) desired = Math.atan2(ayv, axv)
     else if (caution) desired += wrapAngle(Math.atan2(ayv, axv) - desired) * 0.8
     if (division.holdBow && avoidMag <= 0.2) {
+      const enemy = ships.side[i] === 1 ? 0 : 1
+      const tx = division.guard > 0 ? division.guardX : (state.centroidX[enemy] ?? x)
+      const ty = division.guard > 0 ? division.guardY : (state.centroidY[enemy] ?? y)
+      desired = Math.atan2(ty - y, tx - x)
+    }
+    const fleetHot = (fleet?.ships ?? 0) >= 400 && fleet?.commanderId !== 'manual'
+    const held = division.tacticId === 'hold' || division.sweeping
+    const hot = fleetHot && shipUnderFire(i) && !falling && !division.yielding && !held
+    if (hot) {
       const enemy = ships.side[i] === 1 ? 0 : 1
       const tx = division.guard > 0 ? division.guardX : (state.centroidX[enemy] ?? x)
       const ty = division.guard > 0 ? division.guardY : (state.centroidY[enemy] ?? y)

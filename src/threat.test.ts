@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createSim } from './sim.ts'
-import { aimUnderThreat, assessDivision, pathCrossesBow, wideFlankGoal } from './threat.ts'
+import { aimUnderThreat, assessDivision, markUnderFire, pathCrossesBow, shipUnderFire, wideFlankGoal } from './threat.ts'
 
 describe('exposure', () => {
   it('keeps the bow on a threat instead of turning the side toward it', () => {
@@ -81,5 +81,41 @@ describe('exposure', () => {
     const clear = pathCrossesBow(state, 0, -1200, 800, -1200, -800)
     expect(crosses).toBe(true)
     expect(clear).toBe(false)
+  })
+
+  it('marks a unit inside an enemy bow and leaves a unit outside it', () => {
+    const state = createSim({ shipCount: 100, commanders: ['manual', 'manual'] })
+    const ships = state.ships
+    for (let i = 0; i < ships.count; i++) ships.alive[i] = 0
+    const foe = state.divisions.find((division) => division.side === 1)
+    const own = state.divisions.find((division) => division.side === 0)
+    const wing = state.divisions.find((division) => division.side === 0 && division !== own)
+    if (!foe || !own || !wing) throw new Error('division')
+    for (const division of state.divisions) division.alive = 0
+    foe.alive = 10
+    own.alive = 1
+    wing.alive = 1
+    foe.ax = 500
+    foe.ay = 0
+    foe.fx = -1
+    foe.fy = 0
+    foe.classId = 'battleship'
+    own.ax = 0
+    own.ay = 0
+    wing.ax = 0
+    wing.ay = 700
+    ships.alive[0] = 1
+    ships.side[0] = 0
+    ships.division[0] = state.divisions.indexOf(own)
+    ships.x[0] = 0
+    ships.y[0] = 0
+    ships.alive[1] = 1
+    ships.side[1] = 0
+    ships.division[1] = state.divisions.indexOf(wing)
+    ships.x[1] = 0
+    ships.y[1] = 700
+    markUnderFire(state)
+    expect(shipUnderFire(0)).toBe(true)
+    expect(shipUnderFire(1)).toBe(false)
   })
 })

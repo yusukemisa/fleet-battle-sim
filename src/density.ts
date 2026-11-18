@@ -1,4 +1,5 @@
 import { CLASS_MODS } from './balance.ts'
+import { divisionUnderFire } from './threat.ts'
 import type { CommanderId, Division, SideId, SimState } from './types.ts'
 
 /**
@@ -362,6 +363,7 @@ function applyFleet(state: SimState, side: SideId, dt: number): void {
     if (!target) return
     const ordered = [...own].sort((a, b) => hypot(a.ax - target.ax, a.ay - target.ay) - hypot(b.ax - target.ax, b.ay - target.ay))
     ordered.forEach((div, index) => {
+      if (divisionUnderFire(state.divisions.indexOf(div))) return
       if (div.alive < div.roster * 0.15 && div !== strongest) {
         steer(div, strongest.ax, strongest.ay, enemyX, enemyY, cruiseSpeed(nearestGap(div, enemy)), dt)
         return
@@ -395,6 +397,7 @@ function applyFleet(state: SimState, side: SideId, dt: number): void {
   }
   if (shape === 'contract') {
     for (const div of own) {
+      if (divisionUnderFire(state.divisions.indexOf(div))) continue
       if (div.alive < div.roster * 0.15 && div !== strongest) {
         steer(div, strongest.ax, strongest.ay, enemyX, enemyY, DENSITY.cruise, dt)
         continue
@@ -407,6 +410,7 @@ function applyFleet(state: SimState, side: SideId, dt: number): void {
     return
   }
   for (const div of own) {
+    if (divisionUnderFire(state.divisions.indexOf(div))) continue
     if (div.alive < div.roster * 0.15 && div !== strongest) {
       steer(div, strongest.ax, strongest.ay, enemyX, enemyY, DENSITY.cruise, dt)
       continue

@@ -1,4 +1,5 @@
-import { CLASS_MODS } from './balance.ts'
+import { CLASS_MODS, CLASS_STATS, classIndex, SHIP_STATS } from './balance.ts'
+import { shipUnderFire } from './threat.ts'
 import type { CommanderId, Division, SideId, SimState } from './types.ts'
 
 /**
@@ -283,7 +284,10 @@ export function applyOperation(state: SimState, dt: number): void {
     const wing = state.divisions.find((division) => division.side === side && division.slot === 0 && division.alive > 0)
     const axis = frameOf(anvil, target, wing)
     const dist = hypot(target.ax - anvil.ax, target.ay - anvil.ay)
-    const triggered = dist <= persona.range
+    const bow = (CLASS_STATS[classIndex(target.classId)] ?? SHIP_STATS).batteries[0]?.maxRange ?? 900
+    // Start the flank about twelve seconds of closing before the guns, so the swing is finished on contact.
+    const setup = Math.max(persona.range, bow) + 18 * 12
+    const triggered = dist <= setup
     if (triggered && book.cue[side] < 0) book.cue[side] = state.time
     let thin = 1
     if (persona.wings === 'one') {
@@ -504,6 +508,7 @@ function seatDivision(
   for (let i = 0; i < members.length; i++) {
     const ship = members[i]
     if (ship === undefined) continue
+    if (shipUnderFire(ship) && ships.falling[ship] !== 1) continue
     const col = i % grid.across
     const row = Math.floor(i / grid.across)
     const idealX = (col - (grid.across - 1) / 2) * style.ship
@@ -586,6 +591,7 @@ function layoutRanks(
     for (let i = 0; i < group.length; i++) {
       const ship = group[i]
       if (ship === undefined) continue
+      if (shipUnderFire(ship) && ships.falling[ship] !== 1) continue
       const idealX = meanX + (i - (group.length - 1) / 2) * style.ship
       if (fresh) {
         ships.slotX[ship] = idealX
@@ -663,6 +669,7 @@ export function holdUnitStations(state: SimState, dt: number): void {
   const pace = 90 * dt
   for (let i = 0; i < ships.count; i++) {
     if (ships.alive[i] !== 1) continue
+    if (shipUnderFire(i) && ships.falling[i] !== 1) continue
     const side: SideId = ships.side[i] === 1 ? 1 : 0
     if (!UNIT_STYLE[variants[side]]) continue
     const division = state.divisions[ships.division[i] ?? 0]
