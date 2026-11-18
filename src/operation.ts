@@ -119,6 +119,10 @@ interface Book {
   cue: [number, number]
   seen: [number[], number[]]
   unitOf: Int16Array | null
+  birthX: Float32Array | null
+  birthY: Float32Array | null
+  born: Uint8Array | null
+  unitFull: Map<string, number> | null
 }
 
 const books = new WeakMap<SimState, Book>()
@@ -126,7 +130,7 @@ const books = new WeakMap<SimState, Book>()
 function bookOf(state: SimState): Book {
   let book = books.get(state)
   if (!book) {
-    book = { pin: [-1, -1], cue: [-1, -1], seen: [[], []], unitOf: null }
+    book = { pin: [-1, -1], cue: [-1, -1], seen: [[], []], unitOf: null, birthX: null, birthY: null, born: null, unitFull: null }
     books.set(state, book)
   }
   return book
@@ -339,6 +343,16 @@ export function seatUnits(state: SimState): void {
     book.unitOf = next
   }
   const unitOf = book.unitOf
+  if (!book.birthX || book.birthX.length < count || !book.birthY || !book.born) {
+    book.birthX = new Float32Array(count)
+    book.birthY = new Float32Array(count)
+    book.born = new Uint8Array(count)
+  }
+  if (!book.unitFull) book.unitFull = new Map()
+  const birthX = book.birthX
+  const birthY = book.birthY
+  const born = book.born
+  const unitFull = book.unitFull
   for (const side of [0, 1] as const) {
     const style = UNIT_STYLE[variants[side]]
     if (!style) continue
@@ -347,12 +361,22 @@ export function seatUnits(state: SimState): void {
     for (let index = 0; index < state.divisions.length; index++) {
       const division = state.divisions[index]
       if (!division || division.side !== side || division.alive <= 0) continue
-      seatDivision(state, division, index, style, unitOf)
+      seatDivision(state, division, index, style, unitOf, birthX, birthY, born, unitFull)
     }
   }
 }
 
-function seatDivision(state: SimState, division: Division, divisionIndex: number, style: UnitStyle, unitOf: Int16Array): void {
+function seatDivision(
+  state: SimState,
+  division: Division,
+  divisionIndex: number,
+  style: UnitStyle,
+  unitOf: Int16Array,
+  birthX: Float32Array,
+  birthY: Float32Array,
+  born: Uint8Array,
+  unitFull: Map<string, number>,
+): void {
   const ships = state.ships
   const members: number[] = []
   for (let i = 0; i < ships.count; i++) {
@@ -363,11 +387,16 @@ function seatDivision(state: SimState, division: Division, divisionIndex: number
   const unassigned: number[] = []
   let maxId = -1
   for (const ship of members) {
+    if (born[ship] === 0) {
+      birthX[ship] = ships.slotX[ship] ?? 0
+      birthY[ship] = ships.slotY[ship] ?? 0
+      born[ship] = 1
+    }
     const id = unitOf[ship] ?? -1
     if (id < 0) unassigned.push(ship)
     else if (id > maxId) maxId = id
   }
-  unassigned.sort((a, b) => (ships.slotX[a] ?? 0) - (ships.slotX[b] ?? 0) || a - b)
+  unassigned.sort((a, b) => (birthX[a] ?? 0) - (birthX[b] ?? 0) || (birthY[a] ?? 0) - (birthY[b] ?? 0) || a - b)
   let id = maxId + 1
   let fill = 0
   for (const ship of unassigned) {
@@ -378,6 +407,19 @@ function seatDivision(state: SimState, division: Division, divisionIndex: number
     unitOf[ship] = id
     fill += 1
   }
+  const previous = new Map<number, number>()
+  for (const ship of members) previous.set(ship, unitOf[ship] ?? 0)
+  const assigned = new Map<number, number[]>()
+  for (const ship of members) {
+    const unit = unitOf[ship] ?? 0
+    const list = assigned.get(unit)
+    if (list) list.push(ship)
+    else assigned.set(unit, [ship])
+  }
+  for (const [unit, list] of assigned) {
+    const key = `${divisionIndex}:${unit}`
+    if (!unitFull.has(key)) unitFull.set(key, list.length)
+  }
   if (style.merge) mergeShort(members, unitOf)
   const groups = new Map<number, number[]>()
   for (const ship of members) {
@@ -386,28 +428,103 @@ function seatDivision(state: SimState, division: Division, divisionIndex: number
     if (list) list.push(ship)
     else groups.set(unit, [ship])
   }
-  const ids = [...groups.keys()].sort((a, b) => a - b)
-  const cols = style.files
-  const rows = Math.ceil(ids.length / cols)
-  const pitch = 9 * style.ship + style.file
-  for (let k = 0; k < ids.length; k++) {
-    const list = groups.get(ids[k] ?? 0)
-    if (!list) continue
-    list.sort((a, b) => a - b)
-    const col = k % cols
-    const row = Math.floor(k / cols)
-    const originX = (col - (cols - 1) / 2) * pitch
-    const originY = (row - (rows - 1) / 2) * style.rank
-    const width = list.length
-    for (let i = 0; i < width; i++) {
-      const ship = list[i]
-      if (ship === undefined) continue
-      ships.slotX[ship] = originX + (i - (width - 1) / 2) * style.ship
-      ships.slotY[ship] = originY
-      ships.homeX[ship] = ships.slotX[ship] ?? 0
-      ships.homeY[ship] = originY
+  for (const list of groups.values()) {
+    const stayed = list.filter((ship) => previous.get(ship) === (unitOf[ship] ?? 0))
+    const joined = list.filter((ship) => previous.get(ship) !== (unitOf[ship] ?? 0))
+    if (joined.length > 0 && stayed.length > 0) parkJoining(joined, stayed, style.ship, birthX, birthY)
+    const moved = list.some((ship) => previous.get(ship) !== (unitOf[ship] ?? 0))
+    const key = `${divisionIndex}:${unitOf[list[0] ?? 0] ?? 0}`
+    const full = unitFull.get(key) ?? list.length
+    if (!moved && list.length === full) writeBirth(list, ships, birthX, birthY)
+    else spaceSurvivors(list, style.ship, ships, birthX, birthY)
+    if (style.shareAim) {
+      let sx = 0
+      let sy = 0
+      for (const ship of list) {
+        sx += birthX[ship] ?? 0
+        sy += birthY[ship] ?? 0
+      }
+      aimUnit(state, division, list, sx / list.length, sy / list.length)
     }
-    if (style.shareAim) aimUnit(state, division, list, originX, originY)
+  }
+}
+
+function writeBirth(list: number[], ships: SimState['ships'], birthX: Float32Array, birthY: Float32Array): void {
+  for (const ship of list) {
+    const x = birthX[ship] ?? 0
+    const y = birthY[ship] ?? 0
+    ships.slotX[ship] = x
+    ships.slotY[ship] = y
+    ships.homeX[ship] = x
+    ships.homeY[ship] = y
+  }
+}
+
+function parkJoining(joined: number[], stayed: number[], gap: number, birthX: Float32Array, birthY: Float32Array): void {
+  let minX = Infinity
+  let maxX = -Infinity
+  let minY = Infinity
+  let maxY = -Infinity
+  let sy = 0
+  let sx = 0
+  for (const ship of stayed) {
+    const x = birthX[ship] ?? 0
+    const y = birthY[ship] ?? 0
+    sx += x
+    sy += y
+    if (x < minX) minX = x
+    if (x > maxX) maxX = x
+    if (y < minY) minY = y
+    if (y > maxY) maxY = y
+  }
+  const alongX = maxX - minX >= maxY - minY
+  const meanX = sx / stayed.length
+  const meanY = sy / stayed.length
+  let edge = alongX ? maxX : maxY
+  for (const ship of joined) {
+    edge += gap
+    if (alongX) {
+      birthX[ship] = edge
+      birthY[ship] = meanY
+    } else {
+      birthX[ship] = meanX
+      birthY[ship] = edge
+    }
+  }
+}
+
+function spaceSurvivors(list: number[], gap: number, ships: SimState['ships'], birthX: Float32Array, birthY: Float32Array): void {
+  let minX = Infinity
+  let maxX = -Infinity
+  let minY = Infinity
+  let maxY = -Infinity
+  let sx = 0
+  let sy = 0
+  for (const ship of list) {
+    const x = birthX[ship] ?? 0
+    const y = birthY[ship] ?? 0
+    sx += x
+    sy += y
+    if (x < minX) minX = x
+    if (x > maxX) maxX = x
+    if (y < minY) minY = y
+    if (y > maxY) maxY = y
+  }
+  const alongX = maxX - minX >= maxY - minY
+  const meanX = sx / list.length
+  const meanY = sy / list.length
+  list.sort((a, b) => (alongX ? (birthX[a] ?? 0) - (birthX[b] ?? 0) : (birthY[a] ?? 0) - (birthY[b] ?? 0)) || a - b)
+  const width = list.length
+  for (let i = 0; i < width; i++) {
+    const ship = list[i]
+    if (ship === undefined) continue
+    const offset = (i - (width - 1) / 2) * gap
+    const x = alongX ? meanX + offset : meanX
+    const y = alongX ? meanY : meanY + offset
+    ships.slotX[ship] = x
+    ships.slotY[ship] = y
+    ships.homeX[ship] = x
+    ships.homeY[ship] = y
   }
 }
 

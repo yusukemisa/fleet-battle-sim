@@ -39,25 +39,22 @@ describe('tactic variants', () => {
     expect(state.divisions.some((division) => division.side === 0 && division.focus)).toBe(true)
   })
 
-  it('seats a division into lines of ten', () => {
+  it('keeps the opening slots when grouping neighbours into tens', () => {
     setTacticVariant(0, 'u8a')
     let state = createSim({ shipCount: 1000, commanders: ['balanced', 'cunning'], brains: ['rule', 'rule'] })
     state.rng = 3
+    const division = state.divisions.findIndex((item) => item.side === 0 && item.slot === 2)
+    const before = new Map<number, number>()
+    for (let i = 0; i < state.ships.count; i++) {
+      if (state.ships.division[i] !== division) continue
+      before.set(i, state.ships.slotX[i] ?? 0)
+    }
     state = dispatch(state, { type: 'set-speed', speed: 4 })
     state = dispatch(state, { type: 'start' })
     state = dispatch(state, { type: 'tick', dt: 0.05 })
-    const division = state.divisions.findIndex((item) => item.side === 0 && item.slot === 2)
-    const slots: number[] = []
-    for (let i = 0; i < state.ships.count; i++) {
-      if (state.ships.alive[i] !== 1 || state.ships.division[i] !== division) continue
-      slots.push(state.ships.slotX[i] ?? 0)
+    for (const [ship, slot] of before) {
+      if (state.ships.alive[ship] !== 1) continue
+      expect(state.ships.slotX[ship] ?? 0).toBeCloseTo(slot, 4)
     }
-    slots.sort((a, b) => a - b)
-    const gaps = new Set<number>()
-    for (let i = 1; i < slots.length; i++) {
-      const gap = Math.round((slots[i] ?? 0) - (slots[i - 1] ?? 0))
-      if (gap > 0 && gap < 80) gaps.add(gap)
-    }
-    expect(gaps.has(36)).toBe(true)
   })
 })
