@@ -119,6 +119,8 @@ interface Book {
   cue: [number, number]
   seen: [number[], number[]]
   unitOf: Int16Array | null
+  seq: Int16Array | null
+  placed: Uint8Array | null
 }
 
 const books = new WeakMap<SimState, Book>()
@@ -126,7 +128,7 @@ const books = new WeakMap<SimState, Book>()
 function bookOf(state: SimState): Book {
   let book = books.get(state)
   if (!book) {
-    book = { pin: [-1, -1], cue: [-1, -1], seen: [[], []], unitOf: null }
+    book = { pin: [-1, -1], cue: [-1, -1], seen: [[], []], unitOf: null, seq: null, placed: null }
     books.set(state, book)
   }
   return book
@@ -283,20 +285,29 @@ export function applyOperation(state: SimState, dt: number): void {
       let keep = acrossNow >= 0 ? 1 : -1
       if (Math.abs(acrossNow) < 30) keep = division.slot < 2 ? -1 : 1
       const outer = Math.abs(division.slot - 2) >= 2
-      const shoulder = Math.abs(division.slot - 2) === 1
+      const style = UNIT_STYLE[variant]
       const hold = Math.min(820, Math.max(620, persona.range - 80))
-      let lateral = shoulder || outer ? keep * (shoulder ? 380 : 740) : 0
+      let lateral = 0
       let depth = hold
       let angle = 0
       if (outer && triggered && (persona.wings === 'both' || keep === thin)) {
         angle = persona.angle
         if (persona.abort && outflanked(state, side, division, axis, target)) angle = 0
       }
-      if (outer) {
-        const rad = (angle * Math.PI) / 180
+      if (style) {
+        const grid = wideGrid(Math.max(1, division.roster || division.alive))
+        const pitch = Math.max(0, grid.across - 1) * style.ship + style.file
+        lateral = (division.slot - 2) * pitch
+        if (angle > 0) lateral *= Math.cos((angle * Math.PI) / 180)
+      } else if (Math.abs(division.slot - 2) >= 1) {
         const span = 740
-        lateral = keep * span * Math.cos(rad)
-        depth = holdsRank(variant) ? hold : hold - span * Math.sin(rad)
+        const reach = Math.abs(division.slot - 2) >= 2 ? span : 380
+        lateral = keep * reach
+        if (outer) {
+          const rad = (angle * Math.PI) / 180
+          lateral = keep * span * Math.cos(rad)
+          depth = holdsRank(variant) ? hold : hold - span * Math.sin(rad)
+        }
       }
       const goal = place(target, axis, depth, lateral)
       steer(division, goal.x, goal.y, target.ax, target.ay, angle > 0 ? 20 : 14, dt)
@@ -328,17 +339,38 @@ const UNIT_STYLE: Partial<Record<TacticVariant, UnitStyle>> = {
   u8d: { ship: 40, rank: 84, file: 56, files: 3, merge: false, shareAim: true },
 }
 
+export function wideGrid(count: number): { across: number; depth: number } {
+  if (count <= 1) return { across: Math.max(1, count), depth: 1 }
+  let depth = Math.max(1, Math.round(Math.sqrt(count / 4)))
+  let across = Math.ceil(count / depth)
+  while (depth > 1 && across / depth < 4) {
+    depth -= 1
+    across = Math.ceil(count / depth)
+  }
+  return { across, depth }
+}
+
 export function seatUnits(state: SimState): void {
   if (!UNIT_STYLE[variants[0]] && !UNIT_STYLE[variants[1]]) return
   const book = bookOf(state)
   const count = state.ships.count
-  if (!book.unitOf || book.unitOf.length < count) {
-    const next = new Int16Array(count)
-    next.fill(-1)
-    if (book.unitOf) next.set(book.unitOf)
-    book.unitOf = next
+  if (!book.unitOf || book.unitOf.length < count || !book.seq || !book.placed) {
+    const unitOf = new Int16Array(count)
+    const seq = new Int16Array(count)
+    const placed = new Uint8Array(count)
+    unitOf.fill(-1)
+    seq.fill(-1)
+    if (book.unitOf) unitOf.set(book.unitOf)
+    if (book.seq) seq.set(book.seq)
+    if (book.placed) placed.set(book.placed)
+    book.unitOf = unitOf
+    book.seq = seq
+    book.placed = placed
   }
   const unitOf = book.unitOf
+  const seq = book.seq
+  const placed = book.placed
+  if (!unitOf || !seq || !placed) return
   for (const side of [0, 1] as const) {
     const style = UNIT_STYLE[variants[side]]
     if (!style) continue
@@ -347,12 +379,20 @@ export function seatUnits(state: SimState): void {
     for (let index = 0; index < state.divisions.length; index++) {
       const division = state.divisions[index]
       if (!division || division.side !== side || division.alive <= 0) continue
-      seatDivision(state, division, index, style, unitOf)
+      seatDivision(state, division, index, style, unitOf, seq, placed)
     }
   }
 }
 
-function seatDivision(state: SimState, division: Division, divisionIndex: number, style: UnitStyle, unitOf: Int16Array): void {
+function seatDivision(
+  state: SimState,
+  division: Division,
+  divisionIndex: number,
+  style: UnitStyle,
+  unitOf: Int16Array,
+  seq: Int16Array,
+  placed: Uint8Array,
+): void {
   const ships = state.ships
   const members: number[] = []
   for (let i = 0; i < ships.count; i++) {
@@ -360,55 +400,82 @@ function seatDivision(state: SimState, division: Division, divisionIndex: number
     members.push(i)
   }
   if (members.length === 0) return
-  const unassigned: number[] = []
-  let maxId = -1
+  const fresh = members.filter((ship) => (seq[ship] ?? -1) < 0)
+  fresh.sort((a, b) => (ships.slotX[a] ?? 0) - (ships.slotX[b] ?? 0) || (ships.slotY[a] ?? 0) - (ships.slotY[b] ?? 0) || a - b)
+  let nextSeq = -1
+  let maxUnit = -1
   for (const ship of members) {
-    const id = unitOf[ship] ?? -1
-    if (id < 0) unassigned.push(ship)
-    else if (id > maxId) maxId = id
+    if ((seq[ship] ?? -1) > nextSeq) nextSeq = seq[ship] ?? -1
+    if ((unitOf[ship] ?? -1) > maxUnit) maxUnit = unitOf[ship] ?? -1
   }
-  unassigned.sort((a, b) => (ships.slotX[a] ?? 0) - (ships.slotX[b] ?? 0) || a - b)
-  let id = maxId + 1
   let fill = 0
-  for (const ship of unassigned) {
-    if (fill === 10) {
-      id += 1
+  let unit = maxUnit < 0 ? 0 : maxUnit
+  if (maxUnit >= 0) {
+    for (const ship of members) if ((unitOf[ship] ?? -1) === unit) fill += 1
+  }
+  for (const ship of fresh) {
+    if (fill >= 10 || maxUnit < 0) {
+      unit = maxUnit + 1
+      maxUnit = unit
       fill = 0
     }
-    unitOf[ship] = id
+    unitOf[ship] = unit
+    nextSeq += 1
+    seq[ship] = nextSeq
     fill += 1
   }
   if (style.merge) mergeShort(members, unitOf)
-  const groups = new Map<number, number[]>()
-  for (const ship of members) {
-    const unit = unitOf[ship] ?? 0
-    const list = groups.get(unit)
-    if (list) list.push(ship)
-    else groups.set(unit, [ship])
-  }
-  const ids = [...groups.keys()].sort((a, b) => a - b)
-  const cols = style.files
-  const rows = Math.ceil(ids.length / cols)
-  const pitch = 9 * style.ship + style.file
-  for (let k = 0; k < ids.length; k++) {
-    const list = groups.get(ids[k] ?? 0)
-    if (!list) continue
-    list.sort((a, b) => a - b)
-    const col = k % cols
-    const row = Math.floor(k / cols)
-    const originX = (col - (cols - 1) / 2) * pitch
-    const originY = (row - (rows - 1) / 2) * style.rank
-    const width = list.length
-    for (let i = 0; i < width; i++) {
-      const ship = list[i]
-      if (ship === undefined) continue
-      ships.slotX[ship] = originX + (i - (width - 1) / 2) * style.ship
-      ships.slotY[ship] = originY
-      ships.homeX[ship] = ships.slotX[ship] ?? 0
-      ships.homeY[ship] = originY
+  members.sort((a, b) => (seq[a] ?? 0) - (seq[b] ?? 0) || a - b)
+  const grid = wideGrid(members.length)
+  const depthGap = style.ship * 1.4
+  for (let i = 0; i < members.length; i++) {
+    const ship = members[i]
+    if (ship === undefined) continue
+    const col = i % grid.across
+    const row = Math.floor(i / grid.across)
+    const idealX = (col - (grid.across - 1) / 2) * style.ship
+    const idealY = (row - (grid.depth - 1) / 2) * depthGap
+    if (placed[ship] === 0) {
+      ships.slotX[ship] = idealX
+      ships.slotY[ship] = idealY
+      placed[ship] = 1
+      snapShip(division, ships, ship)
+    } else {
+      const dx = Math.max(-style.ship, Math.min(style.ship, idealX - (ships.slotX[ship] ?? 0)))
+      const dy = Math.max(-depthGap, Math.min(depthGap, idealY - (ships.slotY[ship] ?? 0)))
+      ships.slotX[ship] = (ships.slotX[ship] ?? 0) + dx
+      ships.slotY[ship] = (ships.slotY[ship] ?? 0) + dy
     }
-    if (style.shareAim) aimUnit(state, division, list, originX, originY)
+    ships.homeX[ship] = ships.slotX[ship] ?? 0
+    ships.homeY[ship] = ships.slotY[ship] ?? 0
   }
+  if (style.shareAim) {
+    const groups = new Map<number, number[]>()
+    for (const ship of members) {
+      const id = unitOf[ship] ?? 0
+      const list = groups.get(id)
+      if (list) list.push(ship)
+      else groups.set(id, [ship])
+    }
+    for (const list of groups.values()) {
+      let sx = 0
+      let sy = 0
+      for (const ship of list) {
+        sx += ships.slotX[ship] ?? 0
+        sy += ships.slotY[ship] ?? 0
+      }
+      aimUnit(state, division, list, sx / list.length, sy / list.length)
+    }
+  }
+}
+
+function snapShip(division: Division, ships: SimState['ships'], ship: number): void {
+  const sx = ships.slotX[ship] ?? 0
+  const sy = ships.slotY[ship] ?? 0
+  ships.x[ship] = division.ax + division.rx * sx + division.fx * sy
+  ships.y[ship] = division.ay + division.ry * sx + division.fy * sy
+  ships.vx[ship] = division.vx
+  ships.vy[ship] = division.vy
 }
 
 function mergeShort(members: number[], unitOf: Int16Array): void {

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { createSim, dispatch } from './sim.ts'
-import { parseTacticVariant, resetTacticVariants, setTacticVariant, tacticVariants } from './operation.ts'
+import { parseTacticVariant, resetTacticVariants, setTacticVariant, tacticVariants, wideGrid } from './operation.ts'
 
 afterEach(() => {
   resetTacticVariants()
@@ -39,25 +39,42 @@ describe('tactic variants', () => {
     expect(state.divisions.some((division) => division.side === 0 && division.focus)).toBe(true)
   })
 
-  it('seats a division into lines of ten', () => {
+  it('makes a unit one rank and a division a wide front', () => {
+    expect(wideGrid(10)).toEqual({ across: 10, depth: 1 })
+    const division = wideGrid(100)
+    expect(division.across / division.depth).toBeGreaterThanOrEqual(4)
+  })
+
+  it('opens in a wide shallow front without walking there', () => {
     setTacticVariant(0, 'u8a')
     let state = createSim({ shipCount: 1000, commanders: ['balanced', 'cunning'], brains: ['rule', 'rule'] })
     state.rng = 3
     state = dispatch(state, { type: 'set-speed', speed: 4 })
     state = dispatch(state, { type: 'start' })
     state = dispatch(state, { type: 'tick', dt: 0.05 })
-    const division = state.divisions.findIndex((item) => item.side === 0 && item.slot === 2)
-    const slots: number[] = []
+    const division = state.divisions.find((item) => item.side === 0 && item.slot === 2)
+    if (!division) throw new Error('missing division')
+    let minX = Infinity
+    let maxX = -Infinity
+    let minY = Infinity
+    let maxY = -Infinity
+    let off = 0
+    let n = 0
     for (let i = 0; i < state.ships.count; i++) {
-      if (state.ships.alive[i] !== 1 || state.ships.division[i] !== division) continue
-      slots.push(state.ships.slotX[i] ?? 0)
+      if (state.ships.alive[i] !== 1 || state.ships.division[i] !== state.divisions.indexOf(division)) continue
+      const sx = state.ships.slotX[i] ?? 0
+      const sy = state.ships.slotY[i] ?? 0
+      minX = Math.min(minX, sx)
+      maxX = Math.max(maxX, sx)
+      minY = Math.min(minY, sy)
+      maxY = Math.max(maxY, sy)
+      const tx = division.ax + division.rx * sx + division.fx * sy
+      const ty = division.ay + division.ry * sx + division.fy * sy
+      off = Math.max(off, Math.hypot((state.ships.x[i] ?? 0) - tx, (state.ships.y[i] ?? 0) - ty))
+      n += 1
     }
-    slots.sort((a, b) => a - b)
-    const gaps = new Set<number>()
-    for (let i = 1; i < slots.length; i++) {
-      const gap = Math.round((slots[i] ?? 0) - (slots[i - 1] ?? 0))
-      if (gap > 0 && gap < 80) gaps.add(gap)
-    }
-    expect(gaps.has(36)).toBe(true)
+    expect(n).toBeGreaterThan(10)
+    expect(maxX - minX).toBeGreaterThan((maxY - minY) * 3)
+    expect(off).toBeLessThan(1)
   })
 })
