@@ -85,7 +85,8 @@ export function steerClear(state: SimState): void {
   const crowdHit = new Int32Array(divisions.length)
   const crowdSeen = new Int32Array(divisions.length)
   // A 10k battle refreshes a quarter of the hulls each frame and keeps the last vector on the rest.
-  const stride = n >= 8000 ? 4 : 1
+  const stride = n >= 8000 ? 2 : 1
+  const look = n >= 8000 ? 1.2 : LOOK
   const start = state.frame % stride
   for (let i = start; i < n; i += stride) {
     avoidX[i] = 0
@@ -99,7 +100,7 @@ export function steerClear(state: SimState): void {
     const vx = ships.vx[i] ?? 0
     const vy = ships.vy[i] ?? 0
     const ri = HULL_RADIUS[ships.shipClass[i] ?? 0] ?? HULL_RADIUS[1]
-    const reach = Math.min(72, Math.hypot(vx, vy) * LOOK + ri + MAX_RADIUS + 14)
+    const reach = Math.min(96, Math.hypot(vx, vy) * look + ri + MAX_RADIUS + 14)
     const found = collectNear(hash, x, y, reach, ships.x, ships.y)
     if (divisionIndex < crowdSeen.length) crowdSeen[divisionIndex] = (crowdSeen[divisionIndex] ?? 0) + 1
     let crowded = false
@@ -141,10 +142,10 @@ export function steerClear(state: SimState): void {
         brake[i] = Math.max(brake[i] ?? 0, urgency)
       }
       if (approach <= 0) continue
-      const px = x + vx * LOOK
-      const py = y + vy * LOOK
-      const qx = ox + (ships.vx[j] ?? 0) * LOOK
-      const qy = oy + (ships.vy[j] ?? 0) * LOOK
+      const px = x + vx * look
+      const py = y + vy * look
+      const qx = ox + (ships.vx[j] ?? 0) * look
+      const qy = oy + (ships.vy[j] ?? 0) * look
       const dx = qx - px
       const dy = qy - py
       const dist = Math.hypot(dx, dy) || 1
@@ -219,6 +220,7 @@ export function separateShips(state: SimState, dt = 0.1): void {
       const min = ri + rj
       const distSq = dx * dx + dy * dy
       if (distSq >= min * min) continue
+      state.scratch.overlaps += 1
       let dist = Math.sqrt(distSq)
       if (dist < 1e-3) {
         dx = (i & 1) === 0 ? 1 : -1

@@ -1,4 +1,4 @@
-import { CLASS_MODS, CLASS_STATS, classIndex, SHIP_STATS } from './balance.ts'
+import { CLASS_MODS, CLASS_STATS, classIndex, hullRadius, SHIP_STATS } from './balance.ts'
 import type { CommanderId, Division, SideId, SimState } from './types.ts'
 
 /**
@@ -268,6 +268,7 @@ export function applyOperation(state: SimState, dt: number): void {
       thin = neg <= pos ? -1 : 1
     }
     const own = state.divisions.filter((division) => division.side === side && division.alive > 0)
+    const roomOf = blockRooms(state, own)
     for (const division of own) {
       const acrossNow = (division.ax - target.ax) * axis.lx + (division.ay - target.ay) * axis.ly
       let keep = acrossNow >= 0 ? 1 : -1
@@ -291,6 +292,8 @@ export function applyOperation(state: SimState, dt: number): void {
           depth = holdsRank(variant) ? hold : hold - span * Math.sin(rad)
         }
       }
+      const fitted = fleet.ships > 2000 ? keep * (roomOf.get(division.slot) ?? 0) : 0
+      if (Math.abs(fitted) > Math.abs(lateral)) lateral = fitted
       const goal = place(target, axis, depth, lateral)
       steer(division, goal.x, goal.y, target.ax, target.ay, angle > 0 ? 20 : 14, dt, !enemyInRange(state, division))
       division.hunt = targetId
@@ -303,5 +306,34 @@ export function applyOperation(state: SimState, dt: number): void {
 
 function holdsRank(variant: TacticVariant): boolean {
   return variant === 'r7b'
+}
+
+/** How far each slot must sit from the center so neighboring blocks do not meet. */
+function blockRooms(state: SimState, own: readonly Division[]): Map<number, number> {
+  const half = new Map<number, number>()
+  const ships = state.ships
+  for (const division of own) {
+    const index = state.divisions.indexOf(division)
+    let reach = hullRadius(classIndex(division.classId))
+    for (let i = 0; i < ships.count; i++) {
+      if (ships.alive[i] !== 1 || ships.division[i] !== index) continue
+      reach = Math.max(reach, Math.abs(ships.slotX[i] ?? 0) + hullRadius(ships.shipClass[i] ?? 0))
+    }
+    half.set(division.slot, reach)
+  }
+  const room = new Map<number, number>()
+  room.set(2, 0)
+  for (const slot of [0, 1, 3, 4]) {
+    const path = slot < 2 ? [1, 0] : [3, 4]
+    let dist = 0
+    let prev = 2
+    for (const next of path) {
+      dist += (half.get(prev) ?? 0) + (half.get(next) ?? 0) + 32
+      if (next === slot) break
+      prev = next
+    }
+    room.set(slot, dist)
+  }
+  return room
 }
 

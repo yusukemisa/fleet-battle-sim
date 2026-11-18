@@ -53,6 +53,20 @@ function assignByX(layout: FormationLayout): void {
   }
 }
 
+function blockShape(size: number, wide: boolean): { cols: number; rows: number } {
+  if (!wide) {
+    const cols = Math.max(1, Math.ceil(Math.sqrt(size * 1.15)))
+    return { cols, rows: Math.max(1, Math.ceil(size / cols)) }
+  }
+  let rows = Math.max(1, Math.round(Math.sqrt(size / 4)))
+  let cols = Math.max(1, Math.ceil(size / rows))
+  while (rows > 1 && cols / rows < 4) {
+    rows -= 1
+    cols = Math.ceil(size / rows)
+  }
+  return { cols, rows }
+}
+
 function placeOujin(layout: FormationLayout): void {
   const n = layout.count
   const groups = 5
@@ -64,13 +78,14 @@ function placeOujin(layout: FormationLayout): void {
     if (extra > 0) extra -= 1
     sizes.push(size)
   }
-  const pitch = n > 400 ? SLOT_PITCH : SLOT_PITCH + 2
-  // Keep the hull gap fixed and add ranks. Scaling the pitch and spending it
-  // all on width turned a large 横陣 into a ribbon thousands of ships across.
+  // Past 2,000 ships a side, open the pitch with the fleet and keep each block
+  // at least four times as wide as it is deep. A fixed pitch only added ranks,
+  // and those ranks closed into one crowd.
+  const wide = n > 2000
+  const pitch = wide ? formationPitch(n) : n > 400 ? SLOT_PITCH : SLOT_PITCH + 2
   const gap = pitch * 2.2
   const specs = sizes.map((size) => {
-    const cols = Math.max(1, Math.ceil(Math.sqrt(size * 1.15)))
-    const rows = Math.max(1, Math.ceil(size / cols))
+    const { cols, rows } = blockShape(size, wide)
     return { size, cols, rows, width: Math.max(0, cols - 1) * pitch }
   })
   let span = gap * (groups - 1)

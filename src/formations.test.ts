@@ -129,7 +129,7 @@ describe('formations', () => {
     }
   })
 
-  it('横陣 adds ranks as the fleet grows instead of only stretching wider', () => {
+  it('横陣 stays wide as the fleet grows and opens the pitch past 2,000 ships', () => {
     const at = (count: number) => bounds(layoutFormation('oujin', count))
     const small = at(500)
     const mid = at(1000)
@@ -138,11 +138,10 @@ describe('formations', () => {
     expect(aspect(small)).toBeGreaterThan(3)
     expect(aspect(mid)).toBeGreaterThan(3.5)
     expect(aspect(mid)).toBeLessThan(12)
-    expect(aspect(large)).toBeGreaterThan(3.5)
-    expect(aspect(large)).toBeLessThan(8)
+    expect(aspect(large)).toBeGreaterThan(8)
     expect(mid.depth).toBeGreaterThan(small.depth)
-    expect(large.depth).toBeGreaterThan(mid.depth * 2)
-    expect(large.width).toBeLessThan(12000)
+    expect(large.depth).toBeGreaterThan(mid.depth)
+    expect(large.depth).toBeLessThan(large.width / 4)
     expect(mid.width).toBeLessThan(4000)
   })
 
@@ -221,12 +220,12 @@ describe('formations', () => {
     }
   })
 
-  it('opens a 5,000-ship line by adding ranks instead of stretching the pitch', () => {
+  it('opens a 5,000-ship line wide enough that hulls are not packed into ranks', () => {
     const small = bounds(layoutFormation('oujin', 500))
     const large = bounds(layoutFormation('oujin', 5000))
-    expect(large.depth).toBeGreaterThan(small.depth * 2)
-    expect(large.width / large.depth).toBeLessThan(8)
-    expect(minSpacing(layoutFormation('oujin', 5000))).toBeGreaterThanOrEqual(18)
+    expect(large.depth).toBeGreaterThan(small.depth)
+    expect(large.width / large.depth).toBeGreaterThan(8)
+    expect(minSpacing(layoutFormation('oujin', 5000))).toBeGreaterThanOrEqual(36)
     expect(bounds(layoutFormation('kakuyoku', 5000)).width).toBeGreaterThan(bounds(layoutFormation('kakuyoku', 500)).width * 2)
   })
 

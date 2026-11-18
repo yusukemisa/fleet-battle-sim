@@ -1528,6 +1528,7 @@ function moveShips(state: SimState, dt: number): void {
       const cap = leaving ? 22 : far ? 26 : 18
       speed = speed < 0 ? -Math.min(-speed, cap) : Math.min(speed, cap)
     }
+    if ((brakes[i] ?? 0) > 0.45 && (fleet?.ships ?? 0) >= 4000) speed = speed < 0 ? Math.max(speed, -8) : Math.min(speed, 10)
     if (division.holdBow && falling && speed > 8) speed = 8
     const stepSpeed = prevSpeed + Math.max(-accel, Math.min(accel, speed - prevSpeed))
     speed = stepSpeed
