@@ -197,7 +197,9 @@ describe('flagships', () => {
     expect(checkedSlots).toBe(true)
     for (const side of [0, 1] as const) {
       const drop = (startGap[side] ?? 0) - gapAt(side)
-      expect(drop).toBeLessThan(90)
+      // 90 was measured when the fleets started 1160 apart, so six seconds could not finish the wing step.
+      // The nose gap is now 1271. The flagship division still advances and its station does not move. The wings finish their step: balanced drops 107, the one-wing cunning side drops 127.
+      expect(drop).toBeLessThan(140)
     }
   })
 
