@@ -2,6 +2,28 @@ import { CLASS_STATS, classIndex, lineRange, SHIP_STATS } from './balance.ts'
 import { inBattery, wrapAngle } from './combat.ts'
 import type { Division, SideId, SimState } from './types.ts'
 
+const UNIT = 10
+let covered = new Uint8Array(0)
+let divisionHot = new Uint8Array(0)
+let tintCover = false
+
+/** Debug tint for ships inside an enemy battery. Off unless the page asks for it. */
+export function setCoverTint(on: boolean): void {
+  tintCover = on
+}
+
+export function coverTint(): boolean {
+  return tintCover
+}
+
+export function shipUnderFire(index: number): boolean {
+  return covered[index] === 1
+}
+
+export function divisionUnderFire(index: number): boolean {
+  return divisionHot[index] === 1
+}
+
 export interface ThreatRead {
   weight: number
   x: number
@@ -144,6 +166,59 @@ export function pathCrossesBow(state: SimState, side: SideId, x1: number, y1: nu
       const dx = x - division.ax
       const dy = y - division.ay
       if (dx * dx + dy * dy < reach * reach) return true
+    }
+  }
+  return false
+}
+
+/**
+ * A unit of ten is under fire when any enemy battery can see its centroid.
+ * Divisions with no unit book use the same groups, taken in station order.
+ */
+export function markUnderFire(state: SimState): void {
+  const ships = state.ships
+  const n = ships.count
+  if (covered.length < n) covered = new Uint8Array(n)
+  else covered.fill(0)
+  const divisions = state.divisions
+  if (divisionHot.length < divisions.length) divisionHot = new Uint8Array(divisions.length)
+  else divisionHot.fill(0)
+  const members: number[][] = []
+  for (let i = 0; i < n; i++) {
+    if (ships.alive[i] !== 1) continue
+    const index = ships.division[i] ?? 0
+    ;(members[index] ??= []).push(i)
+  }
+  for (let index = 0; index < members.length; index++) {
+    const list = members[index]
+    const division = divisions[index]
+    if (!list || !division || list.length === 0) continue
+    list.sort((a, b) => (ships.slotX[a] ?? 0) - (ships.slotX[b] ?? 0) || (ships.slotY[a] ?? 0) - (ships.slotY[b] ?? 0) || a - b)
+    let hits = 0
+    for (let start = 0; start < list.length; start += UNIT) {
+      const group = list.slice(start, start + UNIT)
+      let sx = 0
+      let sy = 0
+      for (const ship of group) {
+        sx += ships.x[ship] ?? 0
+        sy += ships.y[ship] ?? 0
+      }
+      const cx = sx / group.length
+      const cy = sy / group.length
+      if (!pointCovered(state, division.side, cx, cy)) continue
+      hits += group.length
+      for (const ship of group) covered[ship] = 1
+    }
+    if (hits * 3 >= list.length) divisionHot[index] = 1
+  }
+}
+
+function pointCovered(state: SimState, side: SideId, x: number, y: number): boolean {
+  for (const other of state.divisions) {
+    if (other.side === side || other.alive === 0) continue
+    const guns = statsOf(other)
+    for (const battery of guns.batteries) {
+      if (inBattery(other.fx, other.fy, other.ax, other.ay, x, y, battery)) return true
     }
   }
   return false

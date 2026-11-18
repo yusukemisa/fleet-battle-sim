@@ -1,7 +1,7 @@
 import { CLASS_MODS, FIELD, SHIP_CLASS_IDS, classMods, hullRadius } from './balance.ts'
 import { divisionCommandRadius, fleetCommandRadius } from './flagship.ts'
 import { orderPoints } from './move.ts'
-import { pathCrossesBow } from './threat.ts'
+import { coverTint, pathCrossesBow, shipUnderFire } from './threat.ts'
 import { FORMATIONS } from './formations.ts'
 import type { SimState } from './types.ts'
 
@@ -64,6 +64,7 @@ export function draw(
     paintShips(ctx, state, camera, width, height, 1, RED)
   }
   paintFlashes(ctx, state, camera, width, height)
+  if (coverTint()) paintCover(ctx, state, camera, width, height, blockSize(camera.zoom, state.ships.count))
   paintFlagships(ctx, state, camera, width, height)
 
   strokeBeams(ctx, state, camera, width, height)
@@ -230,6 +231,31 @@ function paintFlashes(
   ctx.stroke()
 }
 
+function paintCover(
+  ctx: CanvasRenderingContext2D,
+  state: SimState,
+  camera: Camera,
+  width: number,
+  height: number,
+  size: number,
+): void {
+  const ships = state.ships
+  ctx.strokeStyle = 'rgba(242, 208, 92, 0.85)'
+  ctx.lineWidth = Math.max(0.6, size * 0.35)
+  ctx.beginPath()
+  for (let i = 0; i < ships.count; i++) {
+    if (ships.alive[i] !== 1 || !shipUnderFire(i)) continue
+    const p = worldToScreen(ships.x[i] ?? 0, ships.y[i] ?? 0, camera, width, height)
+    const heading = ships.heading[i] ?? 0
+    const hx = Math.cos(heading)
+    const hy = -Math.sin(heading)
+    const mark = Math.max(1.4, size * 0.7)
+    ctx.moveTo(p.x - hx * mark, p.y - hy * mark)
+    ctx.lineTo(p.x + hx * mark, p.y + hy * mark)
+  }
+  ctx.stroke()
+}
+
 function drawOrders(
   ctx: CanvasRenderingContext2D,
   state: SimState,
@@ -357,6 +383,11 @@ function slotBox(state: SimState, index: number): { minX: number; maxX: number; 
   }
   if (n === 0) return null
   return { minX, maxX, minY, maxY }
+}
+
+function blockSize(zoom: number, count: number): number {
+  const unit = count >= 24000 ? 1.5 : count >= 16000 ? 2 : count >= 10000 ? 2.6 : count >= 1000 ? 4 : 9
+  return Math.max(1.2, Math.min(13, zoom * unit))
 }
 
 /**

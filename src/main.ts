@@ -1,5 +1,6 @@
 import { draw, fitCamera, type Camera, type OrderDraft } from './draw.ts'
 import { setTacticVariant, tacticVariants, variantKeepsBrain } from './operation.ts'
+import { coverTint, setCoverTint } from './threat.ts'
 import { battleSearch, parseBattleQuery } from './query.ts'
 import { dispatch, createSim } from './sim.ts'
 import { DEFAULT_SHIP_COUNT, type Command, type SimState } from './types.ts'
@@ -200,13 +201,14 @@ function readQuery(): void {
     if (sim.phase.kind === 'setup') sim.rng = query.seed
   }
   if (query.speed) apply({ type: 'set-speed', speed: query.speed })
+  setCoverTint(new URLSearchParams(window.location.search).get('cover') === '1')
   syncHud(root, hud, sim)
   writeQuery()
 }
 
 function writeQuery(): void {
   const speed = sim.phase.kind === 'finished' ? 1 : sim.phase.speed
-  const next = battleSearch({
+  let next = battleSearch({
     blue: tacticVariants()[0],
     red: tacticVariants()[1],
     cmdBlue: sim.fleets[0].commanderId,
@@ -219,6 +221,11 @@ function writeQuery(): void {
     brainBlue: sim.fleets[0].brain,
     brainRed: sim.fleets[1].brain,
   })
+  if (coverTint()) {
+    const params = new URLSearchParams(next.startsWith('?') ? next.slice(1) : next)
+    params.set('cover', '1')
+    next = `?${params.toString()}`
+  }
   const path = `${window.location.pathname}${next}`
   const current = `${window.location.pathname}${window.location.search}`
   if (path !== current) window.history.replaceState(null, '', path)

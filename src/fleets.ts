@@ -1,4 +1,4 @@
-import { FIELD, FLEET_PAD, FLEET_SEPARATION, FLEET_SHIP_MAX, FLEET_SHIP_MIN, FLEET_SHIP_STEP, FLEET_STANDOFF, MAX_SHIPS } from './balance.ts'
+import { FLEET_PAD, FLEET_SEPARATION, FLEET_SHIP_MAX, FLEET_SHIP_MIN, FLEET_SHIP_STEP, MAX_SHIPS, openingGap } from './balance.ts'
 import type { Fleet, FleetSetup, SideId, SimState } from './types.ts'
 
 export const FLEET_NAMES: readonly [readonly string[], readonly string[]] = [
@@ -66,7 +66,7 @@ export function anchorFleets(side: SideId, items: readonly AnchorInput[]): { x: 
     const edge = centerHalf + item.halfY + FLEET_PAD
     const y = dir * Math.max(edge, dir === 0 ? 0 : FLEET_SEPARATION)
     const back = item.ordinal === 0 ? 0 : 80
-    const x = sign * Math.max(FIELD.fleetCenter + back, item.forward + FLEET_STANDOFF)
+    const x = sign * (item.forward + openingGap(item.halfY, items.length) / 2 + back)
     return { x, y }
   })
 }

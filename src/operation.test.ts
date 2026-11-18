@@ -27,6 +27,9 @@ describe('tactic variants', () => {
   it('parses the round-8 unit ids', () => {
     expect(parseTacticVariant('u8a')).toBe('u8a')
     expect(parseTacticVariant('u8d')).toBe('u8d')
+    expect(parseTacticVariant('u9a')).toBe('u9a')
+    expect(parseTacticVariant('u9b')).toBe('u9b')
+    expect(parseTacticVariant('u9c')).toBe('u9c')
   })
 
   it('does not mark the anvil or the hammer', () => {
@@ -76,5 +79,28 @@ describe('tactic variants', () => {
     expect(n).toBeGreaterThan(10)
     expect(maxX - minX).toBeGreaterThan((maxY - minY) * 3)
     expect(off).toBeLessThan(1)
+  })
+
+  it('does not march ships out of the opening line', () => {
+    for (const variant of ['u9a', 'u9c'] as const) {
+      setTacticVariant(0, variant)
+      let state = createSim({ shipCount: 1000, commanders: ['balanced', 'cunning'], brains: ['rule', 'rule'] })
+      state.rng = 3
+      state = dispatch(state, { type: 'set-speed', speed: 4 })
+      state = dispatch(state, { type: 'start' })
+      state = dispatch(state, { type: 'tick', dt: 0.05 })
+      let off = 0
+      for (let i = 0; i < state.ships.count; i++) {
+        if (state.ships.alive[i] !== 1 || state.ships.side[i] !== 0) continue
+        const division = state.divisions[state.ships.division[i] ?? 0]
+        if (!division) continue
+        const sx = state.ships.slotX[i] ?? 0
+        const sy = state.ships.slotY[i] ?? 0
+        const tx = division.ax + division.rx * sx + division.fx * sy
+        const ty = division.ay + division.ry * sx + division.fy * sy
+        off = Math.max(off, Math.hypot((state.ships.x[i] ?? 0) - tx, (state.ships.y[i] ?? 0) - ty))
+      }
+      expect(off).toBeLessThan(1)
+    }
   })
 })

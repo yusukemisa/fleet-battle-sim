@@ -1,4 +1,4 @@
-import { BLAST, CLASS_STATS, DEFAULT_LINE, FIELD, FLEET_STANDOFF, fleetLine, GUNNERY, hullHp, hullRadius, RANKS, SHIP_CLASS_IDS, SHIP_STATS, SIM_TIME_SCALE, SLOT_PITCH, STRAY, SWEEP, stepYawInto, volleyGap, volleyPhase, type ShipClassId, type ShipStats } from './balance.ts'
+import { BLAST, CLASS_STATS, DEFAULT_LINE, FIELD, fleetLine, GUNNERY, hullHp, hullRadius, openingGap, RANKS, SHIP_CLASS_IDS, SHIP_STATS, SIM_TIME_SCALE, SLOT_PITCH, STRAY, SWEEP, stepYawInto, volleyGap, volleyPhase, type ShipClassId, type ShipStats } from './balance.ts'
 import { anchorFleets, assignTargets, fitGroups, fleetIndex, FLEET_NAMES as FLEET_TITLES, separateFleets } from './fleets.ts'
 import { armorZone, inArc, inBattery, inFiringArc, wrapAngle } from './combat.ts'
 import { chooseTactic, COMMANDERS, employClass, type BattleFacts, type Bearing } from './commanders.ts'
@@ -7,7 +7,7 @@ import { batteryCooldown, blastDamage, cacheBows, cacheSpread, crossfireScale, e
 import { refreshCover, rotateRanks } from './ranks.ts'
 import { collectInto, collectNear, createScratch, fillSpatialHash } from './spatial.ts'
 import { orderPoints, stepMoveOrder } from './move.ts'
-import { assessDivision, threatenedHeading } from './threat.ts'
+import { assessDivision, markUnderFire, shipUnderFire, threatenedHeading } from './threat.ts'
 import { avoidanceVectors, separateShips, steerClear } from './collide.ts'
 import { appointFlagships, commandMods, commandRates, noteFlagshipLoss, refreshCommand } from './flagship.ts'
 import { BACK_OFF, GUN_HOLD, holdFronts, holdVectors } from './standoff.ts'
@@ -394,6 +394,7 @@ function deployGrouped(state: SimState): void {
   state.alive[1] = alive[1]
   refreshCentroids(state)
   appointFlagships(state)
+  seatUnits(state)
 }
 
 function reflowAnchors(state: SimState): void {
@@ -917,6 +918,7 @@ function deploy(state: SimState): void {
   state.alive[1] = half
   refreshCentroids(state)
   appointFlagships(state)
+  seatUnits(state)
 }
 
 function placeSide(state: SimState, side: SideId, half: number): void {
@@ -929,7 +931,7 @@ function placeSide(state: SimState, side: SideId, half: number): void {
     forward = Math.max(forward, layout.y[i] ?? 0)
     halfY = Math.max(halfY, Math.abs(layout.x[i] ?? 0))
   }
-  const magnitude = Math.max(FIELD.fleetCenter, forward + FLEET_STANDOFF)
+  const magnitude = forward + openingGap(halfY, 1) / 2
   const centerX = side === 0 ? -magnitude : magnitude
   const fleet = state.fleets[side]
   if (fleet) {
@@ -1253,6 +1255,7 @@ function step(state: SimState, dt: number): void {
     division.shaped = false
     stepDivision(division, ctx, dt, !shaped || fleet.maneuver === 'wheel')
   }
+  markUnderFire(state)
   applyDensity(state, dt)
   applyOperation(state, dt)
   if (state.fleets.length > 2) separateFleets(state)
@@ -1464,6 +1467,15 @@ function moveShips(state: SimState, dt: number): void {
     if (avoidMag > 0.2) desired = Math.atan2(ayv, axv)
     else if (caution) desired += wrapAngle(Math.atan2(ayv, axv) - desired) * 0.8
     if (division.holdBow && avoidMag <= 0.2) {
+      const enemy = ships.side[i] === 1 ? 0 : 1
+      const tx = division.guard > 0 ? division.guardX : (state.centroidX[enemy] ?? x)
+      const ty = division.guard > 0 ? division.guardY : (state.centroidY[enemy] ?? y)
+      desired = Math.atan2(ty - y, tx - x)
+    }
+    const fleetHot = (fleet?.ships ?? 0) >= 400 && fleet?.commanderId !== 'manual'
+    const held = division.tacticId === 'hold' || division.sweeping
+    const hot = fleetHot && shipUnderFire(i) && !falling && !division.yielding && !held
+    if (hot) {
       const enemy = ships.side[i] === 1 ? 0 : 1
       const tx = division.guard > 0 ? division.guardX : (state.centroidX[enemy] ?? x)
       const ty = division.guard > 0 ? division.guardY : (state.centroidY[enemy] ?? y)

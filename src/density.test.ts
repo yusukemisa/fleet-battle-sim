@@ -27,7 +27,7 @@ describe('firepower density', () => {
     state = dispatch(state, { type: 'set-speed', speed: 4 })
     state = dispatch(state, { type: 'start' })
     let firstKill = -1
-    while (state.phase.kind === 'running' && state.time < 24) {
+    while (state.phase.kind === 'running' && state.time < 32) {
       state = dispatch(state, { type: 'tick', dt: 0.05 })
       const losses = (state.lost[0] ?? 0) + (state.lost[1] ?? 0)
       if (firstKill < 0 && losses > 0) firstKill = state.time
@@ -41,7 +41,7 @@ describe('firepower density', () => {
     expect(blueClose).toBeLessThan(blueOpen * 0.45)
     expect(blueClose).toBeGreaterThan(300)
     expect(redClose).toBeLessThan(redOpen * 0.75)
-    expect(firstKill === -1 || firstKill < 24).toBe(true)
+    expect(firstKill === -1 || firstKill < 32).toBe(true)
   })
 })
 
