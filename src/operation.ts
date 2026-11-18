@@ -223,6 +223,41 @@ export function limitApproach(state: SimState, div: Division): void {
   }
 }
 
+/** Outside gun range, bring the flagship division up if the wings have stepped ahead of it. */
+function keepFlagshipWithLine(state: SimState, flag: Division, own: Division[]): void {
+  if (enemyInRange(state, flag)) return
+  let nx = 0
+  let ny = 0
+  let best = Infinity
+  for (const other of state.divisions) {
+    if (other.side === flag.side || other.alive <= 0) continue
+    const dx = other.ax - flag.ax
+    const dy = other.ay - flag.ay
+    const dist = hypot(dx, dy)
+    if (dist < best && dist > 1) {
+      best = dist
+      nx = dx / dist
+      ny = dy / dist
+    }
+  }
+  if (best === Infinity) return
+  let sum = 0
+  let count = 0
+  for (const div of own) {
+    if (div === flag || div.alive <= 0) continue
+    sum += div.ax * nx + div.ay * ny
+    count += 1
+  }
+  if (count === 0) return
+  const mean = sum / count
+  const flagAlong = flag.ax * nx + flag.ay * ny
+  if (mean - flagAlong > 70) {
+    const excess = mean - flagAlong - 70
+    flag.ax += nx * excess
+    flag.ay += ny * excess
+  }
+}
+
 function personaOf(id: CommanderId | string, variant: TacticVariant): Persona {
   const base = PERSONA[id] ?? PERSONA.balanced
   if (!base) return PERSONA.balanced as Persona
@@ -392,6 +427,7 @@ export function applyOperation(state: SimState, dt: number): void {
       division.focusX = target.ax
       division.focusY = target.ay
     }
+    if (!enemyInRange(state, anvil)) keepFlagshipWithLine(state, anvil, own)
   }
 }
 

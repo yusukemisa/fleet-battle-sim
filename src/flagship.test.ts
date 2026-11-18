@@ -197,8 +197,7 @@ describe('flagships', () => {
     expect(checkedSlots).toBe(true)
     for (const side of [0, 1] as const) {
       const drop = (startGap[side] ?? 0) - gapAt(side)
-      // The flagship division still advances. The wings step further ahead while the line dresses, so the gap can pass the old 90.
-      expect(drop).toBeLessThan(130)
+      expect(drop).toBeLessThan(90)
     }
   })
 
