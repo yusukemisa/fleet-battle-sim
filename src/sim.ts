@@ -1224,7 +1224,11 @@ function step(state: SimState, dt: number): void {
     division.sprint = fleet.maneuver === 'envelop' || fleet.maneuver === 'seize'
     const manual = fleet.commanderId === 'manual'
     const brainMove = !rulesDrive(fleet)
-    if (fleet.ships >= DENSITY.minShips && !manual && state.maneuver === 'shaped') continue
+    // Large shaped fleets leave this loop to the density and operation passes.
+    // Those passes only run for a single fleet on each side. With more fleets,
+    // skipping here leaves every division at speed zero.
+    const handedOff = state.fleets.length <= 2 && fleet.ships >= DENSITY.minShips && !manual && state.maneuver === 'shaped'
+    if (handedOff) continue
     if (brainMove) holdBrainOrders(state, fleet)
     if (division.ordered && !manual && !brainMove) division.ordered = false
     if (division.ordered && (manual || brainMove)) {
