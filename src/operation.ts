@@ -6,7 +6,7 @@ import type { CommanderId, Division, SideId, SimState } from './types.ts'
  * anvil's depth. `main` is the older movement, kept for comparison.
  * One fleet against one fleet, and only a side with at least 400 ships.
  */
-export const TACTIC_VARIANTS = ['main', 'table', 'r7a', 'r7b', 'r7c'] as const
+export const TACTIC_VARIANTS = ['main', 'table', 'r7a', 'r7b', 'r7c', 'dress'] as const
 export type TacticVariant = (typeof TACTIC_VARIANTS)[number]
 
 /** What a fresh battle does before anyone picks a variant. */
@@ -17,6 +17,11 @@ export const VARIANT_CHOICES: readonly { id: TacticVariant; label: string; title
     id: 'r7b',
     label: '槌は列に残す',
     title: '開いたときの動きです。翼は金床と同じ深さから前へ出ません。',
+  },
+  {
+    id: 'dress',
+    label: '整列',
+    title: '艦隊の中心を軸に、横に広く浅い格子で進みます。沈んだ穴は後列が詰め、射程内の砲は敵の一か所に集まります。',
   },
   { id: 'main', label: '以前の動き', title: '上書きする前の艦隊です。比べるときに使います。' },
   {
@@ -65,6 +70,8 @@ const ALIAS: Record<string, TacticVariant> = {
   rank: 'r7b',
   r7c: 'r7c',
   soon: 'r7c',
+  dress: 'dress',
+  整列: 'dress',
 }
 
 let variants: [TacticVariant, TacticVariant] = [DEFAULT_VARIANT, DEFAULT_VARIANT]
@@ -231,12 +238,13 @@ function outflanked(state: SimState, side: SideId, hammer: Division, axis: { lx:
 }
 
 export function applyOperation(state: SimState, dt: number): void {
-  if (variants[0] === 'main' && variants[1] === 'main') return
+  const idle = (variant: TacticVariant) => variant === 'main' || variant === 'dress'
+  if (idle(variants[0]) && idle(variants[1])) return
   if (state.maneuver !== 'shaped' || state.fleets.length > 2) return
   const book = bookOf(state)
   for (const side of [0, 1] as const) {
     const variant = variants[side]
-    if (variant === 'main') continue
+    if (variant === 'main' || variant === 'dress') continue
     const fleet = state.fleets[side]
     const anvil = anvilOf(state, side)
     if (!fleet || !anvil || fleet.commanderId === 'manual' || fleet.ships < 400) continue

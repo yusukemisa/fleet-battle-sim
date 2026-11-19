@@ -17,6 +17,7 @@ import { DECISION_INTERVAL, decidePolicy, defaultBrain, preferredFormation } fro
 import { observe } from './brain/observe.ts'
 import { stepPlan, updatePlan } from './posture.ts'
 import { applyDensity, DENSITY } from './density.ts'
+import { applyDress, dressDeploy, dressing, stepDressShip } from './dress.ts'
 import { applyOperation } from './operation.ts'
 import { TACTICS, stepDivision, tacticById } from './tactics.ts'
 import {
@@ -392,6 +393,7 @@ function deployGrouped(state: SimState): void {
   }
   state.alive[0] = alive[0]
   state.alive[1] = alive[1]
+  dressDeploy(state)
   refreshCentroids(state)
   appointFlagships(state)
 }
@@ -915,6 +917,7 @@ function deploy(state: SimState): void {
   for (const side of sides) placeSide(state, side, half)
   state.alive[0] = half
   state.alive[1] = half
+  dressDeploy(state)
   refreshCentroids(state)
   appointFlagships(state)
 }
@@ -1220,6 +1223,7 @@ function step(state: SimState, dt: number): void {
     const enemy: SideId = division.side === 0 ? 1 : 0
     const fleet = (state.fleets.length > 2 ? state.fleets[division.fleet] : state.fleets[division.side]) ?? state.fleets[division.side]
     if (!fleet) continue
+    if (dressing(fleet.side)) continue
     division.yielding = fleet.maneuver === 'breakout' || fleet.maneuver === 'reform'
     division.sprint = fleet.maneuver === 'envelop' || fleet.maneuver === 'seize'
     const manual = fleet.commanderId === 'manual'
@@ -1271,6 +1275,7 @@ function step(state: SimState, dt: number): void {
     cacheBows(state)
     refreshCover(state)
   }
+  applyDress(state, dt)
   moveShips(state, dt)
   fight(state, dt)
   fadeEffects(state, dt)
@@ -1366,8 +1371,15 @@ function moveShips(state: SimState, dt: number): void {
   const [gapOf, awayXOf, awayYOf] = holdVectors()
   const [avoidXs, avoidYs, brakes] = avoidanceVectors()
   const spun = { yaw: 0, delta: 0 }
+  const dressBlue = dressing(0)
+  const dressRed = dressing(1)
   for (let i = 0; i < ships.count; i++) {
     if (ships.alive[i] === 0) continue
+    const side = ships.side[i] === 1 ? 1 : 0
+    if ((side === 0 ? dressBlue : dressRed) && ships.falling[i] !== 1 && stepDressShip(state, i, dt, turnOf[i] ?? 1)) {
+      if ((ships.flash[i] ?? 0) > 0) ships.flash[i] = Math.max(0, (ships.flash[i] ?? 0) - dt * 4)
+      continue
+    }
     const stats = CLASS_STATS[ships.shipClass[i] ?? 0] ?? state.stats
     const reverse = stats.maxSpeed * stats.reverse
     const modsTurn = turnOf[i] ?? 1
