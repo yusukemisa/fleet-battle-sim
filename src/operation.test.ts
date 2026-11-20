@@ -16,6 +16,8 @@ describe('tactic variants', () => {
     expect(parseTacticVariant('table')).toBe('table')
     expect(parseTacticVariant('r5')).toBe('table')
     expect(parseTacticVariant('main')).toBe('main')
+    expect(parseTacticVariant('dress')).toBe('dress')
+    expect(parseTacticVariant('整列')).toBe('dress')
     expect(parseTacticVariant('u8a')).toBeNull()
     expect(parseTacticVariant('u9c')).toBeNull()
     expect(parseTacticVariant('u10b')).toBeNull()

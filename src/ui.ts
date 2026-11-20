@@ -47,11 +47,11 @@ export function mountHud(
       <span id="battle-size"></span>
       <label class="side blue">青軍 <select id="form-0"></select></label>
       <label class="side blue">指揮官 <select id="cmd-0"></select></label>
-      <label class="side blue">戦術 <select id="variant-0" title="1対1で、片側400隻以上のときだけ上書きします"></select></label>
+      <label class="side blue">戦術 <select id="variant-0" title="整列は艦隊数を問いません。それ以外は1対1で片側400隻以上のとき上書きします"></select></label>
       <label class="side blue">艦隊 <select id="fleets-0"></select></label>
       <label class="side red">赤軍 <select id="form-1"></select></label>
       <label class="side red">指揮官 <select id="cmd-1"></select></label>
-      <label class="side red">戦術 <select id="variant-1" title="1対1で、片側400隻以上のときだけ上書きします"></select></label>
+      <label class="side red">戦術 <select id="variant-1" title="整列は艦隊数を問いません。それ以外は1対1で片側400隻以上のとき上書きします"></select></label>
       <label class="side red">艦隊 <select id="fleets-1"></select></label>
       <label>種子 <input id="seed" inputmode="numeric" title="空欄は初期の乱数。数字は開戦前の乱数そのものです" /></label>
       <button id="start" type="button">開戦</button>
@@ -69,7 +69,7 @@ export function mountHud(
     <ol id="log"></ol>
     <details id="orders">
       <summary title="手動の隊名をクリックして選び、地図を押してドラッグすると移動を命じます">分艦隊の艦種と戦術</summary>
-      <p class="ai-settings">猛将・守将・常勝は最初から AI、智将はルールです。開いたときは槌を列に残します。以前の動きを選ぶと、上書きする前の艦隊に戻ります。それ以外の戦術を選ぶと、その軍はルールになり、開戦時に陣形を置き換えません。DT は手元の Decision Transformer で、初期値にはしません。常勝は開戦時に相手の陣形へ合わせて自陣を選びます。切り替えはその艦隊だけを変え、指揮官を変えると初期値に戻ります。重みがないときはルールで代行します。</p>
+      <p class="ai-settings">猛将・守将・常勝は最初から AI、智将はルールです。開いたときは槌を列に残します。以前の動きを選ぶと、上書きする前の艦隊に戻ります。整列を選ぶと、開戦前から横に広く浅い格子に乗り、艦隊の中心が進みます。それ以外の戦術は開戦時に陣形を置き換えません。DT は手元の Decision Transformer で、初期値にはしません。常勝は開戦時に相手の陣形へ合わせて自陣を選びます。切り替えはその艦隊だけを変え、指揮官を変えると初期値に戻ります。重みがないときはルールで代行します。</p>
       <div class="order-grid">
         <section data-side="0"></section>
         <section data-side="1"></section>

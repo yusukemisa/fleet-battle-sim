@@ -1,9 +1,17 @@
 import { BLAST, CLASS_STATS, GUNNERY, STRAY, hullHp, hullRadius, type BatterySpec } from './balance.ts'
 import { armorFactor, inArc, inBattery } from './combat.ts'
+import { dressAim } from './dress.ts'
 import { exposedFlagship } from './flagship.ts'
 import { withdrawalFor } from './ranks.ts'
 import { collectNear } from './spatial.ts'
 import type { GunneryTally, SimState } from './types.ts'
+
+function aimBonus(aim: { x: number; y: number; r2: number } | null, ox: number, oy: number): number {
+  if (!aim) return 0
+  const dx = ox - aim.x
+  const dy = oy - aim.y
+  return dx * dx + dy * dy <= aim.r2 ? 1_000_000 : 0
+}
 
 /** Chance a packed impact clips some other hull. Zero when the target is alone. */
 export function strayChance(bystanders: number): number {
@@ -118,6 +126,7 @@ export function pickBatteryTarget(
   const scale = (state.damage[side] ?? stats.damage) / Math.max(0.01, stats.damage)
   const volley = battery.guns * battery.power * scale
   const prefer = state.maneuver === 'shaped' ? (ships.target[index] ?? -1) : -1
+  const aim = dressAim(state, index)
   let preferScore = -Infinity
   let best = -1
   let bestScore = -Infinity
@@ -174,6 +183,7 @@ export function pickBatteryTarget(
     }
     if (division && division.hunt >= 0 && (ships.division[other] ?? -1) === division.hunt) score *= 3
     if (exposedFlagship(state, other)) score *= 1.6
+    score += aimBonus(aim, ox, oy)
     score -= dist * GUNNERY.near
     if (other === prefer && battery.id === 'bow') preferScore = score
     if (score > bestScore || (score === bestScore && other < best)) {
@@ -212,6 +222,7 @@ export function pickTarget(state: SimState, index: number): number {
   const focus = division?.focus === true
   const damage = state.damage[side]
   const prefer = state.maneuver === 'shaped' ? (ships.target[index] ?? -1) : -1
+  const aim = dressAim(state, index)
   let preferScore = -Infinity
   let best = -1
   let bestScore = -Infinity
@@ -266,6 +277,7 @@ export function pickTarget(state: SimState, index: number): number {
     }
     if (division && division.hunt >= 0 && (ships.division[other] ?? -1) === division.hunt) score *= 3
     if (exposedFlagship(state, other)) score *= 1.6
+    score += aimBonus(aim, ox, oy)
     score -= dist * GUNNERY.near
     if (other === prefer) preferScore = score
     if (score > bestScore || (score === bestScore && other < best)) {

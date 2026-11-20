@@ -26,6 +26,7 @@ const hud = mountHud(
   (side, variant) => {
     if (variantKeepsBrain(variant)) apply({ type: 'set-commander', side, commanderId: sim.fleets[side].commanderId })
     else apply({ type: 'set-fleet-brain', fleet: side, brain: 'rule' })
+    if (sim.phase.kind === 'setup') apply({ type: 'reset' })
   },
   (seed) => {
     pinnedSeed = seed
@@ -200,6 +201,7 @@ function readQuery(): void {
     hud.seed.value = String(query.seed)
     if (sim.phase.kind === 'setup') sim.rng = query.seed
   }
+  if ((chosen[0] === 'dress' || chosen[1] === 'dress') && sim.phase.kind === 'setup') apply({ type: 'reset' })
   if (query.speed) apply({ type: 'set-speed', speed: query.speed })
   setCoverTint(new URLSearchParams(window.location.search).get('cover') === '1')
   syncHud(root, hud, sim)

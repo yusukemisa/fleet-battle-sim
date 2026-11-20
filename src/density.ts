@@ -1,4 +1,5 @@
 import { CLASS_MODS } from './balance.ts'
+import { tacticVariants } from './operation.ts'
 import { divisionUnderFire } from './threat.ts'
 import type { CommanderId, Division, SideId, SimState } from './types.ts'
 
@@ -337,6 +338,7 @@ function inGunRange(state: SimState, division: Division): boolean {
 }
 
 function applyFleet(state: SimState, side: SideId, dt: number): void {
+  if (tacticVariants()[side] === 'dress') return
   const fleet = state.fleets[side]
   if (!fleet || fleet.commanderId === 'manual' || fleet.ships < DENSITY.minShips) return
   const enemySide: SideId = side === 0 ? 1 : 0
